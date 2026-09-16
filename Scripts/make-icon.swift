@@ -1,5 +1,7 @@
 // Generates AppIcon.icns. The app has no Dock icon (LSUIElement), but the
-// icon still shows on notification banners.
+// icon still shows on notification banners — which is why it mirrors
+// BadgeView.tile: the banner and the floating badge are the same app, and
+// looked like two different ones.
 //
 // Draws straight into an NSBitmapImageRep rather than using NSImage.lockFocus
 // + tiffRepresentation, which fails in a headless script context.
@@ -26,21 +28,36 @@ func render(pixels: Int) -> Data? {
     let inset = side * 0.055
     let rect = NSRect(x: inset, y: inset, width: side - inset * 2, height: side - inset * 2)
 
-    // Rounded-square badge, blue to indigo.
-    let squircle = NSBezierPath(roundedRect: rect,
-                                xRadius: side * 0.225, yRadius: side * 0.225)
-    NSGradient(starting: NSColor(srgbRed: 0.31, green: 0.60, blue: 0.99, alpha: 1),
-               ending: NSColor(srgbRed: 0.35, green: 0.33, blue: 0.87, alpha: 1))?
-        .draw(in: squircle, angle: -70)
+    // Proportions taken from Layout: corner radius 24% of the tile, glyph 50%,
+    // and the badge's 1.5pt outline on a 42pt tile.
+    let radius = rect.width * 0.24
+    let lineWidth = rect.width * 0.036
 
-    // White eye glyph: awaiting review.
+    // The dark-appearance variant of the tile. An .icns is one static image and
+    // a banner is as likely to be light as dark, so this leans on the same
+    // outline the badge uses to separate itself from whatever is behind it,
+    // rather than on the ground happening to contrast.
+    NSColor(white: 0, alpha: 0.92).setFill()
+    NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+
+    // SwiftUI's strokeBorder draws wholly inside the shape; NSBezierPath centres
+    // the stroke on the path. Inset by half the width so the outline lands in
+    // the same place as the badge's, rather than half of it bleeding outside.
+    let border = NSBezierPath(
+        roundedRect: rect.insetBy(dx: lineWidth / 2, dy: lineWidth / 2),
+        xRadius: radius - lineWidth / 2, yRadius: radius - lineWidth / 2)
+    border.lineWidth = lineWidth
+    NSColor(white: 1, alpha: 0.85).setStroke()
+    border.stroke()
+
+    // The same pull-request glyph the badge carries, in the same weight.
     //
     // The colour has to come from a palette configuration — setting
     // `isTemplate` and stroking a fill colour does not tint an NSImage draw,
     // it just paints a box behind a black glyph.
-    let config = NSImage.SymbolConfiguration(pointSize: side * 0.44, weight: .bold)
+    let config = NSImage.SymbolConfiguration(pointSize: rect.width * 0.50, weight: .medium)
         .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
-    if let symbol = NSImage(systemSymbolName: "eye.fill", accessibilityDescription: nil)?
+    if let symbol = NSImage(systemSymbolName: "arrow.triangle.pull", accessibilityDescription: nil)?
         .withSymbolConfiguration(config) {
         let size = symbol.size
         let target = NSRect(x: (side - size.width) / 2,
