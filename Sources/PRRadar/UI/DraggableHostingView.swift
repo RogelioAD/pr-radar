@@ -27,6 +27,9 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     private var tracker = PressTracker(threshold: 4)
     private var mouseDownLocation: NSPoint = .zero
     private var initialWindowFrame: NSRect = .zero
+    /// Whether we pushed the grab cursor, so it is only ever popped once.
+    /// An unbalanced push leaves the pointer stuck as a fist.
+    private var pushedGrabCursor = false
 
     required init(rootView: Content) {
         super.init(rootView: rootView)
@@ -45,6 +48,8 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
         }
         mouseDownLocation = NSEvent.mouseLocation
         initialWindowFrame = window?.frame ?? .zero
+        // Defensive: if a previous release was missed, do not stack pushes.
+        releaseGrabCursor()
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -57,6 +62,8 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
         let dx = current.x - mouseDownLocation.x
         let dy = current.y - mouseDownLocation.y
         guard let zone = tracker.update(distance: hypot(dx, dy)) else { return }
+
+        if zone == .resize { holdGrabCursor() }
 
         switch zone {
         case .move:
@@ -73,6 +80,7 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     }
 
     override func mouseUp(with event: NSEvent) {
+        releaseGrabCursor()
         switch tracker.end() {
         case .ignored:
             super.mouseUp(with: event)
@@ -95,18 +103,52 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
 
     // MARK: - Cursor feedback
 
+    /// Closed fist while actually dragging, so the grab is confirmed rather
+    /// than looking identical to hovering. Pushed rather than set, so it
+    /// survives the window moving out from under the pointer mid-drag.
+    private func holdGrabCursor() {
+        guard !pushedGrabCursor else { return }
+        NSCursor.closedHand.push()
+        pushedGrabCursor = true
+    }
+
+    private func releaseGrabCursor() {
+        guard pushedGrabCursor else { return }
+        NSCursor.pop()
+        pushedGrabCursor = false
+    }
+
+    /// Last resort: if this view ever leaves its window mid-drag, mouse-up
+    /// will never arrive and the pointer would stay a fist system-wide.
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { releaseGrabCursor() }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
     override func resetCursorRects() {
         super.resetCursorRects()
-        // Advertise the resizable edge. Sampling the zone classifier keeps
-        // this in step with wherever the resize strip currently is. The view
-        // is flipped, so the visual top is minY rather than maxY.
+        // Up/down arrows over the resizable edge: they read as "resize",
+        // where a hand reads as "move". `frameResize` is the clean pair with
+        // no bar through the middle; `resizeUpDown` is the pre-macOS-15
+        // fallback, which has one.
+        //
+        // Sampling the zone classifier keeps this in step with wherever the
+        // resize strip currently is. The view is flipped, so the visual top is
+        // minY rather than maxY.
         let thickness: CGFloat = 6
         let topY = isFlipped ? bounds.minY : bounds.maxY - thickness
         let probe = NSPoint(x: bounds.midX,
                            y: isFlipped ? bounds.minY + 2 : bounds.maxY - 2)
         guard zoneAt(probe) == .resize else { return }
+
+        let resizeCursor: NSCursor
+        if #available(macOS 15.0, *) {
+            resizeCursor = NSCursor.frameResize(position: .top, directions: .all)
+        } else {
+            resizeCursor = .resizeUpDown
+        }
         addCursorRect(NSRect(x: bounds.minX, y: topY,
                              width: bounds.width, height: thickness),
-                      cursor: .resizeUpDown)
+                      cursor: resizeCursor)
     }
 }

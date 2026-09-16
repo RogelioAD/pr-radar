@@ -199,7 +199,8 @@ hidden until it has to be.
   halfway through an item. Snapping during the drag was tried first and felt
   like lurching; quantising every frame stops it tracking your hand.
 - The handle is **always available**, since there is always something to
-  adjust.
+  adjust. The pointer becomes **up/down arrows** over it, and a **closed fist**
+  while you drag, so hovering and grabbing never look the same.
 
 Each tab sizes to its own list, and switching between them **animates** the
 difference rather than jumping.
