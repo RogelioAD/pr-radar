@@ -255,9 +255,10 @@ When a new version is released, running copies find out two ways:
   `update 1.1.0` chip in the drawer header plus a one-time notification.
   Clicking either opens the release page.
 
-The check runs at launch and every six hours — releases appear on the order of
-days, so it does not ride the 60-second PR poll. A given version announces
-itself once, not every six hours.
+The check runs at launch, every six hours, and whenever you press **Refresh** —
+so there is a way to ask on demand instead of waiting out the timer. It
+deliberately does *not* ride the 60-second PR poll; releases do not appear that
+often. A given version announces itself once, not every six hours.
 
 A failed check leaves the status alone rather than reporting "up to date",
 for the same reason a failed branch compare reads as unknown: claiming

@@ -110,11 +110,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Pressing Refresh also looks for a new PR Radar release, so there is a
+    /// way to ask on demand rather than waiting out the six-hour timer. The
+    /// background poll deliberately does not: it runs every 60 seconds, and
+    /// releases do not appear that often.
     private func refreshNow() {
-        Task { await refresh() }
+        Task { await refresh(alsoCheckingForUpdate: true) }
     }
 
-    private func refresh() async {
+    private func refresh(alsoCheckingForUpdate checkForRelease: Bool = false) async {
         guard !state.isRefreshing else { return }
         state.isRefreshing = true
         defer { state.isRefreshing = false }
@@ -175,6 +179,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 state.authError = error.localizedDescription
                 panel.syncVisibility()
             }
+        }
+
+        // Awaited here rather than in a `defer`, which cannot await and so
+        // would fire after isRefreshing had already cleared. Outside the
+        // do/catch too, so a failed PR fetch does not skip it.
+        if checkForRelease {
+            await checkForUpdate()
+            panel.refreshLayoutIfExpanded()
         }
     }
 

@@ -181,6 +181,7 @@ struct DrawerView: View {
             }
             .buttonStyle(.plain)
             .disabled(state.isRefreshing)
+            .help("Refresh now — also checks for a new PR Radar release")
 
             Spacer()
 
