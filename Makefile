@@ -47,6 +47,18 @@ clean:
 	swift package clean
 	rm -rf .build PRRadar.app
 
+# Prepended to every release's generated notes. The update chip in the drawer
+# links to the release page, so this is what someone reads the instant they act
+# on the chip. Without it they land on a bare commit list: a page that confirms
+# there is an update but not how to take it.
+define RELEASE_NOTES
+**To update:** `cd pr-radar && git pull && make install`
+
+Pull before installing. The version comes from *your* checkout, so building a
+stale tree leaves the update chip showing after you have already updated.
+endef
+export RELEASE_NOTES
+
 # Cut a release, which is what tells everyone running PR Radar that there is a
 # newer build: the app checks the repo's latest release, and anyone watching
 # the repo for releases gets an email from GitHub.
@@ -63,6 +75,7 @@ release:
 	@git tag -a "v$(VERSION)" -m "PR Radar $(VERSION)"
 	@git push -q origin main --follow-tags
 	@echo "==> publishing release v$(VERSION)"
-	@gh release create "v$(VERSION)" --title "PR Radar $(VERSION)" --generate-notes
+	@gh release create "v$(VERSION)" --title "PR Radar $(VERSION)" \
+		--notes "$$RELEASE_NOTES" --generate-notes
 	@echo "==> done. Collaborators watching releases are notified by GitHub,"
 	@echo "    and running copies show an update chip within six hours."

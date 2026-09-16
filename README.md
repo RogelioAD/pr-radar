@@ -189,8 +189,12 @@ make release VERSION=1.1.0
 ```
 
 Stamps the version into `Scripts/bundle.sh`, runs the tests, commits, tags,
-pushes, and publishes a GitHub release with generated notes. It refuses on a
-dirty working tree.
+pushes, and publishes a GitHub release. It refuses on a dirty working tree.
+
+The notes are the generated changelog with the upgrade command prepended —
+see `RELEASE_NOTES` in the Makefile. That preamble is not decoration: the
+update chip links to the release page, so it is what someone reads the moment
+they act on the chip.
 
 That release is what notifies everyone: GitHub emails collaborators who watch
 the repo for releases, and running copies show an `update 1.1.0` chip within

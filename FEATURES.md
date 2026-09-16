@@ -259,7 +259,8 @@ When a new version is released, running copies find out two ways:
 - **The app checks itself.** It reads the repo's latest release, compares the
   tag against its own `CFBundleShortVersionString`, and shows an
   `update 1.1.0` chip in the drawer header plus a one-time notification.
-  Clicking either opens the release page.
+  Clicking either opens the release page, whose notes lead with the upgrade
+  command — the chip would otherwise land you on a bare commit list.
 
 The check runs at launch, every six hours, and whenever you press **Refresh** —
 so there is a way to ask on demand instead of waiting out the timer. It
