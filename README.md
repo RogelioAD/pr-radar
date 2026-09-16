@@ -181,7 +181,7 @@ make test     # 89 unit tests
 make run      # run unbundled — fast iteration, notifications degrade
 make print    # one fetch, printed to stdout
 make bundle   # assemble PRRadar.app without installing it
-make install  # bundle + /Applications + login item
+make install  # bundle + /Applications + login item (removes the local bundle)
 make uninstall
 make clean
 ```

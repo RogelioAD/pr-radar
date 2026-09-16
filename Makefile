@@ -37,6 +37,14 @@ install: bundle
 	@# build was registered first. Re-registering forces a re-read.
 	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
 		-f /Applications/PRRadar.app 2>/dev/null || true
+	@# The checkout copy declares the same bundle identifier as the installed
+	@# one, so leaving it behind gives LaunchServices two records for a single
+	@# app. Which of them answers for the icon is then arbitrary, and a stale
+	@# one can win — the same ambiguity that let a second copy get launched.
+	@# It has done its job once copied.
+	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+		-u "$(CURDIR)/PRRadar.app" 2>/dev/null || true
+	@rm -rf "$(CURDIR)/PRRadar.app"
 	@echo "==> registering login item"
 	@mkdir -p ~/Library/LaunchAgents
 	@/usr/libexec/PlistBuddy -c "Clear dict" \
