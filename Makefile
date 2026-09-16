@@ -1,4 +1,4 @@
-.PHONY: build test run print bundle install uninstall clean
+.PHONY: build test run print bundle install uninstall clean release
 
 build:
 	swift build
@@ -46,3 +46,23 @@ uninstall:
 clean:
 	swift package clean
 	rm -rf .build PRRadar.app
+
+# Cut a release, which is what tells everyone running PR Radar that there is a
+# newer build: the app checks the repo's latest release, and anyone watching
+# the repo for releases gets an email from GitHub.
+#
+#   make release VERSION=1.1.0
+release:
+	@test -n "$(VERSION)" || (echo "usage: make release VERSION=1.1.0" && exit 1)
+	@test -z "$$(git status --porcelain)" || (echo "working tree is dirty" && exit 1)
+	@echo "==> stamping $(VERSION)"
+	@/usr/bin/sed -i '' 's/^VERSION=".*"/VERSION="$(VERSION)"/' Scripts/bundle.sh
+	@$(MAKE) --no-print-directory test
+	@git add Scripts/bundle.sh
+	@git commit -q -m "Release $(VERSION)"
+	@git tag -a "v$(VERSION)" -m "PR Radar $(VERSION)"
+	@git push -q origin main --follow-tags
+	@echo "==> publishing release v$(VERSION)"
+	@gh release create "v$(VERSION)" --title "PR Radar $(VERSION)" --generate-notes
+	@echo "==> done. Collaborators watching releases are notified by GitHub,"
+	@echo "    and running copies show an update chip within six hours."

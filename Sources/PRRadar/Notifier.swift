@@ -41,6 +41,25 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         for item in fresh { post(item) }
     }
 
+    /// Announces a new PR Radar release. Clicking opens the release page.
+    func notifyUpdate(version: String, url: URL) {
+        let title = "PR Radar \(version) available"
+        let body = "You're running an older build. Click to open the release."
+
+        guard isBundled, authorized else {
+            postViaOsascript(title: title, body: body)
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.userInfo = ["url": url.absoluteString]
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "update-\(version)",
+                                  content: content, trigger: nil))
+    }
+
     private func post(_ item: ReviewItem) {
         let title = "Review requested"
         let body = "\(item.authorLogin) · #\(item.number) \(item.title)"

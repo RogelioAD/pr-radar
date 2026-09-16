@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: PanelController!
     private var pollTask: Task<Void, Never>?
     private var clockTask: Task<Void, Never>?
+    private var updateTask: Task<Void, Never>?
 
     /// Discovered once per launch and reused for every poll.
     private var viewerLogin: String?
@@ -39,11 +40,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         startPolling()
         startClock()
+        startUpdateChecks()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         pollTask?.cancel()
         clockTask?.cancel()
+        updateTask?.cancel()
     }
 
     // MARK: - Polling
@@ -64,6 +67,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try? await Task.sleep(for: .seconds(30))
                 self?.state.clock = Date()
             }
+        }
+    }
+
+    /// Releases appear on the order of days, so this checks at launch and then
+    /// every six hours rather than riding the 60-second PR poll.
+    private func startUpdateChecks() {
+        updateTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.checkForUpdate()
+                try? await Task.sleep(for: .seconds(6 * 60 * 60))
+            }
+        }
+    }
+
+    private func checkForUpdate() async {
+        guard let token = try? Token.resolve() else { return }
+        let repo = Prefs.updateRepo
+        let current = Bundle.main
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+
+        do {
+            let release = try await GitHubClient(token: token).fetchLatestRelease(repo: repo)
+            let status = UpdateCheck.evaluate(current: current,
+                                              latestTag: release?.tagName,
+                                              releaseURL: release?.url)
+            state.updateStatus = status
+            Log.debug("update check: current=\(current ?? "?") "
+                      + "latest=\(release?.tagName ?? "none") -> \(status)")
+
+            // Announce a given version once, not every six hours.
+            if case .available(let version, let url) = status,
+               Prefs.notifiedUpdate != version.description {
+                Prefs.notifiedUpdate = version.description
+                notifier.notifyUpdate(version: version.description, url: url)
+            }
+            panel.refreshLayoutIfExpanded()
+        } catch {
+            // Leaves the status at whatever it was: a failed check must not
+            // claim the app is current.
+            Log.debug("update check failed: \(error)")
         }
     }
 
@@ -207,6 +250,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(withTitle: "Refresh now",
                      action: #selector(menuRefresh), keyEquivalent: "r").target = self
+        if case .available(let version, _) = state.updateStatus {
+            let item = NSMenuItem(title: "Download PR Radar \(version)…",
+                                  action: #selector(menuOpenUpdate),
+                                  keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+            menu.addItem(.separator())
+        }
+
         menu.addItem(withTitle: "Open review requests on GitHub",
                      action: #selector(menuOpenGitHub), keyEquivalent: "").target = self
 
@@ -239,6 +291,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             state.lastError = "Login item: \(error.localizedDescription)"
         }
+    }
+
+    @objc private func menuOpenUpdate() {
+        if let url = state.updateStatus.url { NSWorkspace.shared.open(url) }
     }
 
     @objc private func menuQuit() { NSApp.terminate(nil) }

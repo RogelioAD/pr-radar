@@ -79,6 +79,13 @@ public struct GitHubClient {
         try await run(Query.myPullRequests(), as: MyPRPayload.self).mine
     }
 
+    /// The latest published release of PR Radar itself.
+    public func fetchLatestRelease(repo: String) async throws -> ReleaseNode? {
+        guard let query = Query.latestRelease(repo: repo) else { return nil }
+        return try await run(query, as: LatestReleasePayload.self)
+            .repository?.latestRelease
+    }
+
     /// Second phase: how far behind each head branch is. Returns an empty
     /// dictionary when there is nothing to compare, and is allowed to fail
     /// independently of the main fetch — callers keep `behindBy` nil rather

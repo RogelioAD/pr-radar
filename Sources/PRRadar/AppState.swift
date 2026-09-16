@@ -41,6 +41,8 @@ final class AppState: ObservableObject {
     @Published var lastError: String?
     @Published var isRefreshing = false
     @Published var lastUpdated: Date?
+    /// Whether a newer PR Radar release is published.
+    @Published var updateStatus: UpdateStatus = .unknown
     /// Ticks so relative timestamps re-render without a network round trip.
     @Published var clock = Date()
 

@@ -16,6 +16,8 @@ public enum Prefs {
         static let myPRFilter = "mine.filter"
         static let leadLogins = "leads.logins"
         static let repoFilter = "list.repoFilter"
+        static let updateRepo = "update.repo"
+        static let notifiedUpdate = "update.notifiedVersion"
     }
 
     public static var badgeOrigin: CGPoint? {
@@ -56,6 +58,25 @@ public enum Prefs {
                 defaults.set(newValue, forKey: Key.repoFilter)
             } else {
                 defaults.removeObject(forKey: Key.repoFilter)
+            }
+        }
+    }
+
+    /// Which repository the update check watches. Overridable so a fork
+    /// checks its own releases rather than the original's.
+    public static var updateRepo: String {
+        get { defaults.string(forKey: Key.updateRepo) ?? "RogelioAD/pr-radar" }
+        set { defaults.set(newValue, forKey: Key.updateRepo) }
+    }
+
+    /// The newest version already announced, so one release notifies once.
+    public static var notifiedUpdate: String? {
+        get { defaults.string(forKey: Key.notifiedUpdate) }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Key.notifiedUpdate)
+            } else {
+                defaults.removeObject(forKey: Key.notifiedUpdate)
             }
         }
     }

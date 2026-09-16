@@ -243,6 +243,34 @@ notifications for a backlog you already know about.
 
 ---
 
+## Update notifications
+
+When a new version is released, running copies find out two ways:
+
+- **GitHub emails collaborators.** Anyone with access who sets
+  *Watch → Custom → Releases* on the repo gets an email per release. No code
+  involved; it works today.
+- **The app checks itself.** It reads the repo's latest release, compares the
+  tag against its own `CFBundleShortVersionString`, and shows an
+  `update 1.1.0` chip in the drawer header plus a one-time notification.
+  Clicking either opens the release page.
+
+The check runs at launch and every six hours — releases appear on the order of
+days, so it does not ride the 60-second PR poll. A given version announces
+itself once, not every six hours.
+
+A failed check leaves the status alone rather than reporting "up to date",
+for the same reason a failed branch compare reads as unknown: claiming
+you're current when nothing was checked is the one actively misleading answer.
+
+Forks can point the check at their own releases:
+
+```sh
+defaults write com.yourname.prradar update.repo -string "you/your-fork"
+```
+
+---
+
 ## Deliberate non-features
 
 Things left out on purpose, and why:

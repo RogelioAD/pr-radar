@@ -73,6 +73,18 @@ struct DrawerView: View {
                      symbol: "checkmark.seal", health: .good)
             }
             Spacer()
+            if let version = state.updateStatus.newerVersion {
+                Button {
+                    if let url = state.updateStatus.url {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    Chip(text: "update \(version)", symbol: "arrow.down.circle",
+                         health: .running, filled: true)
+                }
+                .buttonStyle(.plain)
+                .help("A newer PR Radar release is available")
+            }
             Button(action: onCollapse) {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .bold))

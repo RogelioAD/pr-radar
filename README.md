@@ -180,6 +180,23 @@ make uninstall
 make clean
 ```
 
+### Releasing
+
+```sh
+make release VERSION=1.1.0
+```
+
+Stamps the version into `Scripts/bundle.sh`, runs the tests, commits, tags,
+pushes, and publishes a GitHub release with generated notes. It refuses on a
+dirty working tree.
+
+That release is what notifies everyone: GitHub emails collaborators who watch
+the repo for releases, and running copies show an `update 1.1.0` chip within
+six hours.
+
+Tell collaborators to enable it once, on the repo page:
+**Watch → Custom → Releases**.
+
 ### Debug flags
 
 Several bits of state are hard to reproduce on demand — you cannot conjure a

@@ -25,6 +25,21 @@ public enum Query {
         viewerAndTeams.replacingOccurrences(of: "@me", with: login)
     }
 
+    /// The newest published release of PR Radar itself, for the update check.
+    /// `latestRelease` is null when a repo has no releases, which reads as
+    /// "nothing newer" rather than as a failure.
+    public static func latestRelease(repo: String) -> String? {
+        let parts = repo.split(separator: "/")
+        guard parts.count == 2 else { return nil }
+        return """
+        query {
+          repository(owner: "\(parts[0])", name: "\(parts[1])") {
+            latestRelease { tagName name url publishedAt }
+          }
+        }
+        """
+    }
+
     /// The viewer's own open pull requests, with everything a My PRs row needs.
     ///
     /// Sent as its own request rather than another alias on the reviews
