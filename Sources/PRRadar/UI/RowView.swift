@@ -7,7 +7,6 @@ struct RowView: View {
     let onOpen: () -> Void
 
     @State private var hovering = false
-    @State private var titleHovering = false
 
     private var staleness: Staleness { Staleness.of(item.pingedAt, now: now) }
 
@@ -21,17 +20,15 @@ struct RowView: View {
             avatar
 
             VStack(alignment: .leading, spacing: 3) {
-                // Underlined on hover, so it reads as the link it is.
-                Text(TitleText.attributed(item.title, underlined: titleHovering))
+                // Underlined while the row is hovered, so it reads as the
+                // link it is. Driven by the row rather than by a hover on the
+                // text itself: the whole row opens the PR, and a hover tracked
+                // on the Text proved unreliable where the row's is not.
+                Text(TitleText.attributed(item.title, underlined: hovering))
                     .font(.system(size: 12.5, weight: .medium))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
-                    // Without an explicit shape the hover region follows the
-                    // glyphs rather than the text's frame, so the underline
-                    // only appeared for part of the title, if at all.
-                    .contentShape(Rectangle())
-                    .onHover { titleHovering = $0 }
 
                 HStack(spacing: 5) {
                     Text("#\(item.number)")
