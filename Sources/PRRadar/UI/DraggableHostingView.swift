@@ -16,6 +16,9 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
 
     /// Classifies a point in this view's coordinates (origin bottom-left).
     var zoneAt: (NSPoint) -> Zone = { _ in .move }
+    /// Thickness of the resize strip. Supplied by the owner so the cursor
+    /// region and the drag region cannot drift apart.
+    var resizeEdgeThickness: CGFloat = 12
     var onClick: () -> Void = {}
     var onMoveFinished: () -> Void = {}
     /// Reports the window height the user is dragging towards.
@@ -27,9 +30,12 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     private var tracker = PressTracker(threshold: 4)
     private var mouseDownLocation: NSPoint = .zero
     private var initialWindowFrame: NSRect = .zero
-    /// Whether we pushed the grab cursor, so it is only ever popped once.
-    /// An unbalanced push leaves the pointer stuck as a fist.
-    private var pushedGrabCursor = false
+    /// Cursor state, tracked rather than pushed. `NSCursor.push()`/`pop()`
+    /// leaves the pointer stuck as a fist system-wide if a release is ever
+    /// missed; `set()` has no stack to unbalance.
+    private var hoveringResizeEdge = false
+    private var draggingResizeEdge = false
+    private var resizeTrackingArea: NSTrackingArea?
 
     required init(rootView: Content) {
         super.init(rootView: rootView)
@@ -48,8 +54,6 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
         }
         mouseDownLocation = NSEvent.mouseLocation
         initialWindowFrame = window?.frame ?? .zero
-        // Defensive: if a previous release was missed, do not stack pushes.
-        releaseGrabCursor()
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -63,7 +67,10 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
         let dy = current.y - mouseDownLocation.y
         guard let zone = tracker.update(distance: hypot(dx, dy)) else { return }
 
-        if zone == .resize { holdGrabCursor() }
+        if zone == .resize, !draggingResizeEdge {
+            draggingResizeEdge = true
+            applyCursor()
+        }
 
         switch zone {
         case .move:
@@ -80,7 +87,8 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     }
 
     override func mouseUp(with event: NSEvent) {
-        releaseGrabCursor()
+        draggingResizeEdge = false
+        applyCursor()
         switch tracker.end() {
         case .ignored:
             super.mouseUp(with: event)
@@ -103,52 +111,96 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
 
     // MARK: - Cursor feedback
 
-    /// Closed fist while actually dragging, so the grab is confirmed rather
-    /// than looking identical to hovering. Pushed rather than set, so it
-    /// survives the window moving out from under the pointer mid-drag.
-    private func holdGrabCursor() {
-        guard !pushedGrabCursor else { return }
-        NSCursor.closedHand.push()
-        pushedGrabCursor = true
+    /// Up/down arrows over the resizable edge: they read as "resize", where a
+    /// hand reads as "move". `frameResize` is the clean pair with no bar
+    /// through the middle; `resizeUpDown` is the pre-macOS-15 fallback.
+    private var resizeCursor: NSCursor {
+        if #available(macOS 15.0, *) {
+            return NSCursor.frameResize(position: .top, directions: .all)
+        }
+        return .resizeUpDown
     }
 
-    private func releaseGrabCursor() {
-        guard pushedGrabCursor else { return }
-        NSCursor.pop()
-        pushedGrabCursor = false
-    }
+    /// Tracking area rather than `addCursorRect`: cursor rects only take effect
+    /// while the window is active, and this is a non-activating floating panel,
+    /// so they never fired. `.activeAlways` works regardless.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = resizeTrackingArea {
+            removeTrackingArea(existing)
+            resizeTrackingArea = nil
+        }
 
-    /// Last resort: if this view ever leaves its window mid-drag, mouse-up
-    /// will never arrive and the pointer would stay a fist system-wide.
-    override func viewWillMove(toWindow newWindow: NSWindow?) {
-        if newWindow == nil { releaseGrabCursor() }
-        super.viewWillMove(toWindow: newWindow)
-    }
-
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        // Up/down arrows over the resizable edge: they read as "resize",
-        // where a hand reads as "move". `frameResize` is the clean pair with
-        // no bar through the middle; `resizeUpDown` is the pre-macOS-15
-        // fallback, which has one.
-        //
-        // Sampling the zone classifier keeps this in step with wherever the
-        // resize strip currently is. The view is flipped, so the visual top is
-        // minY rather than maxY.
-        let thickness: CGFloat = 6
-        let topY = isFlipped ? bounds.minY : bounds.maxY - thickness
+        let thickness = resizeEdgeThickness
         let probe = NSPoint(x: bounds.midX,
                            y: isFlipped ? bounds.minY + 2 : bounds.maxY - 2)
         guard zoneAt(probe) == .resize else { return }
 
-        let resizeCursor: NSCursor
-        if #available(macOS 15.0, *) {
-            resizeCursor = NSCursor.frameResize(position: .top, directions: .all)
-        } else {
-            resizeCursor = .resizeUpDown
+        // The view is flipped, so the visual top is minY rather than maxY.
+        let topY = isFlipped ? bounds.minY : bounds.maxY - thickness
+        let area = NSTrackingArea(
+            rect: NSRect(x: bounds.minX, y: topY,
+                         width: bounds.width, height: thickness),
+            // .mouseMoved matters: .cursorUpdate alone only fires on entry, so
+            // anything that reset the cursor while the pointer was still
+            // inside won until it left and re-entered — which is why the
+            // arrows appeared only sometimes.
+            options: [.mouseEnteredAndExited, .mouseMoved,
+                      .cursorUpdate, .activeAlways],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        resizeTrackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        hoveringResizeEdge = true
+        applyCursor()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hoveringResizeEdge = false
+        applyCursor()
+    }
+
+    /// Reasserts the cursor on every move inside the strip, so it cannot be
+    /// left as whatever something else set.
+    override func mouseMoved(with event: NSEvent) {
+        let local = convert(event.locationInWindow, from: nil)
+        let inside = zoneAt(local) == .resize
+        if inside != hoveringResizeEdge {
+            hoveringResizeEdge = inside
         }
-        addCursorRect(NSRect(x: bounds.minX, y: topY,
-                             width: bounds.width, height: thickness),
-                      cursor: resizeCursor)
+        if inside { applyCursor() }
+        super.mouseMoved(with: event)
+    }
+
+    /// Called by AppKit when the pointer enters a `.cursorUpdate` area — the
+    /// supported hook for asserting a cursor, and it reasserts after anything
+    /// else changes it.
+    override func cursorUpdate(with event: NSEvent) {
+        applyCursor()
+    }
+
+    private func applyCursor() {
+        if draggingResizeEdge {
+            NSCursor.closedHand.set()
+        } else if hoveringResizeEdge {
+            resizeCursor.set()
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+
+    /// Last resort: leaving the window mid-drag means no mouse-up arrives, so
+    /// put the pointer back rather than leaving it a fist.
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil {
+            hoveringResizeEdge = false
+            draggingResizeEdge = false
+            NSCursor.arrow.set()
+        }
+        super.viewWillMove(toWindow: newWindow)
     }
 }

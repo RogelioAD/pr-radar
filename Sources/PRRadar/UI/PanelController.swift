@@ -48,6 +48,9 @@ final class PanelController {
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = false
         panel.animationBehavior = .none
+        // Without this the tracking area never receives mouseMoved, so the
+        // cursor could not be reasserted while the pointer sat on the strip.
+        panel.acceptsMouseMovedEvents = true
 
         let root = RootView(
             state: state,
@@ -60,6 +63,7 @@ final class PanelController {
         )
         hostingView = DraggableHostingView(rootView: root)
         hostingView.zoneAt = { [weak self] point in self?.zone(at: point) ?? .move }
+        hostingView.resizeEdgeThickness = Layout.resizeEdge
         hostingView.onMoveFinished = { [weak self] in self?.persistPosition() }
         hostingView.onResize = { [weak self] in self?.previewResize(to: $0) }
         hostingView.onResizeFinished = { [weak self] in self?.commitResize() }
@@ -113,7 +117,7 @@ final class PanelController {
         } else {
             removeOutsideClickMonitor()
         }
-        hostingView.window?.invalidateCursorRects(for: hostingView)
+        hostingView.updateTrackingAreas()
     }
 
     // MARK: - Geometry
@@ -278,7 +282,7 @@ final class PanelController {
         guard state.selectedTab != tab else { return }
         state.selectedTab = tab
         applyFrame(animated: true)
-        hostingView.window?.invalidateCursorRects(for: hostingView)
+        hostingView.updateTrackingAreas()
     }
 
     // MARK: - Screen fitting

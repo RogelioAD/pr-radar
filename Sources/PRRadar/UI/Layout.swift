@@ -39,8 +39,9 @@ enum Layout {
     static let footerHeight: CGFloat = 28
     static let rowSpacing: CGFloat = 2
     static let listPadding: CGFloat = 12
-    /// Height of the grab strip along the drawer's top edge.
-    static let resizeEdge: CGFloat = 6
+    /// Height of the grab strip along the drawer's top edge. Generous on
+    /// purpose: at 6pt the pointer missed it more often than it hit it.
+    static let resizeEdge: CGFloat = 12
     /// Gap kept from the screen edges when placing the panel by default.
     static let screenInset: CGFloat = 24
 
