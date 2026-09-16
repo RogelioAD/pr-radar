@@ -106,9 +106,13 @@ else depends on it.
 make install
 ```
 
-That builds in release mode, assembles `PRRadar.app`, ad-hoc signs it, copies
-it to `/Applications`, registers a LaunchAgent so it starts at login, and
-launches it.
+That builds in release mode, assembles `PRRadar.app`, ad-hoc signs it, stops
+any copy already running, copies it to `/Applications`, registers a LaunchAgent
+so it starts at login, and launches it.
+
+Only one copy runs at a time: a second exits at launch rather than placing a
+panel. Two would restore the same badge position at the same window level, so
+whichever landed in front would hide the other's count badges.
 
 **The badge appears in the bottom-right of your screen within about a minute** —
 it stays hidden until the first fetch returns, so an empty screen for a few

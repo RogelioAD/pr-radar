@@ -20,6 +20,10 @@ bundle:
 # Installs to /Applications and registers the login item.
 install: bundle
 	@echo "==> installing to /Applications"
+	@# launchctl unload below only stops the copy it manages. One started any
+	@# other way — double-clicked, an old login item, `make run` — would survive
+	@# and be joined by a second, giving two identical panels at one position.
+	@pkill -f '/Applications/PRRadar.app/Contents/MacOS/PRRadar' 2>/dev/null || true
 	@rm -rf /Applications/PRRadar.app
 	@cp -R PRRadar.app /Applications/PRRadar.app
 	@echo "==> registering login item"

@@ -25,6 +25,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.debug("applicationDidFinishLaunching")
+        guard !anotherCopyIsRunning() else {
+            // Before any UI exists, so a duplicate never gets as far as
+            // placing a panel.
+            NSApp.terminate(nil)
+            return
+        }
         if let appearance = Log.forcedAppearance {
             NSApp.appearance = appearance
         }
@@ -46,6 +52,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startPolling()
         startClock()
         startUpdateChecks()
+    }
+
+    /// A second copy is not a harmless spare: it restores the same saved badge
+    /// origin and floats at the same window level, so the two panels land on
+    /// exactly the same frame. Whichever the window server puts in front hides
+    /// the other's count badges — the counters go first, being the part that
+    /// overhangs the tile — and the order flips as windows are ordered front,
+    /// which is what made it look intermittent.
+    ///
+    /// Returns false when unbundled, which is how `make run` starts it: there
+    /// is no bundle identifier to match on, and a debug copy running alongside
+    /// the installed one is deliberate.
+    private func anotherCopyIsRunning() -> Bool {
+        guard let identifier = Bundle.main.bundleIdentifier else { return false }
+        let mine = ProcessInfo.processInfo.processIdentifier
+        let others = NSRunningApplication
+            .runningApplications(withBundleIdentifier: identifier)
+            .filter { $0.processIdentifier != mine }
+        guard !others.isEmpty else { return false }
+        Log.debug("already running as pid \(others.map(\.processIdentifier)); exiting")
+        return true
     }
 
     func applicationWillTerminate(_ notification: Notification) {
