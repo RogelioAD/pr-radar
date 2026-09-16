@@ -7,6 +7,7 @@ struct RowView: View {
     let onOpen: () -> Void
 
     @State private var hovering = false
+    @State private var titleHovering = false
 
     private var staleness: Staleness { Staleness.of(item.pingedAt, now: now) }
 
@@ -20,11 +21,14 @@ struct RowView: View {
             avatar
 
             VStack(alignment: .leading, spacing: 3) {
+                // Underlined on hover, so it reads as the link it is.
                 Text(item.title)
                     .font(.system(size: 12.5, weight: .medium))
+                    .underline(titleHovering)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
+                    .onHover { titleHovering = $0 }
 
                 HStack(spacing: 5) {
                     Text("#\(item.number)")

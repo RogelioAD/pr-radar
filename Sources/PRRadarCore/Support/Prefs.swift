@@ -15,6 +15,7 @@ public enum Prefs {
         static let myPRSortOrder = "mine.sortOrder"
         static let myPRFilter = "mine.filter"
         static let leadLogins = "leads.logins"
+        static let repoFilter = "list.repoFilter"
     }
 
     public static var badgeOrigin: CGPoint? {
@@ -40,6 +41,23 @@ public enum Prefs {
             return order
         }
         set { defaults.set(newValue.rawValue, forKey: Key.sortOrder) }
+    }
+
+    /// The repo the drawer is narrowed to, as `owner/name`, or nil for all.
+    ///
+    /// Unlike the author filter this *is* persisted — "I'm working in one repo
+    /// today" outlives a restart. The empty-drawer risk that keeps the author
+    /// filter session-only is handled by validating it on every refresh and
+    /// dropping it when it matches nothing.
+    public static var repoFilter: String? {
+        get { defaults.string(forKey: Key.repoFilter) }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Key.repoFilter)
+            } else {
+                defaults.removeObject(forKey: Key.repoFilter)
+            }
+        }
     }
 
     public static var selectedTab: DrawerTab {

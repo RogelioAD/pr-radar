@@ -164,10 +164,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return liveIDs.contains(String(key.dropFirst("mine:".count)))
             }
             state.myPRs = mine
+            validateRepoFilter()
             Log.debug("my PRs: \(mine.count), ready to merge: \(state.myPRsReadyToMerge)")
         } catch {
             Log.debug("my PRs fetch failed: \(error)")
             state.lastError = error.localizedDescription
+        }
+    }
+
+    /// Drops a persisted repo filter that no longer matches anything in either
+    /// tab — otherwise a repo you finished with would leave both drawers empty
+    /// next to non-zero badges, with no obvious cause.
+    private func validateRepoFilter() {
+        guard let repo = state.repoFilter else { return }
+        let counts = state.repoCount(repo)
+        if counts.reviews == 0 && counts.mine == 0 {
+            Log.debug("clearing stale repo filter: \(repo)")
+            state.repoFilter = nil
         }
     }
 

@@ -164,6 +164,27 @@ ready-to-merge, with a count beside each.
 
 ---
 
+## Filtering by repository
+
+Both tabs share one repository filter, for anyone whose work spans more than
+one repo. The menu lists every repo appearing in *either* tab, with counts for
+both (`elevationchurch/ec-website — 2 review, 1 mine`), so it is obvious what
+picking one will show.
+
+It is shared rather than per-tab because "I'm in this repo today" is one
+intent, not two. It is also the one filter that persists across restarts —
+which is safe because it is re-validated on every refresh and dropped if it
+matches nothing, rather than leaving you with two empty drawers and no obvious
+cause.
+
+While any filter is hiding rows, the tab reads `shown/total` — `My PRs 1/2` —
+so a tab never claims a count the list below it isn't showing.
+
+The author menu is also scoped by it, so it never offers you someone the repo
+filter has already excluded.
+
+---
+
 ## The drawer
 
 **Sizes itself to its contents** rather than using a fixed height:
@@ -187,8 +208,9 @@ empty space below it is the price of the drawer holding still.
 Both tabs share one width, so switching tabs never resizes the drawer sideways.
 Heights are remembered separately, since My PR rows are much taller.
 
-**Click a row** to open that PR in your browser. **Click outside** to collapse.
-**Drag the header** to move the whole thing.
+**Click a row** to open that PR in your browser — the title underlines on
+hover so it reads as the link it is. **Click outside** to collapse. **Drag the
+header** to move the whole thing.
 
 ---
 

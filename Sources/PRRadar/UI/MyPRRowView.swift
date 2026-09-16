@@ -10,6 +10,7 @@ struct MyPRRowView: View {
     let onOpen: () -> Void
 
     @State private var hovering = false
+    @State private var titleHovering = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
@@ -45,12 +46,15 @@ struct MyPRRowView: View {
 
     private var titleLine: some View {
         HStack(alignment: .top, spacing: 6) {
+            // Underlined on hover, so it reads as the link it is.
             Text(item.title)
                 .font(.system(size: 12.5, weight: .medium))
+                .underline(titleHovering)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentShape(Rectangle())
+                .onHover { titleHovering = $0 }
                 .onTapGesture(perform: onOpen)
             Spacer(minLength: 2)
             Text(TimeAgo.short(since: item.createdAt, now: now))

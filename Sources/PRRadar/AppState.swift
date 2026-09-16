@@ -14,6 +14,14 @@ final class AppState: ObservableObject {
     /// nil means every author.
     @Published var authorFilter: String?
 
+    // MARK: - Shared filters
+
+    /// Narrows **both** tabs to one repository, as `owner/name`. Shared rather
+    /// than per-tab because "I'm in this repo today" is one intent, not two.
+    @Published var repoFilter: String? = Prefs.repoFilter {
+        didSet { Prefs.repoFilter = repoFilter }
+    }
+
     // MARK: - My PRs tab
 
     @Published var myPRs: [MyPullRequest] = []
@@ -53,20 +61,39 @@ final class AppState: ObservableObject {
     // MARK: - Displayed lists
 
     var displayedItems: [ReviewItem] {
-        let filtered = authorFilter.map { author in
-            items.filter { $0.authorLogin == author }
-        } ?? items
+        var filtered = RepoScope.apply(repoFilter, to: items, repoOf: \.repo)
+        if let author = authorFilter {
+            filtered = filtered.filter { $0.authorLogin == author }
+        }
         return sortOrder.apply(to: filtered)
     }
 
     var displayedMyPRs: [MyPullRequest] {
-        myPRSortOrder.apply(to: myPRFilter.apply(to: myPRs))
+        let scoped = RepoScope.apply(repoFilter, to: myPRs, repoOf: \.repo)
+        return myPRSortOrder.apply(to: myPRFilter.apply(to: scoped))
     }
 
+    /// Authors available to filter by, within the current repo filter — so the
+    /// author menu never offers someone the repo filter has already excluded.
     var authors: [String] {
-        Array(Set(items.map(\.authorLogin))).sorted { $0.lowercased() < $1.lowercased() }
+        let scoped = RepoScope.apply(repoFilter, to: items, repoOf: \.repo)
+        return Array(Set(scoped.map(\.authorLogin)))
+            .sorted { $0.lowercased() < $1.lowercased() }
     }
 
+    /// Every repo appearing in either tab, so the menu covers both.
+    var repos: [String] {
+        RepoScope.names(reviews: items.map(\.repo), mine: myPRs.map(\.repo))
+    }
+
+    func repoCount(_ repo: String) -> (reviews: Int, mine: Int) {
+        (RepoScope.apply(repo, to: items, repoOf: \.repo).count,
+         RepoScope.apply(repo, to: myPRs, repoOf: \.repo).count)
+    }
+
+    static func shortRepoName(_ repo: String) -> String { RepoScope.shortName(repo) }
+
+    var isRepoFiltered: Bool { repoFilter != nil }
     var isFiltered: Bool { authorFilter != nil }
     var isMyPRFiltered: Bool { myPRFilter != .all }
 

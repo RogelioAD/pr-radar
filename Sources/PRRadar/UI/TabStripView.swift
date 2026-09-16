@@ -17,11 +17,19 @@ struct TabStripView: View {
         .frame(height: Layout.tabStripHeight)
     }
 
-    private func count(for tab: DrawerTab) -> Int {
+    private func total(for tab: DrawerTab) -> Int {
         switch tab {
         case .reviews: return state.items.count
         case .mine: return state.myPRs.count
         }
+    }
+
+    /// Reads `shown/total` while a filter is hiding rows, so the tab never
+    /// claims a count the list below it is not showing.
+    private func countLabel(for tab: DrawerTab) -> String {
+        let total = total(for: tab)
+        let shown = state.rowCount(for: tab)
+        return shown == total ? "\(total)" : "\(shown)/\(total)"
     }
 
     /// The My PRs tab carries a dot when one of those PRs is ready to merge,
@@ -36,7 +44,7 @@ struct TabStripView: View {
             HStack(spacing: 5) {
                 Image(systemName: tab.symbol).font(.system(size: 9.5, weight: .semibold))
                 Text(tab.title).font(.system(size: 11, weight: selected ? .semibold : .regular))
-                Text("\(count(for: tab))")
+                Text(countLabel(for: tab))
                     .font(.system(size: 9.5, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .padding(.horizontal, 4)

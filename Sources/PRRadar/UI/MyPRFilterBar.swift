@@ -48,18 +48,21 @@ struct MyPRFilterBar: View {
             .menuIndicator(.hidden)
             .fixedSize()
 
+            RepoFilterMenu(state: state)
+
             Spacer()
 
-            if state.isMyPRFiltered {
+            if state.isMyPRFiltered || state.isRepoFiltered {
                 Button {
                     state.myPRFilter = .all
+                    state.repoFilter = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("Clear filter")
+                .help("Clear filters")
             }
         }
         .padding(.horizontal, 10)
@@ -70,6 +73,54 @@ struct MyPRFilterBar: View {
     private func label(for filter: MyPRFilter) -> String {
         let matching = state.myPRs.filter(filter.matches).count
         return filter == .all ? filter.label : "\(filter.label) (\(matching))"
+    }
+}
+
+/// Narrows both tabs to one repository. Shared by both filter bars.
+///
+/// The menu shows the full `owner/name` so two repos with the same short name
+/// cannot be confused; the pill shows the short name, which is all that fits.
+struct RepoFilterMenu: View {
+    @ObservedObject var state: AppState
+
+    var body: some View {
+        Menu {
+            Button { state.repoFilter = nil } label: {
+                if state.repoFilter == nil {
+                    Label("All repos", systemImage: "checkmark")
+                } else {
+                    Text("All repos")
+                }
+            }
+            if !state.repos.isEmpty { Divider() }
+            ForEach(state.repos, id: \.self) { repo in
+                Button {
+                    // Picking the active repo again clears the filter.
+                    state.repoFilter = (state.repoFilter == repo) ? nil : repo
+                } label: {
+                    if state.repoFilter == repo {
+                        Label(label(for: repo), systemImage: "checkmark")
+                    } else {
+                        Text(label(for: repo))
+                    }
+                }
+            }
+        } label: {
+            FilterPill(
+                symbol: "folder",
+                text: state.repoFilter.map(AppState.shortRepoName) ?? "All repos",
+                active: state.isRepoFiltered
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    /// Counts for both tabs, so it is obvious what picking a repo will show.
+    private func label(for repo: String) -> String {
+        let counts = state.repoCount(repo)
+        return "\(repo)  —  \(counts.reviews) review, \(counts.mine) mine"
     }
 }
 

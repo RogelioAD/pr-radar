@@ -256,16 +256,21 @@ struct ReviewFilterBar: View {
             .menuIndicator(.hidden)
             .fixedSize()
 
+            RepoFilterMenu(state: state)
+
             Spacer()
 
-            if state.isFiltered {
-                Button { state.authorFilter = nil } label: {
+            if state.isFiltered || state.isRepoFiltered {
+                Button {
+                    state.authorFilter = nil
+                    state.repoFilter = nil
+                } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("Clear filter")
+                .help("Clear filters")
             }
         }
         .padding(.horizontal, 10)
