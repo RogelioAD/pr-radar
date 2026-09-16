@@ -78,6 +78,56 @@ final class DrawerZonesTests: XCTestCase {
         XCTAssertEqual(zones.zone(distanceFromTop: -5, canResize: true), .none)
     }
 
+    // MARK: - Controls inside the drag band
+
+    /// Roughly where the update chip and the collapse button sit: inside the
+    /// header, over on the trailing side.
+    let chip = CGRect(x: 300, y: 12, width: 92, height: 20)
+    let collapse = CGRect(x: 404, y: 14, width: 16, height: 16)
+
+    /// The bug, stated directly: a press on the update chip must reach SwiftUI.
+    /// Taken as a drag it never reaches the button, and the press ends up read
+    /// as a click on the header — collapsing the drawer instead of opening the
+    /// release page the chip exists to link to.
+    func testPressOnTheUpdateChipIsHandedToSwiftUI() {
+        XCTAssertEqual(zones.zone(distanceFromTop: 22, distanceFromLeft: 340,
+                                  canResize: true, controls: [chip, collapse]), .none)
+    }
+
+    func testPressOnTheCollapseButtonIsHandedToSwiftUI() {
+        XCTAssertEqual(zones.zone(distanceFromTop: 22, distanceFromLeft: 410,
+                                  canResize: true, controls: [chip, collapse]), .none)
+    }
+
+    /// The rest of the header still drags, or the drawer could not be moved.
+    func testHeaderBesideTheControlsStillMoves() {
+        XCTAssertEqual(zones.zone(distanceFromTop: 22, distanceFromLeft: 40,
+                                  canResize: true, controls: [chip, collapse]), .move)
+        // Between the two controls.
+        XCTAssertEqual(zones.zone(distanceFromTop: 22, distanceFromLeft: 396,
+                                  canResize: true, controls: [chip, collapse]), .move)
+    }
+
+    /// With no update published there is no chip, so that same point drags.
+    func testHeaderDragsWhereAChipIsAbsent() {
+        XCTAssertEqual(zones.zone(distanceFromTop: 22, distanceFromLeft: 340,
+                                  canResize: true, controls: [collapse]), .move)
+    }
+
+    /// A control overlapping the grab strip must not eat it: resize is resolved
+    /// first, or the drawer would lose its handle wherever a chip reached up.
+    func testResizeStripWinsOverAnOverlappingControl() {
+        let overlapping = CGRect(x: 300, y: 0, width: 92, height: 30)
+        XCTAssertEqual(zones.zone(distanceFromTop: 3, distanceFromLeft: 340,
+                                  canResize: true, controls: [overlapping]), .resize)
+    }
+
+    /// Below the header nothing changes — it already belonged to SwiftUI.
+    func testControlsDoNotAffectTheAreaBelowTheHeader() {
+        XCTAssertEqual(zones.zone(distanceFromTop: 200, distanceFromLeft: 340,
+                                  canResize: true, controls: [chip]), .none)
+    }
+
     /// Every point in a realistic drawer resolves to exactly one zone, and the
     /// drag zones together never exceed the header's height.
     func testDragZonesNeverExtendPastTheHeader() {

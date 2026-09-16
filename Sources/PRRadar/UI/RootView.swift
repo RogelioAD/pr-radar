@@ -11,6 +11,7 @@ struct RootView: View {
     let onRefresh: () -> Void
     let onRowHeights: ([String: CGFloat]) -> Void
     let onSelectTab: (DrawerTab) -> Void
+    let onHeaderControls: ([CGRect]) -> Void
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -22,7 +23,8 @@ struct RootView: View {
                            onCollapse: onCollapse,
                            onRefresh: onRefresh,
                            onRowHeights: onRowHeights,
-                           onSelectTab: onSelectTab)
+                           onSelectTab: onSelectTab,
+                           onHeaderControls: onHeaderControls)
             } else {
                 BadgeView(state: state)
             }

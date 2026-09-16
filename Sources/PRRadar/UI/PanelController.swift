@@ -16,6 +16,11 @@ final class PanelController {
     /// returns the badge to exactly where the user left it.
     private var badgeFrame: NSRect
 
+    /// Where the header's controls are, reported by the view layer. The header
+    /// is the drag handle, so without these a press on the update chip or the
+    /// collapse button would be taken as a window drag and never reach it.
+    private var headerControls: [CGRect] = []
+
     /// Height the user is dragging towards, live during a resize.
     private var resizeDraft: CGFloat?
     /// True only between mouse-down and mouse-up on the resize edge. While
@@ -59,7 +64,8 @@ final class PanelController {
             onCollapse: { [weak self] in self?.setExpanded(false) },
             onRefresh: { [weak self] in self?.onRefresh() },
             onRowHeights: { [weak self] in self?.adoptRowHeights($0) },
-            onSelectTab: { [weak self] in self?.selectTab($0) }
+            onSelectTab: { [weak self] in self?.selectTab($0) },
+            onHeaderControls: { [weak self] in self?.headerControls = $0 }
         )
         hostingView = DraggableHostingView(rootView: root)
         hostingView.zoneAt = { [weak self] point in self?.zone(at: point) ?? .move }
@@ -183,7 +189,10 @@ final class PanelController {
             isFlipped: hostingView.isFlipped
         )
         // Always resizable: the handle is shown unconditionally now.
-        return Self.zones.zone(distanceFromTop: distance, canResize: true)
+        return Self.zones.zone(distanceFromTop: distance,
+                               distanceFromLeft: point.x,
+                               canResize: true,
+                               controls: headerControls)
     }
 
     /// Dumps what a press at each part of the real, laid-out drawer would do.
@@ -207,6 +216,16 @@ final class PanelController {
             let zone = zone(at: NSPoint(x: Layout.drawerWidth / 2, y: pointY))
             Log.debug("   \(label): \(zone)")
         }
+        // Each header control probed through the same path a real press takes.
+        // These must read `.none`: a control the drag band still owns never
+        // sees its click. Absent rects mean the preference never arrived, which
+        // looks identical from the outside.
+        for rect in headerControls {
+            let pointY = hostingView.isFlipped ? rect.midY : height - rect.midY
+            let zone = zone(at: NSPoint(x: rect.midX, y: pointY))
+            Log.debug("   control \(rect.integral): \(zone)")
+        }
+        if headerControls.isEmpty { Log.debug("   control rects: none reported") }
     }
 
     private func persistPosition() {

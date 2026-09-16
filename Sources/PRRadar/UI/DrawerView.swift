@@ -10,7 +10,21 @@ struct RowHeightsKey: PreferenceKey {
     }
 }
 
+/// Frames of the controls the header carries, in the drawer's own coordinate
+/// space. The header doubles as the window's drag handle, so the panel needs to
+/// know where they are to leave their clicks to SwiftUI.
+struct HeaderControlsKey: PreferenceKey {
+    static var defaultValue: [CGRect] = []
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
 struct DrawerView: View {
+    /// Named so control frames are measured against the drawer's top-left,
+    /// which is the frame of reference the zone rules already use.
+    static let coordinateSpace = "drawer"
+
     @ObservedObject var state: AppState
     let onOpen: (ReviewItem) -> Void
     let onOpenMyPR: (MyPullRequest) -> Void
@@ -18,6 +32,7 @@ struct DrawerView: View {
     let onRefresh: () -> Void
     let onRowHeights: ([String: CGFloat]) -> Void
     let onSelectTab: (DrawerTab) -> Void
+    let onHeaderControls: ([CGRect]) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,6 +56,8 @@ struct DrawerView: View {
                 .strokeBorder(.white.opacity(0.14), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.32), radius: 18, y: 6)
+        .coordinateSpace(name: Self.coordinateSpace)
+        .onPreferenceChange(HeaderControlsKey.self, perform: onHeaderControls)
     }
 
     /// Always shown: with the drawer defaulting to every row, dragging it
@@ -79,6 +96,7 @@ struct DrawerView: View {
                 }
                 .buttonStyle(.plain)
                 .help("A newer PR Radar release is available")
+                .headerControl()
             }
             Button(action: onCollapse) {
                 Image(systemName: "chevron.down")
@@ -87,6 +105,7 @@ struct DrawerView: View {
             }
             .buttonStyle(.plain)
             .help("Collapse")
+            .headerControl()
         }
         .padding(.horizontal, 12)
         .frame(height: Layout.headerHeight - Layout.resizeEdge)
@@ -283,5 +302,20 @@ struct ReviewFilterBar: View {
         }
         .padding(.horizontal, 10)
         .frame(height: Layout.filterBarHeight)
+    }
+}
+
+private extension View {
+    /// Publishes this view's frame as a header control, so a press on it
+    /// reaches SwiftUI instead of being taken as a window drag.
+    func headerControl() -> some View {
+        background(
+            GeometryReader { geometry in
+                Color.clear.preference(
+                    key: HeaderControlsKey.self,
+                    value: [geometry.frame(in: .named(DrawerView.coordinateSpace))]
+                )
+            }
+        )
     }
 }

@@ -34,4 +34,25 @@ public struct DrawerZones: Sendable {
         if distanceFromTop <= headerHeight { return .move }
         return .none
     }
+
+    /// As above, but yielding the controls the header carries — the update
+    /// chip, the collapse button — back to SwiftUI.
+    ///
+    /// They sit inside the drag band, and a press the view layer is tracking is
+    /// never forwarded on. So a button there never saw its click: the press was
+    /// instead classified as a plain click on the header, which toggles. The
+    /// update chip's whole purpose is to open the release page, and it was
+    /// collapsing the drawer.
+    ///
+    /// The resize strip is resolved first, so a control overlapping the grab
+    /// edge cannot swallow it.
+    public func zone(distanceFromTop: CGFloat,
+                     distanceFromLeft: CGFloat,
+                     canResize: Bool,
+                     controls: [CGRect]) -> PressTracker.Zone {
+        let base = zone(distanceFromTop: distanceFromTop, canResize: canResize)
+        guard base == .move else { return base }
+        let point = CGPoint(x: distanceFromLeft, y: distanceFromTop)
+        return controls.contains { $0.contains(point) } ? .none : base
+    }
 }
