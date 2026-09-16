@@ -49,7 +49,17 @@ final class PanelController {
         panel.backgroundColor = .clear
         panel.hasShadow = false          // shadows are drawn in SwiftUI
         panel.isFloatingPanel = true
-        panel.becomesKeyOnlyIfNeeded = true
+        // Deliberately false. It reads like the cautious choice for a panel
+        // that must not steal focus, but it refuses key status unless a view
+        // wants text input — so the makeKeyAndOrderFront below never took, and
+        // SwiftUI's hover tracking, which is live only in the key window, never
+        // fired. No row highlighted and no title underlined. The resize cursor
+        // was unaffected only because that tracking area is .activeAlways.
+        //
+        // Nothing here grabs focus on its own regardless: the badge is shown
+        // with orderFrontRegardless, and the panel is made key only when the
+        // drawer is deliberately opened.
+        panel.becomesKeyOnlyIfNeeded = false
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = false
         panel.animationBehavior = .none
