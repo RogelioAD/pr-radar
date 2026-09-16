@@ -10,7 +10,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${CONFIG:-release}"
 APP="$ROOT/PRRadar.app"
 BUNDLE_ID="com.rogelioacosta.prradar"
-VERSION="1.7.0"
+VERSION="1.8.0"
 
 echo "==> building ($CONFIG)"
 swift build -c "$CONFIG" --package-path "$ROOT"
