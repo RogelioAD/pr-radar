@@ -47,9 +47,8 @@ struct MyPRRowView: View {
     private var titleLine: some View {
         HStack(alignment: .top, spacing: 6) {
             // Underlined on hover, so it reads as the link it is.
-            Text(item.title)
+            Text(TitleText.attributed(item.title, underlined: titleHovering))
                 .font(.system(size: 12.5, weight: .medium))
-                .underline(titleHovering)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)

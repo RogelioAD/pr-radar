@@ -22,12 +22,15 @@ struct RowView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 // Underlined on hover, so it reads as the link it is.
-                Text(item.title)
+                Text(TitleText.attributed(item.title, underlined: titleHovering))
                     .font(.system(size: 12.5, weight: .medium))
-                    .underline(titleHovering)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
+                    // Without an explicit shape the hover region follows the
+                    // glyphs rather than the text's frame, so the underline
+                    // only appeared for part of the title, if at all.
+                    .contentShape(Rectangle())
                     .onHover { titleHovering = $0 }
 
                 HStack(spacing: 5) {
