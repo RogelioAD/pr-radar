@@ -21,9 +21,15 @@ bundle:
 install: bundle
 	@echo "==> installing to /Applications"
 	@# launchctl unload below only stops the copy it manages. One started any
-	@# other way — double-clicked, an old login item, `make run` — would survive
-	@# and be joined by a second, giving two identical panels at one position.
-	@pkill -f '/Applications/PRRadar.app/Contents/MacOS/PRRadar' 2>/dev/null || true
+	@# other way — double-clicked, an old login item — would survive and be
+	@# joined by a second, giving two identical panels at one position.
+	@#
+	@# Matched by bundle path from any location, not just /Applications: `make
+	@# bundle` leaves a PRRadar.app in the checkout, and a copy double-clicked
+	@# from there would otherwise outlive the install and, being first, keep the
+	@# freshly installed one from starting at all. `make run` is unaffected — it
+	@# runs .build/debug/PRRadar, which is not inside a bundle.
+	@pkill -f 'PRRadar\.app/Contents/MacOS/PRRadar' 2>/dev/null || true
 	@rm -rf /Applications/PRRadar.app
 	@cp -R PRRadar.app /Applications/PRRadar.app
 	@echo "==> registering login item"
