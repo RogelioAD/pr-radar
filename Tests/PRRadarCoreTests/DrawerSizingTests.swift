@@ -161,6 +161,60 @@ final class DrawerSizingTests: XCTestCase {
         XCTAssertEqual(height, expected(1))
     }
 
+    // MARK: - Mid-drag: smooth, not snapped
+
+    /// While dragging, the height must follow the pointer exactly. Snapping
+    /// every frame is what made the drag lurch between rows.
+    func testMidDragFollowsThePointerWithoutSnapping() {
+        for requested in [70, 95, 131, 158, 199, 244] as [CGFloat] {
+            let height = sizing.contentHeight(rowHeights: rows, itemCount: 5,
+                                              userContentHeight: requested,
+                                              snapping: false)
+            XCTAssertEqual(height, requested,
+                           "mid-drag height must not be quantised")
+        }
+    }
+
+    func testMidDragStillStopsAtOneRow() {
+        XCTAssertEqual(sizing.clamp(10, rowHeights: rows, itemCount: 5), expected(1))
+        XCTAssertEqual(sizing.clamp(-200, rowHeights: rows, itemCount: 5), expected(1))
+    }
+
+    func testMidDragStillStopsAtTheWholeList() {
+        XCTAssertEqual(sizing.clamp(9_999, rowHeights: rows, itemCount: 5), expected(5))
+    }
+
+    func testMidDragRespectsTheScreenCeiling() {
+        XCTAssertEqual(sizing.clamp(9_999, rowHeights: rows, itemCount: 5, limit: 150),
+                       150, "clamped to the ceiling, not snapped down to 114")
+    }
+
+    /// A ceiling below even one row must not invert the clamp range.
+    func testMidDragSurvivesACeilingSmallerThanOneRow() {
+        XCTAssertEqual(sizing.clamp(40, rowHeights: rows, itemCount: 5, limit: 10),
+                       expected(1))
+    }
+
+    /// The two paths must agree on the boundaries themselves: dragging exactly
+    /// onto a row edge should not move.
+    func testSnappedAndSmoothAgreeOnExactBoundaries() {
+        for rowCount in 1...5 {
+            let boundary = expected(rowCount)
+            XCTAssertEqual(sizing.clamp(boundary, rowHeights: rows, itemCount: 5),
+                           boundary)
+            XCTAssertEqual(sizing.snap(boundary, rowHeights: rows, itemCount: 5),
+                           boundary)
+        }
+    }
+
+    /// Release snaps whatever the drag left behind.
+    func testReleaseSnapsAnIntermediateDragHeight() {
+        let midDrag = sizing.clamp(158, rowHeights: rows, itemCount: 5)
+        XCTAssertEqual(midDrag, 158)
+        XCTAssertEqual(sizing.snap(midDrag, rowHeights: rows, itemCount: 5),
+                       expected(3), "166 is nearest to 158")
+    }
+
     // MARK: - Mixed row heights end to end
 
     func testSnappingWithUnevenRows() {

@@ -10,9 +10,11 @@ import CoreGraphics
 /// - A height the user dragged to is honoured between one row and everything,
 ///   so the handle is always useful — dragging *shorter* is the common case
 ///   once the default is "fit everything".
-/// - Every height, dragged or capped, lands on a row boundary. A drawer that
-///   ends halfway through a row looks broken, and hides the fact that there is
-///   more below.
+/// - A settled height lands on a row boundary. A drawer that ends halfway
+///   through a row looks broken, and hides the fact that there is more below.
+/// - While a drag is *in progress* it is clamped but **not** snapped, so the
+///   edge tracks the pointer smoothly. Snapping every frame makes the drag
+///   lurch from row to row instead of following the hand.
 public struct DrawerSizing: Sendable {
     public let rowSpacing: CGFloat
     public let listPadding: CGFloat
@@ -76,17 +78,39 @@ public struct DrawerSizing: Sendable {
         return boundaries.min { abs($0 - requested) < abs($1 - requested) } ?? first
     }
 
+    /// Clamps a height to between one row and the whole list, without snapping.
+    /// Used while dragging, where the edge should follow the pointer.
+    public func clamp(_ requested: CGFloat,
+                      rowHeights: [CGFloat],
+                      itemCount: Int,
+                      limit: CGFloat? = nil) -> CGFloat {
+        let ceiling = limit ?? (maxHeight - chromeHeight)
+        let boundaries = rowBoundaries(rowHeights: rowHeights, itemCount: itemCount)
+        let lowest = boundaries[0]
+        // Never below one row; never past the list or the screen, whichever
+        // comes first. If one row already overflows the screen, that wins.
+        let highest = max(lowest, min(boundaries[boundaries.count - 1], ceiling))
+        return min(max(requested, lowest), highest)
+    }
+
     /// The row-list height the drawer should use.
+    ///
+    /// `snapping` is false only mid-drag; see the note on smoothness above.
     public func contentHeight(rowHeights: [CGFloat],
                               itemCount: Int,
                               userContentHeight: CGFloat?,
-                              maxHeight overrideMax: CGFloat? = nil) -> CGFloat {
+                              maxHeight overrideMax: CGFloat? = nil,
+                              snapping: Bool = true) -> CGFloat {
         let ceiling = (overrideMax ?? maxHeight) - chromeHeight
         // Default: everything, as far as the screen allows.
         let fitAll = largestBoundary(within: ceiling,
                                      rowHeights: rowHeights,
                                      itemCount: itemCount)
         guard let requested = userContentHeight else { return fitAll }
+        guard snapping else {
+            return clamp(requested, rowHeights: rowHeights,
+                         itemCount: itemCount, limit: ceiling)
+        }
         return snap(requested, rowHeights: rowHeights,
                     itemCount: itemCount, limit: ceiling)
     }
@@ -95,10 +119,12 @@ public struct DrawerSizing: Sendable {
     public func windowHeight(rowHeights: [CGFloat],
                              itemCount: Int,
                              userContentHeight: CGFloat?,
-                             maxHeight overrideMax: CGFloat? = nil) -> CGFloat {
+                             maxHeight overrideMax: CGFloat? = nil,
+                             snapping: Bool = true) -> CGFloat {
         chromeHeight + contentHeight(rowHeights: rowHeights,
                                      itemCount: itemCount,
                                      userContentHeight: userContentHeight,
-                                     maxHeight: overrideMax)
+                                     maxHeight: overrideMax,
+                                     snapping: snapping)
     }
 }

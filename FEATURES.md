@@ -194,9 +194,10 @@ hidden until it has to be.
 - **Drag the top edge** to make it shorter — that is the useful direction now
   that the default is "fit everything". Your chosen height is remembered per
   tab.
-- Every height **snaps to a whole row**, dragged or screen-capped, so the
-  drawer never ends halfway through an item. A partial row looks broken and
-  hides the fact that there is more below.
+- The edge **follows your pointer smoothly** while you drag, then **settles
+  onto the nearest whole row** when you let go, so the drawer never ends
+  halfway through an item. Snapping during the drag was tried first and felt
+  like lurching; quantising every frame stops it tracking your hand.
 - The handle is **always available**, since there is always something to
   adjust.
 

@@ -18,6 +18,10 @@ final class PanelController {
 
     /// Height the user is dragging towards, live during a resize.
     private var resizeDraft: CGFloat?
+    /// True only between mouse-down and mouse-up on the resize edge. While
+    /// set, heights are clamped but not snapped, so the edge follows the
+    /// pointer instead of jumping row to row.
+    private var isDraggingHeight = false
 
     var onOpen: (ReviewItem) -> Void = { _ in }
     var onOpenMyPR: (MyPullRequest) -> Void = { _ in }
@@ -56,10 +60,15 @@ final class PanelController {
         )
         hostingView = DraggableHostingView(rootView: root)
         hostingView.zoneAt = { [weak self] point in self?.zone(at: point) ?? .move }
-        hostingView.onClick = { [weak self] in self?.toggle() }
         hostingView.onMoveFinished = { [weak self] in self?.persistPosition() }
         hostingView.onResize = { [weak self] in self?.previewResize(to: $0) }
         hostingView.onResizeFinished = { [weak self] in self?.commitResize() }
+        hostingView.onClick = { [weak self] in
+            // A press on the resize edge that never moved: clear the drag flag
+            // before treating it as a click, or layout would stay unsnapped.
+            self?.isDraggingHeight = false
+            self?.toggle()
+        }
         hostingView.contextMenuProvider = { [weak self] in self?.menuProvider() }
         panel.contentView = hostingView
 
@@ -120,7 +129,8 @@ final class PanelController {
         Layout.drawerHeight(rowHeights: state.activeRowHeights,
                             itemCount: state.activeRowCount,
                             userContentHeight: state.userContentHeight,
-                            maxHeight: availableMaxHeight)
+                            maxHeight: availableMaxHeight,
+                            snapping: !isDraggingHeight)
     }
 
     /// The drawer grows up and to the left, keeping the badge's bottom-right
@@ -136,17 +146,17 @@ final class PanelController {
         return clamp(raw)
     }
 
-    private func applyFrame(animated: Bool = false) {
+    private func applyFrame(animated: Bool = false, duration: TimeInterval = 0.16) {
         let frame = targetFrame()
         guard animated, panel.isVisible else {
             panel.setFrame(frame, display: true)
             return
         }
-        // Smooths the jump when switching tabs or when the list changes size.
+        // Smooths the jump when switching tabs, and the settle after a resize.
         // Never used mid-drag: animating towards a target the pointer is still
         // moving would lag behind the cursor.
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.16
+            context.duration = duration
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(frame, display: true)
         }
@@ -211,27 +221,39 @@ final class PanelController {
 
     /// Live feedback while dragging the top edge.
     ///
-    /// Snapped as the pointer moves rather than only on release, so the drag
-    /// visibly steps from row to row and you can see where it will land.
+    /// Follows the pointer one-to-one, clamped but not snapped. Snapping every
+    /// frame made the drag lurch between rows rather than track the hand.
     private func previewResize(to windowHeight: CGFloat) {
-        let snapped = Layout.sizing.snap(
+        isDraggingHeight = true
+        let content = Layout.sizing.clamp(
             windowHeight - Layout.chromeHeight,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
             limit: availableMaxHeight - Layout.chromeHeight
         )
-        resizeDraft = snapped
-        state.userContentHeight = snapped
+        resizeDraft = content
+        state.userContentHeight = content
         applyFrame()
     }
 
+    /// On release, settle onto the nearest row edge — animated, so it glides
+    /// into place instead of popping.
     private func commitResize() {
+        isDraggingHeight = false
         guard let draft = resizeDraft else { return }
         resizeDraft = nil
-        // Already snapped and clamped by previewResize, so this stores exactly
-        // what is on screen.
-        state.userContentHeight = draft
-        Prefs.setDrawerContentHeight(draft, for: state.selectedTab)
+
+        let snapped = Layout.sizing.snap(
+            draft,
+            rowHeights: state.activeRowHeights,
+            itemCount: state.activeRowCount,
+            limit: availableMaxHeight - Layout.chromeHeight
+        )
+        state.userContentHeight = snapped
+        Prefs.setDrawerContentHeight(snapped, for: state.selectedTab)
+        // A touch slower than a tab switch: this is a settle, and the travel
+        // is at most half a row, so a quick snap reads as a jolt.
+        applyFrame(animated: true, duration: 0.22)
     }
 
     private func adoptRowHeights(_ heights: [String: CGFloat]) {

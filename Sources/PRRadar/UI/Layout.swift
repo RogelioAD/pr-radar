@@ -67,11 +67,13 @@ enum Layout {
     static func drawerHeight(rowHeights: [CGFloat],
                              itemCount: Int,
                              userContentHeight: CGFloat?,
-                             maxHeight: CGFloat) -> CGFloat {
+                             maxHeight: CGFloat,
+                             snapping: Bool = true) -> CGFloat {
         sizing.windowHeight(rowHeights: rowHeights,
                             itemCount: itemCount,
                             userContentHeight: userContentHeight,
-                            maxHeight: maxHeight)
+                            maxHeight: maxHeight,
+                            snapping: snapping)
     }
 
     /// Height for the single-row empty/problem states.
