@@ -11,6 +11,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pollTask: Task<Void, Never>?
     private var clockTask: Task<Void, Never>?
     private var updateTask: Task<Void, Never>?
+    /// Guards the release check the way `isRefreshing` guards the PR fetch.
+    /// Needed now that a manual press no longer rides the PR fetch's guard:
+    /// the six-hour timer and a press can otherwise overlap, and two checks
+    /// racing both read the old `notifiedUpdate` and both notify.
+    private var isCheckingForUpdate = false
 
     /// Discovered once per launch and reused for every poll.
     private var viewerLogin: String?
@@ -82,6 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func checkForUpdate() async {
+        guard !isCheckingForUpdate else { return }
+        isCheckingForUpdate = true
+        defer { isCheckingForUpdate = false }
+
         guard let token = try? Token.resolve() else { return }
         let repo = Prefs.updateRepo
         let current = Bundle.main
@@ -114,11 +123,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// way to ask on demand rather than waiting out the six-hour timer. The
     /// background poll deliberately does not: it runs every 60 seconds, and
     /// releases do not appear that often.
+    ///
+    /// The two run as separate awaits rather than one combined pass because
+    /// `refresh` drops out early when a poll is already in flight. Folding the
+    /// release check into it meant a press landing in that window was a silent
+    /// no-op — and a manual press is exactly when someone is watching for an
+    /// answer. Each now guards only itself.
     private func refreshNow() {
-        Task { await refresh(alsoCheckingForUpdate: true) }
+        Task {
+            await refresh()
+            await checkForUpdate()
+        }
     }
 
-    private func refresh(alsoCheckingForUpdate checkForRelease: Bool = false) async {
+    private func refresh() async {
         guard !state.isRefreshing else { return }
         state.isRefreshing = true
         defer { state.isRefreshing = false }
@@ -180,14 +198,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 state.authError = error.localizedDescription
                 panel.syncVisibility()
             }
-        }
-
-        // Awaited here rather than in a `defer`, which cannot await and so
-        // would fire after isRefreshing had already cleared. Outside the
-        // do/catch too, so a failed PR fetch does not skip it.
-        if checkForRelease {
-            await checkForUpdate()
-            panel.refreshLayoutIfExpanded()
         }
     }
 
