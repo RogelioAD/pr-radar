@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import PRRadarCore
 
 enum Layout {
@@ -44,19 +44,6 @@ enum Layout {
     /// Gap kept from the screen edges when placing the panel by default.
     static let screenInset: CGFloat = 24
 
-    /// The drawer sizes itself to this many rows. Fewer shrink to fit; more
-    /// scroll inside the same height until the user drags it taller.
-    ///
-    /// PRRADAR_VISIBLE_ROWS overrides it, so the "more rows than fit" path can
-    /// be exercised without manufacturing extra pull requests.
-    static let defaultVisibleRows: Int = {
-        if let raw = ProcessInfo.processInfo.environment["PRRADAR_VISIBLE_ROWS"],
-           let rows = Int(raw), rows > 0 {
-            return rows
-        }
-        return 3
-    }()
-    static let maxDrawerHeight: CGFloat = 760
     /// Used only before rows report their real size.
     static let estimatedRowHeight: CGFloat = 80
 
@@ -65,27 +52,35 @@ enum Layout {
         headerHeight + tabStripHeight + filterBarHeight + footerHeight + 4
     }
 
+    /// Fallback ceiling, only used if no screen can be determined. The real
+    /// limit is the screen height, passed in per call.
+    static let fallbackMaxHeight: CGFloat = 900
+
     static let sizing = DrawerSizing(
         rowSpacing: rowSpacing,
         listPadding: listPadding,
         chromeHeight: chromeHeight,
-        defaultVisibleRows: defaultVisibleRows,
-        maxHeight: maxDrawerHeight,
+        maxHeight: fallbackMaxHeight,
         estimatedRowHeight: estimatedRowHeight
     )
 
     static func drawerHeight(rowHeights: [CGFloat],
                              itemCount: Int,
                              userContentHeight: CGFloat?,
-                             minimumContentHeight: CGFloat = 0) -> CGFloat {
+                             maxHeight: CGFloat) -> CGFloat {
         sizing.windowHeight(rowHeights: rowHeights,
                             itemCount: itemCount,
                             userContentHeight: userContentHeight,
-                            minimumContentHeight: minimumContentHeight)
+                            maxHeight: maxHeight)
     }
 
     /// Height for the single-row empty/problem states.
     static func singleRowHeight() -> CGFloat {
         sizing.contentHeight(rowHeights: [], rows: 1)
+    }
+
+    /// The drawer may grow to the height of the screen it is on.
+    static func maxHeight(on screen: NSScreen?) -> CGFloat {
+        screen?.visibleFrame.height ?? fallbackMaxHeight
     }
 }

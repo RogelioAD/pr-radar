@@ -187,23 +187,21 @@ filter has already excluded.
 
 ## The drawer
 
-**Sizes itself to its contents** rather than using a fixed height:
+**Shows every row by default**, growing to fit the whole list. Nothing is
+hidden until it has to be.
 
-- 1 or 2 rows → shrinks to exactly that many.
-- 3 or more → sizes to 3 rows and scrolls.
-- **Drag the top edge** to make it taller. It will not go below the 3-row
-  height, nor taller than it takes to show every row, and your chosen height is
-  remembered per tab.
+- The ceiling is the **height of your screen**. Past that the list scrolls.
+- **Drag the top edge** to make it shorter — that is the useful direction now
+  that the default is "fit everything". Your chosen height is remembered per
+  tab.
+- Every height **snaps to a whole row**, dragged or screen-capped, so the
+  drawer never ends halfway through an item. A partial row looks broken and
+  hides the fact that there is more below.
+- The handle is **always available**, since there is always something to
+  adjust.
 
-The grab handle **only appears when rows are actually hidden**. With 3 or fewer
-waiting there is nothing to expand into, so the handle is hidden and the resize
-zone disabled to match — it never advertises something it cannot do.
-
-The **My PRs tab never renders shorter than the Reviews tab**, so switching to
-it never makes the drawer jump upward. With fewer PRs than reviews it is padded
-to match; with more, or with taller rows, its own content decides. That floor
-deliberately outranks the "no taller than all the rows" cap — a single row with
-empty space below it is the price of the drawer holding still.
+Each tab sizes to its own list, and switching between them **animates** the
+difference rather than jumping.
 
 Both tabs share one width, so switching tabs never resizes the drawer sideways.
 Heights are remembered separately, since My PR rows are much taller.

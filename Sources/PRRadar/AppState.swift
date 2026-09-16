@@ -135,10 +135,6 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Only expandable when rows are actually hidden. Showing a grab handle
-    /// that cannot do anything is worse than showing none.
-    var canResizeDrawer: Bool { activeRowCount > Layout.defaultVisibleRows }
-
     // MARK: - Badge
 
     /// The badge counts review requests only — the number you owe other people.

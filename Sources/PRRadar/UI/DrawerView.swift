@@ -43,21 +43,16 @@ struct DrawerView: View {
         .shadow(color: .black.opacity(0.32), radius: 18, y: 6)
     }
 
-    /// The strip always reserves its height so the drawer's chrome stays a
-    /// fixed size for the sizing math; only the visible capsule is
-    /// conditional.
+    /// Always shown: with the drawer defaulting to every row, dragging it
+    /// *shorter* is the useful direction, so the handle is never inert.
     private var grabber: some View {
-        Group {
-            if state.canResizeDrawer {
-                Capsule()
-                    .fill(Color.secondary.opacity(0.35))
-                    .frame(width: 36, height: 4)
-                    .help("Drag to resize")
-            }
-        }
-        .frame(height: Layout.resizeEdge)
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
+        Capsule()
+            .fill(Color.secondary.opacity(0.35))
+            .frame(width: 36, height: 4)
+            .frame(height: Layout.resizeEdge)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .help("Drag to resize — snaps to whole rows")
     }
 
     // The header also drags the window — see PanelController.zone(at:).

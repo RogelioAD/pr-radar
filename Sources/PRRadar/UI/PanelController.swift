@@ -109,27 +109,18 @@ final class PanelController {
 
     // MARK: - Geometry
 
+    /// The screen the panel is on caps the drawer; past that the list scrolls.
+    private var availableMaxHeight: CGFloat {
+        let screen = NSScreen.screens.first { $0.frame.intersects(panel.frame) }
+            ?? NSScreen.main
+        return Layout.maxHeight(on: screen)
+    }
+
     private var drawerHeight: CGFloat {
         Layout.drawerHeight(rowHeights: state.activeRowHeights,
                             itemCount: state.activeRowCount,
                             userContentHeight: state.userContentHeight,
-                            minimumContentHeight: minimumContentHeight)
-    }
-
-    /// The My PRs tab never renders shorter than the Reviews tab, so switching
-    /// to it never makes the drawer jump upward. With fewer PRs than reviews it
-    /// would otherwise shrink.
-    ///
-    /// If the Reviews tab has not been rendered yet its row heights are
-    /// unmeasured, so this falls back to the per-row estimate and settles on
-    /// the real figure the first time that tab is shown.
-    private var minimumContentHeight: CGFloat {
-        guard state.selectedTab == .mine else { return 0 }
-        return Layout.sizing.contentHeight(
-            rowHeights: state.rowHeights(for: .reviews),
-            itemCount: state.rowCount(for: .reviews),
-            userContentHeight: state.userContentHeights[.reviews]
-        )
+                            maxHeight: availableMaxHeight)
     }
 
     /// The drawer grows up and to the left, keeping the badge's bottom-right
@@ -145,8 +136,20 @@ final class PanelController {
         return clamp(raw)
     }
 
-    private func applyFrame() {
-        panel.setFrame(targetFrame(), display: true)
+    private func applyFrame(animated: Bool = false) {
+        let frame = targetFrame()
+        guard animated, panel.isVisible else {
+            panel.setFrame(frame, display: true)
+            return
+        }
+        // Smooths the jump when switching tabs or when the list changes size.
+        // Never used mid-drag: animating towards a target the pointer is still
+        // moving would lag behind the cursor.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.16
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(frame, display: true)
+        }
     }
 
     private static let zones = DrawerZones(headerHeight: Layout.headerHeight,
@@ -165,8 +168,8 @@ final class PanelController {
             viewHeight: hostingView.bounds.height,
             isFlipped: hostingView.isFlipped
         )
-        return Self.zones.zone(distanceFromTop: distance,
-                               canResize: state.canResizeDrawer)
+        // Always resizable: the handle is shown unconditionally now.
+        return Self.zones.zone(distanceFromTop: distance, canResize: true)
     }
 
     /// Dumps what a press at each part of the real, laid-out drawer would do.
@@ -182,7 +185,7 @@ final class PanelController {
             ("footer / Refresh", height - Layout.footerHeight / 2),
         ]
         Log.debug("zone map (flipped=\(hostingView.isFlipped) height=\(height) "
-                  + "canResize=\(state.canResizeDrawer)):")
+                  + "rows=\(state.activeRowCount) max=\(availableMaxHeight)):")
         for (label, visualY) in probes {
             // Probes are expressed as distance from the visual top; convert
             // back into view space before asking the classifier.
@@ -207,22 +210,28 @@ final class PanelController {
     // MARK: - Resizing
 
     /// Live feedback while dragging the top edge.
+    ///
+    /// Snapped as the pointer moves rather than only on release, so the drag
+    /// visibly steps from row to row and you can see where it will land.
     private func previewResize(to windowHeight: CGFloat) {
-        let content = windowHeight - Layout.chromeHeight
-        resizeDraft = content
-        state.userContentHeight = content
+        let snapped = Layout.sizing.snap(
+            windowHeight - Layout.chromeHeight,
+            rowHeights: state.activeRowHeights,
+            itemCount: state.activeRowCount,
+            limit: availableMaxHeight - Layout.chromeHeight
+        )
+        resizeDraft = snapped
+        state.userContentHeight = snapped
         applyFrame()
     }
 
     private func commitResize() {
         guard let draft = resizeDraft else { return }
         resizeDraft = nil
-        // Store what the layout actually settled on, not the raw pointer
-        // delta, so a drag past either limit does not persist an out-of-range
-        // height that would reappear later.
-        let settled = min(max(draft, 0), panel.frame.height - Layout.chromeHeight)
-        state.userContentHeight = settled
-        Prefs.setDrawerContentHeight(settled, for: state.selectedTab)
+        // Already snapped and clamped by previewResize, so this stores exactly
+        // what is on screen.
+        state.userContentHeight = draft
+        Prefs.setDrawerContentHeight(draft, for: state.selectedTab)
     }
 
     private func adoptRowHeights(_ heights: [String: CGFloat]) {
@@ -246,7 +255,7 @@ final class PanelController {
     func selectTab(_ tab: DrawerTab) {
         guard state.selectedTab != tab else { return }
         state.selectedTab = tab
-        applyFrame()
+        applyFrame(animated: true)
         hostingView.window?.invalidateCursorRects(for: hostingView)
     }
 
