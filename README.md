@@ -34,7 +34,7 @@ beyond `gh` itself.
 ```sh
 git clone <your-fork-url> pr-radar
 cd pr-radar
-make test          # 133 tests, ~17s. If these pass, your toolchain is fine.
+make test          # 142 tests, ~17s. If these pass, your toolchain is fine.
 ```
 
 Running the tests first is the fastest way to find out whether Swift and the
@@ -80,24 +80,25 @@ else's id in place means colliding with their settings if you ever run both.
 ### Your review leads
 
 The **My PRs** tab highlights whether a *lead* has approved — the reviewers
-whose sign-off actually unblocks a merge on your team. The defaults are the
-original author's team, so they will mean nothing to you.
+whose sign-off actually unblocks a merge on your team. **No leads ship by
+default**, so until you set yours the lead chip always reads `lead needed`.
 
-Either edit the defaults in `Sources/PRRadarCore/MyPR/Leads.swift`:
-
-```swift
-public static let defaultLogins: [String] = ["alice", "bob"]
-public static let displayNames: [String: String] = ["alice": "Alice", ...]
-```
-
-…or leave the code alone and override at runtime, no rebuild needed:
+Set them at runtime, no rebuild needed:
 
 ```sh
 defaults write com.yourname.prradar leads.logins -array alice bob carol
 ```
 
-If your team has no such concept, set it to an empty list and the lead chip
-will simply always read `lead needed`. Nothing else depends on it.
+Or bake your team in as the default, in `Sources/PRRadarCore/MyPR/Leads.swift`:
+
+```swift
+public static let defaultLogins: [String] = ["alice", "bob"]
+public static let displayNames: [String: String] = ["alice": "Alice"]
+```
+
+`displayNames` only shortens what a chip shows; any login without an entry is
+displayed as-is. If your team has no lead concept, leave it empty — nothing
+else depends on it.
 
 ## 4. Install
 
@@ -161,8 +162,9 @@ it degrades to badge-only rather than nagging you.
 **Nothing on the My PRs tab.** Only *open* PRs authored by you appear. Check
 with `gh pr list --author @me`.
 
-**Lead chip always says `lead needed`.** Either no lead has a *live* approval,
-or your lead logins are still the defaults. Note that a **dismissed** approval
+**Lead chip always says `lead needed`.** Either you have not set any lead
+logins (there are none by default — see above), or no lead has a *live*
+approval. Note that a **dismissed** approval
 does not count — see [FEATURES.md](FEATURES.md#the-lead-gate).
 
 ---
@@ -206,8 +208,6 @@ failing check or a branch that is behind. These force them:
 PRRADAR_DEBUG=1           # trace refreshes, layout, notification auth to stderr,
                           # and dump a hit-test zone map each time the drawer opens
 PRRADAR_EXPAND=1          # open the drawer on launch, to inspect it without clicking
-PRRADAR_VISIBLE_ROWS=2    # override the 3-row cap, to exercise scrolling and the
-                          # resize handle without creating extra PRs
 PRRADAR_APPEARANCE=light  # force Light or Dark, to check the other colour scheme
 PRRADAR_FAKE_BEHIND=3     # make your PRs look N commits behind, to see the
                           # "needs rebase" chip
@@ -236,7 +236,7 @@ Sources/PRRadarCore/   fetching, parsing, and every rule worth testing:
                        the dismiss rule, the lead gate, branch state, drawer
                        sizing, hit-test zones, click-vs-drag
 Sources/PRRadar/       the app: panel, badge, tabs, drawer, notifications
-Tests/                 133 tests
+Tests/                 142 tests
 Scripts/bundle.sh      assembles and ad-hoc signs PRRadar.app
 ```
 

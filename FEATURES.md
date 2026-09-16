@@ -108,7 +108,9 @@ signed off?**
 | `lead: Alice` *(green, filled)* | a lead has a live approval |
 | `lead needed` *(amber)* | no lead has approved yet |
 
-Configured per team — see [README.md](README.md#your-review-leads).
+Configured per team, and **empty by default** — until you set your leads the
+chip always reads `lead needed`. See
+[README.md](README.md#your-review-leads).
 
 **Only live approvals count.** GitHub reports dismissed approvals in the same
 place as current ones, and a dismissed approval is not an approval — it is why
