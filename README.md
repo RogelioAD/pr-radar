@@ -34,7 +34,7 @@ beyond `gh` itself.
 ```sh
 git clone <your-fork-url> pr-radar
 cd pr-radar
-make test          # 89 tests, ~17s. If these pass, your toolchain is fine.
+make test          # 133 tests, ~17s. If these pass, your toolchain is fine.
 ```
 
 Running the tests first is the fastest way to find out whether Swift and the
@@ -236,7 +236,7 @@ Sources/PRRadarCore/   fetching, parsing, and every rule worth testing:
                        the dismiss rule, the lead gate, branch state, drawer
                        sizing, hit-test zones, click-vs-drag
 Sources/PRRadar/       the app: panel, badge, tabs, drawer, notifications
-Tests/                 89 tests
+Tests/                 133 tests
 Scripts/bundle.sh      assembles and ad-hoc signs PRRadar.app
 ```
 
