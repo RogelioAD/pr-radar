@@ -28,7 +28,10 @@ if swift "$ROOT/Scripts/make-icon.swift" "$ROOT/.build" >/dev/null 2>&1 \
         -o "$APP/Contents/Resources/AppIcon.icns" 2>/dev/null; then
   ICON_KEY='<key>CFBundleIconFile</key><string>AppIcon</string>'
 else
-  echo "    (icon generation skipped)"
+  # Worth shouting about: the bundle then declares no icon at all, and what a
+  # notification banner shows in that case is whatever the icon cache still
+  # holds — which looks exactly like the icon simply not having changed.
+  echo "    !! icon generation FAILED - app will ship with no icon of its own" >&2
   ICON_KEY=''
 fi
 

@@ -32,6 +32,11 @@ install: bundle
 	@pkill -f 'PRRadar\.app/Contents/MacOS/PRRadar' 2>/dev/null || true
 	@rm -rf /Applications/PRRadar.app
 	@cp -R PRRadar.app /Applications/PRRadar.app
+	@# Replacing a bundle in place does not invalidate the LaunchServices icon
+	@# cache, so a notification banner can keep showing the icon from whichever
+	@# build was registered first. Re-registering forces a re-read.
+	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+		-f /Applications/PRRadar.app 2>/dev/null || true
 	@echo "==> registering login item"
 	@mkdir -p ~/Library/LaunchAgents
 	@/usr/libexec/PlistBuddy -c "Clear dict" \
