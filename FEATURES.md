@@ -178,6 +178,12 @@ The grab handle **only appears when rows are actually hidden**. With 3 or fewer
 waiting there is nothing to expand into, so the handle is hidden and the resize
 zone disabled to match — it never advertises something it cannot do.
 
+The **My PRs tab never renders shorter than the Reviews tab**, so switching to
+it never makes the drawer jump upward. With fewer PRs than reviews it is padded
+to match; with more, or with taller rows, its own content decides. That floor
+deliberately outranks the "no taller than all the rows" cap — a single row with
+empty space below it is the price of the drawer holding still.
+
 Both tabs share one width, so switching tabs never resizes the drawer sideways.
 Heights are remembered separately, since My PR rows are much taller.
 

@@ -75,22 +75,25 @@ final class AppState: ObservableObject {
     /// Row ids are namespaced by tab so the two lists cannot collide.
     func rowKey(_ tab: DrawerTab, _ id: String) -> String { "\(tab.rawValue):\(id)" }
 
-    var activeRowCount: Int {
-        switch selectedTab {
+    func rowCount(for tab: DrawerTab) -> Int {
+        switch tab {
         case .reviews: return displayedItems.count
         case .mine: return displayedMyPRs.count
         }
     }
 
-    /// Measured heights of the active tab's rows, in display order.
-    var activeRowHeights: [CGFloat] {
-        switch selectedTab {
+    /// Measured heights of a tab's rows, in display order.
+    func rowHeights(for tab: DrawerTab) -> [CGFloat] {
+        switch tab {
         case .reviews:
             return displayedItems.compactMap { rowHeights[rowKey(.reviews, $0.id)] }
         case .mine:
             return displayedMyPRs.compactMap { rowHeights[rowKey(.mine, $0.id)] }
         }
     }
+
+    var activeRowCount: Int { rowCount(for: selectedTab) }
+    var activeRowHeights: [CGFloat] { rowHeights(for: selectedTab) }
 
     var userContentHeight: CGFloat? {
         get { userContentHeights[selectedTab] }

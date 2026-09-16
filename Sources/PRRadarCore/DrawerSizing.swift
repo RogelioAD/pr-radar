@@ -9,6 +9,8 @@ import CoreGraphics
 ///   rest scroll.
 /// - A height the user dragged to is honoured, but never below the default
 ///   and never beyond what it takes to show every row.
+/// - An optional floor keeps one tab from rendering shorter than another, so
+///   switching tabs never makes the drawer jump upward.
 public struct DrawerSizing: Sendable {
     public let rowSpacing: CGFloat
     public let listPadding: CGFloat
@@ -44,28 +46,40 @@ public struct DrawerSizing: Sendable {
     }
 
     /// The row-list height the drawer should use, before chrome.
+    ///
+    /// `minimum` is applied last, after every other rule. It deliberately wins
+    /// over the "no taller than all the rows" cap: a tab with one row may end
+    /// up with empty space below it, which is the price of the drawer never
+    /// shrinking when you switch tabs.
     public func contentHeight(rowHeights: [CGFloat],
                               itemCount: Int,
-                              userContentHeight: CGFloat?) -> CGFloat {
+                              userContentHeight: CGFloat?,
+                              minimum: CGFloat = 0) -> CGFloat {
         let visible = min(max(itemCount, 1), defaultVisibleRows)
         let floorHeight = contentHeight(rowHeights: rowHeights, rows: visible)
 
         // With everything already visible there is nothing to expand into, so
         // a stored user height is ignored rather than padding empty space.
-        guard itemCount > defaultVisibleRows else { return floorHeight }
+        guard itemCount > defaultVisibleRows else {
+            return max(floorHeight, minimum)
+        }
 
         let fullHeight = contentHeight(rowHeights: rowHeights, rows: itemCount)
-        guard let requested = userContentHeight else { return floorHeight }
-        return min(max(requested, floorHeight), fullHeight)
+        guard let requested = userContentHeight else {
+            return max(floorHeight, minimum)
+        }
+        return max(min(max(requested, floorHeight), fullHeight), minimum)
     }
 
     /// Total window height, chrome included.
     public func windowHeight(rowHeights: [CGFloat],
                              itemCount: Int,
-                             userContentHeight: CGFloat?) -> CGFloat {
+                             userContentHeight: CGFloat?,
+                             minimumContentHeight: CGFloat = 0) -> CGFloat {
         let content = contentHeight(rowHeights: rowHeights,
                                     itemCount: itemCount,
-                                    userContentHeight: userContentHeight)
+                                    userContentHeight: userContentHeight,
+                                    minimum: minimumContentHeight)
         return min(chromeHeight + content, maxHeight)
     }
 }

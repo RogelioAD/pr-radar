@@ -112,7 +112,24 @@ final class PanelController {
     private var drawerHeight: CGFloat {
         Layout.drawerHeight(rowHeights: state.activeRowHeights,
                             itemCount: state.activeRowCount,
-                            userContentHeight: state.userContentHeight)
+                            userContentHeight: state.userContentHeight,
+                            minimumContentHeight: minimumContentHeight)
+    }
+
+    /// The My PRs tab never renders shorter than the Reviews tab, so switching
+    /// to it never makes the drawer jump upward. With fewer PRs than reviews it
+    /// would otherwise shrink.
+    ///
+    /// If the Reviews tab has not been rendered yet its row heights are
+    /// unmeasured, so this falls back to the per-row estimate and settles on
+    /// the real figure the first time that tab is shown.
+    private var minimumContentHeight: CGFloat {
+        guard state.selectedTab == .mine else { return 0 }
+        return Layout.sizing.contentHeight(
+            rowHeights: state.rowHeights(for: .reviews),
+            itemCount: state.rowCount(for: .reviews),
+            userContentHeight: state.userContentHeights[.reviews]
+        )
     }
 
     /// The drawer grows up and to the left, keeping the badge's bottom-right

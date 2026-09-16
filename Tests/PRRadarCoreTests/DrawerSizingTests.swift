@@ -79,12 +79,97 @@ final class DrawerSizingTests: XCTestCase {
         XCTAssertEqual(height, expected(2))
     }
 
+    // MARK: - The minimum, so one tab never renders shorter than the other
+
+    /// A tab with one row must not shrink below a taller tab's height.
+    func testMinimumRaisesAShortTab() {
+        let tall = expected(3)
+        let height = sizing.contentHeight(rowHeights: [50], itemCount: 1,
+                                          userContentHeight: nil, minimum: tall)
+        XCTAssertEqual(height, tall)
+    }
+
+    func testMinimumIsIgnoredWhenTheTabIsAlreadyTaller() {
+        let height = sizing.contentHeight(rowHeights: rows, itemCount: 3,
+                                          userContentHeight: nil, minimum: 10)
+        XCTAssertEqual(height, expected(3), "a small floor must change nothing")
+    }
+
+    /// The floor deliberately beats the "never taller than all rows" cap —
+    /// empty space below one row is the price of the drawer not jumping.
+    func testMinimumOutranksTheAllRowsCap() {
+        let height = sizing.contentHeight(rowHeights: [50, 50], itemCount: 2,
+                                          userContentHeight: nil, minimum: 500)
+        XCTAssertEqual(height, 500)
+    }
+
+    func testMinimumAppliesWithMoreRowsThanFitToo() {
+        let height = sizing.contentHeight(rowHeights: rows, itemCount: 5,
+                                          userContentHeight: nil,
+                                          minimum: expected(4))
+        XCTAssertEqual(height, expected(4),
+                       "floor raises the 3-row default toward 4 rows")
+    }
+
+    /// A user-dragged height still cannot drop the tab below the floor.
+    func testMinimumOutranksAUserDraggedHeight() {
+        let height = sizing.contentHeight(rowHeights: rows, itemCount: 5,
+                                          userContentHeight: 10,
+                                          minimum: expected(4))
+        XCTAssertEqual(height, expected(4))
+    }
+
+    func testZeroMinimumIsTheDefaultAndChangesNothing() {
+        XCTAssertEqual(
+            sizing.contentHeight(rowHeights: rows, itemCount: 2, userContentHeight: nil),
+            sizing.contentHeight(rowHeights: rows, itemCount: 2,
+                                 userContentHeight: nil, minimum: 0))
+    }
+
+    /// The real case: 3 review rows at 50pt vs 1 taller My PR row. The My PRs
+    /// tab must match the Reviews tab, not shrink to its single row.
+    func testMyPRsTabMatchesReviewsTabWhenItHasFewerRows() {
+        let reviewsHeight = sizing.contentHeight(rowHeights: [50, 50, 50],
+                                                 itemCount: 3,
+                                                 userContentHeight: nil)
+        let mineHeight = sizing.windowHeight(rowHeights: [110], itemCount: 1,
+                                             userContentHeight: nil,
+                                             minimumContentHeight: reviewsHeight)
+        let reviewsWindow = sizing.windowHeight(rowHeights: [50, 50, 50], itemCount: 3,
+                                                userContentHeight: nil)
+        XCTAssertGreaterThanOrEqual(mineHeight, reviewsWindow,
+                                    "My PRs must never be shorter than Reviews")
+    }
+
+    /// And when My PRs is naturally taller, it stays taller.
+    func testMyPRsTabStaysTallerWhenItsRowsAreBigger() {
+        let reviewsHeight = sizing.contentHeight(rowHeights: [50, 50, 50],
+                                                 itemCount: 3,
+                                                 userContentHeight: nil)
+        let mine = sizing.contentHeight(rowHeights: [110, 110, 110], itemCount: 3,
+                                        userContentHeight: nil,
+                                        minimum: reviewsHeight)
+        XCTAssertGreaterThan(mine, reviewsHeight)
+        XCTAssertEqual(mine, 110 * 3 + 2 * 2 + 12, "its own content still decides")
+    }
+
     // MARK: - Chrome and bounds
 
     func testWindowHeightAddsChrome() {
         let height = sizing.windowHeight(rowHeights: rows, itemCount: 3,
                                          userContentHeight: nil)
         XCTAssertEqual(height, 100 + expected(3))
+    }
+
+    /// maxHeight still caps everything, floor included.
+    func testMaximumStillBeatsTheMinimum() {
+        let tall = DrawerSizing(rowSpacing: 2, listPadding: 12, chromeHeight: 100,
+                                defaultVisibleRows: 3, maxHeight: 200,
+                                estimatedRowHeight: 80)
+        let height = tall.windowHeight(rowHeights: [50], itemCount: 1,
+                                       userContentHeight: nil,
+                                       minimumContentHeight: 5_000)
+        XCTAssertEqual(height, 200)
     }
 
     func testWindowHeightRespectsMaximum() {
