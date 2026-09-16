@@ -9,9 +9,9 @@ final class RepoScopeTests: XCTestCase {
     }
 
     let rows = [
-        Row(repo: "elevationchurch/elevation-church-mobile-rust", number: 1),
-        Row(repo: "elevationchurch/ec-website", number: 2),
-        Row(repo: "elevationchurch/elevation-church-mobile-rust", number: 3),
+        Row(repo: "acme/widgets-mobile", number: 1),
+        Row(repo: "acme/widgets-web", number: 2),
+        Row(repo: "acme/widgets-mobile", number: 3),
         Row(repo: "rogelioad/pr-radar", number: 4),
     ]
 
@@ -22,13 +22,13 @@ final class RepoScopeTests: XCTestCase {
     }
 
     func testFiltersToOneRepo() {
-        let filtered = RepoScope.apply("elevationchurch/elevation-church-mobile-rust",
+        let filtered = RepoScope.apply("acme/widgets-mobile",
                                        to: rows, repoOf: \.repo)
         XCTAssertEqual(filtered.map(\.number), [1, 3])
     }
 
     func testFilteringPreservesOrder() {
-        let filtered = RepoScope.apply("elevationchurch/elevation-church-mobile-rust",
+        let filtered = RepoScope.apply("acme/widgets-mobile",
                                        to: rows, repoOf: \.repo)
         XCTAssertEqual(filtered.map(\.number), [1, 3], "sorting is applied afterwards")
     }
@@ -70,7 +70,7 @@ final class RepoScopeTests: XCTestCase {
     // MARK: - Display names
 
     func testShortNameDropsTheOwner() {
-        XCTAssertEqual(RepoScope.shortName("elevationchurch/ec-website"), "ec-website")
+        XCTAssertEqual(RepoScope.shortName("acme/widgets-web"), "widgets-web")
     }
 
     func testShortNameTolleratesNoSlash() {

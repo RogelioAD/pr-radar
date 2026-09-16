@@ -102,7 +102,9 @@ final class AppState: ObservableObject {
     // MARK: - Active-tab geometry
 
     /// Row ids are namespaced by tab so the two lists cannot collide.
-    func rowKey(_ tab: DrawerTab, _ id: String) -> String { "\(tab.rawValue):\(id)" }
+    func rowKey(_ tab: DrawerTab, _ id: String) -> String {
+        RowHeightKeys.key(tab: tab, id: id)
+    }
 
     func rowCount(for tab: DrawerTab) -> Int {
         switch tab {
@@ -135,19 +137,33 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Repo scope
+    //
+    // The repo filter behaves as a *scope* — "I'm working in this repo today" —
+    // so the badge follows it. The author and state filters are temporary view
+    // narrowing and deliberately do not, or the badge would flicker every time
+    // you poked at a menu.
+
+    var repoScopedItems: [ReviewItem] {
+        RepoScope.apply(repoFilter, to: items, repoOf: \.repo)
+    }
+
+    var repoScopedMyPRs: [MyPullRequest] {
+        RepoScope.apply(repoFilter, to: myPRs, repoOf: \.repo)
+    }
+
     // MARK: - Badge
 
     /// The badge counts review requests only — the number you owe other people.
     /// Your own PRs are informational and must not inflate it.
-    var count: Int { items.count }
+    var count: Int { repoScopedItems.count }
 
     /// Lights the badge's secondary dot: PRs of mine that are ready to merge.
-    var myPRsReadyToMerge: Int { myPRs.filter(\.isReadyToMerge).count }
+    var myPRsReadyToMerge: Int { repoScopedMyPRs.filter(\.isReadyToMerge).count }
 
-    /// The badge reflects the most overdue request across everything waiting,
-    /// independent of whatever filter the drawer is showing.
+    /// The most overdue request in scope.
     var worstStaleness: Staleness {
-        guard let oldest = items.map(\.pingedAt).min() else { return .fresh }
+        guard let oldest = repoScopedItems.map(\.pingedAt).min() else { return .fresh }
         return Staleness.of(oldest, now: clock)
     }
 
@@ -156,6 +172,10 @@ final class AppState: ObservableObject {
     /// Hidden only when *both* tabs are empty. Keying this on review requests
     /// alone would make My PRs unreachable exactly when the review queue is
     /// clear, which is when you most want to look at your own work.
+    ///
+    /// Deliberately ignores the repo scope: a filter matching nothing would
+    /// otherwise hide the badge, leaving no way to reach the drawer and clear
+    /// the very filter causing it.
     var shouldHidePanel: Bool {
         items.isEmpty && myPRs.isEmpty && !hasProblem
     }

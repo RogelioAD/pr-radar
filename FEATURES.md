@@ -19,7 +19,11 @@ corner:
 | **Red, top-right** | review requests waiting on you — work you owe other people |
 | **Green, bottom-right** | your own PRs that are ready to merge |
 
-They are kept separate so each number means exactly one thing. The red count is
+They are kept separate so each number means exactly one thing. Both follow the
+**repository filter**: pick a repo and the counts show only that repo's work,
+because "I'm in this repo today" is a scope rather than a temporary view. The
+author and state filters deliberately do *not* affect them — the badge would
+otherwise flicker every time you poked at a menu. The red count is
 tinted by how stale the *oldest* request is: blue under a day, amber at 1–3
 days, red beyond 3 — so a queue that has gone unattended looks different from a
 fresh one at a glance.
@@ -149,7 +153,7 @@ terminal runs better. Naming the state turned out to be the useful half.
   resolved.
 - **Merge blocker** — `ready`, `needs review`, `draft`.
 - **Changes requested**, naming who.
-- **Stack position** — `stacked on #734` on a child, and `restacks #736` on its
+- **Stack position** — `stacked on #100` on a child, and `restacks #101` on its
   parent, because rebasing a parent leaves its children needing their own
   restack.
 - **Diff size and age** — lines changed, files touched, how long it has been
@@ -168,7 +172,7 @@ ready-to-merge, with a count beside each.
 
 Both tabs share one repository filter, for anyone whose work spans more than
 one repo. The menu lists every repo appearing in *either* tab, with counts for
-both (`elevationchurch/ec-website — 2 review, 1 mine`), so it is obvious what
+both (`acme/widgets-web — 2 review, 1 mine`), so it is obvious what
 picking one will show.
 
 It is shared rather than per-tab because "I'm in this repo today" is one

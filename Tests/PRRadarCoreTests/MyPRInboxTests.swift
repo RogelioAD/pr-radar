@@ -3,8 +3,8 @@ import XCTest
 
 final class MyPRInboxTests: XCTestCase {
 
-    let inbox = MyPRInbox(leadLogins: ["ec-boston", "ulises-codes",
-                                       "mattiatelevation", "ec-danjocha"])
+    let inbox = MyPRInbox(leadLogins: ["alice", "bob",
+                                       "carol", "dave"])
 
     func decode(_ json: String) throws -> MyPRSearchResult {
         let decoder = JSONDecoder()
@@ -13,7 +13,7 @@ final class MyPRInboxTests: XCTestCase {
     }
 
     /// Builds one PR node. `reviews` are (login, state) pairs.
-    func node(number: Int = 736,
+    func node(number: Int = 101,
               head: String = "feat/a",
               base: String = "main",
               decision: String = "REVIEW_REQUIRED",
@@ -49,14 +49,14 @@ final class MyPRInboxTests: XCTestCase {
         return """
         {
           "number": \(number), "title": "a pull request",
-          "url": "https://github.com/elevationchurch/repo/pull/\(number)",
+          "url": "https://github.com/acme/repo/pull/\(number)",
           "isDraft": \(draft),
           "createdAt": "\(created)", "updatedAt": "\(updated)",
           "headRefName": "\(head)", "baseRefName": "\(base)",
           "reviewDecision": "\(decision)", "mergeStateStatus": "\(mergeState)",
           "mergeable": "MERGEABLE",
           "additions": \(additions), "deletions": \(deletions), "changedFiles": \(files),
-          "repository": { "nameWithOwner": "elevationchurch/repo" },
+          "repository": { "nameWithOwner": "acme/repo" },
           "latestReviews": { "nodes": [\(reviewNodes)] },
           "reviewRequests": { "nodes": [\(requestNodes)] },
           "reviewThreads": { "totalCount": \(threads.count), "nodes": [\(threadNodes)] },
@@ -83,11 +83,11 @@ final class MyPRInboxTests: XCTestCase {
 
     // MARK: - The lead rule
 
-    /// The live shape of PR #736: a lead approved, then the approval was
+    /// The live shape of PR #101: a lead approved, then the approval was
     /// dismissed by a later commit. GitHub does not count it, so neither do we.
     func testDismissedLeadApprovalDoesNotSatisfyTheLeadGate() throws {
-        let items = try build([node(reviews: [("ec-boston", "DISMISSED"),
-                                              ("james-wall-elevation", "DISMISSED")])])
+        let items = try build([node(reviews: [("alice", "DISMISSED"),
+                                              ("frank", "DISMISSED")])])
         let pr = items[0]
         XCTAssertTrue(pr.needsLead, "a dismissed lead approval must not unblock")
         XCTAssertNil(pr.approvingLead)
@@ -95,20 +95,21 @@ final class MyPRInboxTests: XCTestCase {
         XCTAssertEqual(pr.dismissedApprovals.count, 2)
     }
 
-    /// The live shape of PR #734: the same lead, but the approval still stands.
+    /// The live shape of PR #100: the same lead, but the approval still stands.
     func testLiveLeadApprovalSatisfiesTheLeadGate() throws {
-        let items = try build([node(reviews: [("ec-boston", "APPROVED"),
-                                              ("benjaminrevelo", "DISMISSED")])])
+        let items = try build([node(reviews: [("alice", "APPROVED"),
+                                              ("erin", "DISMISSED")])])
         let pr = items[0]
         XCTAssertFalse(pr.needsLead)
-        XCTAssertEqual(pr.approvingLead?.login, "ec-boston")
-        XCTAssertEqual(pr.approvingLead?.shortName, "Boston")
-        XCTAssertEqual(pr.dismissedApprovals.map(\.login), ["benjaminrevelo"])
+        XCTAssertEqual(pr.approvingLead?.login, "alice")
+        // With no display-name mapping configured, the login is used as-is.
+        XCTAssertEqual(pr.approvingLead?.shortName, "alice")
+        XCTAssertEqual(pr.dismissedApprovals.map(\.login), ["erin"])
     }
 
     func testNonLeadApprovalDoesNotSatisfyTheLeadGate() throws {
-        let items = try build([node(reviews: [("samiesmlz", "APPROVED"),
-                                              ("benjaminrevelo", "APPROVED")])])
+        let items = try build([node(reviews: [("heidi", "APPROVED"),
+                                              ("erin", "APPROVED")])])
         let pr = items[0]
         XCTAssertTrue(pr.needsLead)
         XCTAssertEqual(pr.liveApprovals.count, 2, "they still count as approvals")
@@ -116,7 +117,7 @@ final class MyPRInboxTests: XCTestCase {
     }
 
     func testEveryConfiguredLeadCounts() throws {
-        for lead in ["ec-boston", "ulises-codes", "mattiatelevation", "ec-danjocha"] {
+        for lead in ["alice", "bob", "carol", "dave"] {
             let items = try build([node(reviews: [(lead, "APPROVED")])])
             XCTAssertFalse(items[0].needsLead, "\(lead) should satisfy the gate")
         }
@@ -124,17 +125,17 @@ final class MyPRInboxTests: XCTestCase {
 
     func testChangesRequestedIsSurfaced() throws {
         let items = try build([node(decision: "CHANGES_REQUESTED",
-                                    reviews: [("ulises-codes", "CHANGES_REQUESTED")])])
+                                    reviews: [("bob", "CHANGES_REQUESTED")])])
         let pr = items[0]
-        XCTAssertEqual(pr.changesRequestedBy.map(\.shortName), ["Ulises"])
+        XCTAssertEqual(pr.changesRequestedBy.map(\.shortName), ["bob"])
         XCTAssertEqual(pr.reviewDecision, .changesRequested)
     }
 
     /// Bot "COMMENTED" reviews are noise — github-actions comments on every PR.
     func testCommentedReviewsAreDropped() throws {
         let items = try build([node(reviews: [("github-actions", "COMMENTED"),
-                                              ("ec-boston", "APPROVED")])])
-        XCTAssertEqual(items[0].approvals.map(\.login), ["ec-boston"])
+                                              ("alice", "APPROVED")])])
+        XCTAssertEqual(items[0].approvals.map(\.login), ["alice"])
     }
 
     // MARK: - Checks
@@ -228,20 +229,20 @@ final class MyPRInboxTests: XCTestCase {
 
     // MARK: - Stacks
 
-    /// The live shape: #736's base is #734's head branch.
+    /// The live shape: #101's base is #100's head branch.
     func testStackIsLinkedInBothDirections() throws {
         let items = try build([
-            node(number: 736, head: "feat/detail", base: "feat/feed"),
-            node(number: 734, head: "feat/feed", base: "feat/sprint-18"),
+            node(number: 101, head: "feat/detail", base: "feat/feed"),
+            node(number: 100, head: "feat/feed", base: "feat/sprint-18"),
         ])
-        let detail = items.first { $0.number == 736 }!
-        let feed = items.first { $0.number == 734 }!
-        XCTAssertEqual(detail.stackedOn, 734)
+        let detail = items.first { $0.number == 101 }!
+        let feed = items.first { $0.number == 100 }!
+        XCTAssertEqual(detail.stackedOn, 100)
         XCTAssertTrue(detail.isStacked)
         XCTAssertEqual(detail.blocksRestackOf, [])
         XCTAssertNil(feed.stackedOn)
-        XCTAssertEqual(feed.blocksRestackOf, [736],
-                       "rebasing 734 strands 736, and the row must say so")
+        XCTAssertEqual(feed.blocksRestackOf, [101],
+                       "rebasing 100 strands 101, and the row must say so")
     }
 
     func testUnstackedPRHasNoStackLinks() throws {
@@ -255,12 +256,12 @@ final class MyPRInboxTests: XCTestCase {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let other = node(number: 900, head: "feat/feed", base: "main")
-            .replacingOccurrences(of: "elevationchurch/repo", with: "elevationchurch/other")
+            .replacingOccurrences(of: "acme/repo", with: "acme/other")
         let items = inbox.build(from: try decoder.decode(
             MyPRPayload.self,
-            from: Data(payload([node(number: 736, head: "feat/detail", base: "feat/feed"),
+            from: Data(payload([node(number: 101, head: "feat/detail", base: "feat/feed"),
                                 other]).utf8)).mine)
-        let detail = items.first { $0.number == 736 }!
+        let detail = items.first { $0.number == 101 }!
         XCTAssertNil(detail.stackedOn, "a same-named branch in another repo is not the parent")
     }
 
@@ -347,7 +348,7 @@ final class MyPRInboxTests: XCTestCase {
     /// Both live PRs are BLOCKED on reviews, so the dot stays dark today.
     func testBlockedOnReviewIsNotReadyToMerge() throws {
         let items = try build([node(mergeState: "BLOCKED",
-                                    reviews: [("ec-boston", "APPROVED")])])
+                                    reviews: [("alice", "APPROVED")])])
         XCTAssertFalse(items[0].needsLead)
         XCTAssertFalse(items[0].isReadyToMerge,
                        "a lead approval alone does not make it mergeable")
@@ -360,5 +361,43 @@ final class MyPRInboxTests: XCTestCase {
         XCTAssertTrue(pr.needsLead)
         XCTAssertEqual(pr.unresolvedThreadCount, 2)
         XCTAssertEqual(pr.health, .attention)
+    }
+}
+
+/// The display-name map ships empty, so these cover both branches.
+final class LeadsTests: XCTestCase {
+    func testUnmappedLoginFallsBackToItself() {
+        XCTAssertEqual(Leads.shortName(for: "some-login"), "some-login")
+    }
+
+    func testDefaultsShipEmptySoNoTeamIsBakedIn() {
+        XCTAssertTrue(Leads.defaultLogins.isEmpty)
+        XCTAssertTrue(Leads.displayNames.isEmpty)
+    }
+
+    /// An empty lead list must leave every PR reading "lead needed" rather
+    /// than crashing or accidentally satisfying the gate.
+    func testNoLeadsConfiguredMeansTheGateIsNeverSatisfied() throws {
+        let inbox = MyPRInbox(leadLogins: [])
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let json = """
+        {"mine":{"issueCount":1,"nodes":[{
+          "number":1,"title":"t","url":"https://example.com/1","isDraft":false,
+          "createdAt":"2026-09-02T18:58:51Z","updatedAt":"2026-09-02T18:58:51Z",
+          "headRefName":"h","baseRefName":"b","reviewDecision":"APPROVED",
+          "mergeStateStatus":"CLEAN","mergeable":"MERGEABLE",
+          "additions":1,"deletions":0,"changedFiles":1,
+          "repository":{"nameWithOwner":"acme/repo"},
+          "latestReviews":{"nodes":[{"author":{"login":"anyone"},"state":"APPROVED"}]},
+          "reviewRequests":{"nodes":[]},
+          "reviewThreads":{"totalCount":0,"nodes":[]},
+          "commits":{"nodes":[]}
+        }]}}
+        """
+        let result = try decoder.decode(MyPRPayload.self, from: Data(json.utf8)).mine
+        let items = inbox.build(from: result)
+        XCTAssertTrue(items[0].needsLead)
+        XCTAssertEqual(items[0].liveApprovals.count, 1, "the approval still counts")
     }
 }

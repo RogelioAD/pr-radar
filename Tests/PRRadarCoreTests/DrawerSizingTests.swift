@@ -224,3 +224,51 @@ final class DrawerSizingTests: XCTestCase {
         XCTAssertEqual(sizing.snap(200, rowHeights: mixed, itemCount: 3), 226)
     }
 }
+
+/// Pins the prefix handling that, when wrong, wiped every measurement on each
+/// refresh and made the drawer resize itself twice per poll.
+final class RowHeightKeysTests: XCTestCase {
+
+    let heights: [String: CGFloat] = [
+        "reviews:acme/repo#1": 50,
+        "reviews:acme/repo#2": 60,
+        "mine:acme/repo#9": 110,
+    ]
+
+    func testKeysAreNamespacedByTab() {
+        XCTAssertEqual(RowHeightKeys.key(tab: .reviews, id: "acme/repo#1"),
+                       "reviews:acme/repo#1")
+        XCTAssertEqual(RowHeightKeys.key(tab: .mine, id: "acme/repo#1"),
+                       "mine:acme/repo#1")
+    }
+
+    /// The regression: live ids are un-namespaced, so the prefix must be
+    /// stripped before comparing. Getting this wrong dropped everything.
+    func testKeepsRowsThatStillExist() {
+        let pruned = RowHeightKeys.pruned(heights, tab: .reviews,
+                                          liveIDs: ["acme/repo#1", "acme/repo#2"])
+        XCTAssertEqual(pruned["reviews:acme/repo#1"], 50)
+        XCTAssertEqual(pruned["reviews:acme/repo#2"], 60)
+    }
+
+    func testDropsOnlyRowsThatAreGone() {
+        let pruned = RowHeightKeys.pruned(heights, tab: .reviews,
+                                          liveIDs: ["acme/repo#1"])
+        XCTAssertNotNil(pruned["reviews:acme/repo#1"])
+        XCTAssertNil(pruned["reviews:acme/repo#2"])
+    }
+
+    /// Pruning one tab must not touch the other's measurements.
+    func testLeavesTheOtherTabAlone() {
+        let pruned = RowHeightKeys.pruned(heights, tab: .reviews, liveIDs: [])
+        XCTAssertEqual(pruned["mine:acme/repo#9"], 110)
+        XCTAssertNil(pruned["reviews:acme/repo#1"])
+    }
+
+    func testPruningWithEverythingStillLiveChangesNothing() {
+        let pruned = RowHeightKeys.pruned(heights, tab: .reviews,
+                                          liveIDs: ["acme/repo#1", "acme/repo#2"])
+        XCTAssertEqual(pruned.count, heights.count,
+                       "a refresh that changes nothing must discard nothing")
+    }
+}

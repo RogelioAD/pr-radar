@@ -4,8 +4,8 @@ import XCTest
 final class ReviewInboxTests: XCTestCase {
 
     let me = "RogelioAD"
-    let myTeams = [TeamRef(org: "elevationchurch", slug: "developers"),
-                   TeamRef(org: "elevationchurch", slug: "mobile_developers")]
+    let myTeams = [TeamRef(org: "acme", slug: "web-team"),
+                   TeamRef(org: "acme", slug: "mobile-team")]
 
     func decode(_ json: String) throws -> [String: SearchResult] {
         let decoder = JSONDecoder()
@@ -39,10 +39,10 @@ final class ReviewInboxTests: XCTestCase {
         {"direct":{"nodes":[{
           "number":\(number),
           "title":"a pull request",
-          "url":"https://github.com/elevationchurch/repo/pull/\(number)",
+          "url":"https://github.com/acme/repo/pull/\(number)",
           "isDraft":\(draft),
           "author":{"login":"\(author)","avatarUrl":"https://avatars.githubusercontent.com/u/1"},
-          "repository":{"nameWithOwner":"elevationchurch/repo"},
+          "repository":{"nameWithOwner":"acme/repo"},
           "requests":{"nodes":[\(reqNodes)]},
           "myReviews":{"nodes":[\(revNodes)]},
           "myComments":{"nodes":[\(comNodes)]}
@@ -75,12 +75,12 @@ final class ReviewInboxTests: XCTestCase {
         XCTAssertTrue(inbox().build(from: data).isEmpty)
     }
 
-    /// The real shape of PR #763: I reviewed, then was re-requested afterwards.
+    /// The real shape of PR #102: I reviewed, then was re-requested afterwards.
     /// A naive "have I ever commented?" check gets this wrong.
     func testReRequestAfterMyReviewShowsAgain() throws {
         let data = try decode(payload(
-            number: 763,
-            author: "benjaminrevelo",
+            number: 102,
+            author: "erin",
             requests: [("User", me, "2026-09-14T20:59:13Z"),
                        ("User", me, "2026-09-15T13:37:09Z")],
             reviews: [(me, "2026-09-14T20:59:31Z")]))
@@ -95,32 +95,32 @@ final class ReviewInboxTests: XCTestCase {
         let data = try decode(payload(
             requests: [("User", me, "2026-09-15T11:00:00Z")],
             reviews: [("github-actions", "2026-09-15T12:00:00Z"),
-                      ("james-wall-elevation", "2026-09-15T13:00:00Z")],
-            comments: [("benjaminrevelo", "2026-09-15T14:00:00Z")]))
+                      ("frank", "2026-09-15T13:00:00Z")],
+            comments: [("erin", "2026-09-15T14:00:00Z")]))
         XCTAssertEqual(inbox().build(from: data).count, 1)
     }
 
     // MARK: - Reviewer union discrimination
 
     func testTeamPingForMyTeamShows() throws {
-        let data = try decode(payload(requests: [("Team", "mobile_developers", "2026-09-15T11:00:00Z")]))
+        let data = try decode(payload(requests: [("Team", "mobile-team", "2026-09-15T11:00:00Z")]))
         XCTAssertEqual(inbox().build(from: data).count, 1)
     }
 
     func testTeamPingForTeamImNotInIsIgnored() throws {
-        let data = try decode(payload(requests: [("Team", "ios-platform", "2026-09-15T11:00:00Z")]))
+        let data = try decode(payload(requests: [("Team", "platform-team", "2026-09-15T11:00:00Z")]))
         XCTAssertTrue(inbox().build(from: data).isEmpty)
     }
 
-    /// `ec-boston` is a real User, not a Team. A user login must never be
+    /// `alice` is a real User, not a Team. A user login must never be
     /// matched against the team slug set, and vice versa.
     func testUserPingForSomeoneElseIsIgnored() throws {
-        let data = try decode(payload(requests: [("User", "ec-boston", "2026-09-15T11:00:00Z")]))
+        let data = try decode(payload(requests: [("User", "alice", "2026-09-15T11:00:00Z")]))
         XCTAssertTrue(inbox().build(from: data).isEmpty)
     }
 
     func testUserWhoseLoginMatchesATeamSlugIsNotATeamPing() throws {
-        let data = try decode(payload(requests: [("User", "developers", "2026-09-15T11:00:00Z")]))
+        let data = try decode(payload(requests: [("User", "web-team", "2026-09-15T11:00:00Z")]))
         XCTAssertTrue(inbox().build(from: data).isEmpty)
     }
 

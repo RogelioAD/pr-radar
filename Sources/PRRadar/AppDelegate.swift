@@ -152,8 +152,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Drop measurements for rows that are gone, and an author filter
             // whose author no longer has anything waiting — otherwise the
             // drawer would sit empty next to a non-zero badge.
-            let liveIDs = Set(items.map(\.id))
-            state.rowHeights = state.rowHeights.filter { liveIDs.contains($0.key) }
+            state.rowHeights = RowHeightKeys.pruned(state.rowHeights,
+                                                    tab: .reviews,
+                                                    liveIDs: Set(items.map(\.id)))
             if let author = state.authorFilter,
                !items.contains(where: { $0.authorLogin == author }) {
                 state.authorFilter = nil
@@ -214,10 +215,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             let liveIDs = Set(mine.map(\.id))
-            state.rowHeights = state.rowHeights.filter { key, _ in
-                guard key.hasPrefix("mine:") else { return true }
-                return liveIDs.contains(String(key.dropFirst("mine:".count)))
-            }
+            state.rowHeights = RowHeightKeys.pruned(state.rowHeights,
+                                                    tab: .mine,
+                                                    liveIDs: liveIDs)
             state.myPRs = mine
             validateRepoFilter()
             Log.debug("my PRs: \(mine.count), ready to merge: \(state.myPRsReadyToMerge)")
