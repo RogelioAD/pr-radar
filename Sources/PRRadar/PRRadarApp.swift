@@ -44,7 +44,8 @@ enum Diagnostics {
             var reached = 0
             for account in accounts {
                 let name = account.login.isEmpty ? "(active account)" : account.login
-                print("\n── \(name) @ \(account.host)"
+                let where_ = account.host.isEmpty ? "" : " @ \(account.host)"
+                print("\n── \(name)\(where_)"
                       + (account.isActive ? "  [active]" : "")
                       + (account.isHealthy ? "" : "  [gh reports auth trouble]"))
                 do {

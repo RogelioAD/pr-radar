@@ -283,7 +283,10 @@ struct DrawerView: View {
             ScrollView {
                 VStack(spacing: Layout.rowSpacing) {
                     ForEach(items) { item in
-                        RowView(item: item, now: state.clock) { onOpen(item) }
+                        RowView(item: item, now: state.clock,
+                                accountLabel: state.accountLabel(for: item.account)) {
+                            onOpen(item)
+                        }
                     }
                 }
                 .padding(.horizontal, 6)
@@ -312,9 +315,13 @@ struct DrawerView: View {
                         switch unit {
                         case .single(let item):
                             MyPRRowView(item: item, now: state.clock,
+                                        accountLabel: state.accountLabel(for: item.account),
                                         onOpen: { onOpenMyPR(item) })
                         case .stack(let stack):
                             MyPRStackView(stack: stack, now: state.clock,
+                                          accountLabel: {
+                                              state.accountLabel(for: $0.account)
+                                          },
                                           onOpen: { onOpenMyPR($0) })
                         }
                     }

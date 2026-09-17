@@ -103,10 +103,15 @@ extension Accounts {
         return parsed.isEmpty ? [activeFallback] : parsed
     }
 
-    /// Stands in for the active account when it cannot be named. `login` is empty
-    /// because nothing has told us what it is; the UI shows a discovered login
-    /// only when there is one to show.
-    static let activeFallback = Account(login: "", host: "github.com",
+    /// Stands in for the active account when it cannot be named — an older `gh`
+    /// without `auth status --json`.
+    ///
+    /// Both fields are empty rather than guessed. `gh` is equally at home on an
+    /// Enterprise host, and naming github.com here would print a hostname this
+    /// machine may never talk to: a placeholder that states a fact is worse
+    /// than one that admits it knows nothing. Callers show a discovered value
+    /// only when there is one.
+    static let activeFallback = Account(login: "", host: "",
                                         isActive: true, isHealthy: true)
 
     /// The token for an account, preferring a named lookup and falling back to

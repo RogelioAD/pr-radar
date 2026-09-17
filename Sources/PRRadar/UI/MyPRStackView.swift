@@ -9,6 +9,11 @@ import PRRadarCore
 struct MyPRStackView: View {
     let stack: MyPRStack
     let now: Date
+    /// Which account surfaced each row, asked per PR rather than per card: a
+    /// stack is usually one identity's chain, but nothing guarantees it — two
+    /// accounts can both reach the same repo, and a card that named only the
+    /// first would be quietly wrong about the rest.
+    var accountLabel: (MyPullRequest) -> String? = { _ in nil }
     let onOpen: (MyPullRequest) -> Void
 
     var body: some View {
@@ -16,6 +21,7 @@ struct MyPRStackView: View {
             ForEach(stack.members) { item in
                 MyPRRowView(item: item,
                             now: now,
+                            accountLabel: accountLabel(item),
                             onOpen: { onOpen(item) },
                             stackPosition: stack.position(of: item),
                             stackDepth: stack.depth,

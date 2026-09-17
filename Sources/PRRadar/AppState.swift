@@ -26,7 +26,14 @@ final class AppState: ObservableObject {
     /// them, which is the only value under which the badge answers "who is
     /// waiting on you" for the whole of your work.
     @Published var accountFilter: String? = Prefs.accountFilter {
-        didSet { Prefs.accountFilter = accountFilter }
+        didSet {
+            Prefs.accountFilter = accountFilter
+            // Switching account is the second way a repo filter can go stale,
+            // and it goes stale immediately rather than at the next refresh:
+            // the repo you were narrowed to may not exist for this identity at
+            // all, which would leave an empty drawer beside a non-zero strip.
+            dropStaleRepoFilter()
+        }
     }
 
     /// Every account discovered on this machine, active one first.
@@ -215,6 +222,28 @@ final class AppState: ObservableObject {
         case .reviews: return AccountScope.apply(id, to: items, accountOf: \.account).count
         case .mine: return AccountScope.apply(id, to: myPRs, accountOf: \.account).count
         }
+    }
+
+    /// Drops a repo filter that matches nothing for the current account scope.
+    ///
+    /// Lives here rather than in the refresh loop because there are now two
+    /// ways to invalidate it — a refresh, and an account switch — and a rule
+    /// with two triggers and one implementation cannot drift between them.
+    func dropStaleRepoFilter() {
+        guard let repo = repoFilter else { return }
+        let counts = repoCount(repo)
+        if counts.reviews == 0 && counts.mine == 0 { repoFilter = nil }
+    }
+
+    /// The account to name on a row, or nil when naming it would be noise:
+    /// only one account exists, the list is already scoped to one, or the row
+    /// predates the tag.
+    func accountLabel(for id: String) -> String? {
+        guard showsAccountStrip, accountFilter == nil else { return nil }
+        guard let account = accounts.first(where: { $0.id == id }),
+              !account.login.isEmpty
+        else { return nil }
+        return account.login
     }
 
     static func shortRepoName(_ repo: String) -> String { RepoScope.shortName(repo) }

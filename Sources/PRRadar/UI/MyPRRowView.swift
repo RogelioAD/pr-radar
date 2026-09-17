@@ -7,6 +7,8 @@ import PRRadarCore
 struct MyPRRowView: View {
     let item: MyPullRequest
     let now: Date
+    /// Which account surfaced this row, or nil when saying so would be noise.
+    var accountLabel: String?
     let onOpen: () -> Void
     /// This PR's height in its stack, 1 at the base, or nil when it is not in
     /// one. Supplied by the group rather than read off the PR, because what
@@ -151,6 +153,10 @@ struct MyPRRowView: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
+            if let accountLabel {
+                Chip(text: accountLabel, symbol: "person.crop.circle",
+                     health: .neutral)
+            }
             if item.isDraft {
                 Chip(text: "draft", health: .neutral)
             }

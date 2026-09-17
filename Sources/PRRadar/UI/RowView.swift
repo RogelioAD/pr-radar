@@ -4,6 +4,8 @@ import PRRadarCore
 struct RowView: View {
     let item: ReviewItem
     let now: Date
+    /// Which account surfaced this row, or nil when saying so would be noise.
+    var accountLabel: String?
     let onOpen: () -> Void
 
     @State private var hovering = false
@@ -38,6 +40,13 @@ struct RowView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
+                    if let accountLabel {
+                        // A symbol rather than bare text: this row already
+                        // shows an author login, and two logins side by side
+                        // with nothing to tell them apart is worse than one.
+                        Chip(text: accountLabel, symbol: "person.crop.circle",
+                             health: .neutral)
+                    }
                     if item.isDraft {
                         Text("draft")
                             .font(.system(size: 9, weight: .semibold))
