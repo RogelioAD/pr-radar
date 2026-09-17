@@ -70,6 +70,19 @@ struct RowView: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
         .onHover { hovering = $0 }
+        .draggable(item.url) {
+            Text(item.title).font(.system(size: 12)).padding(6)
+        }
+        .contextMenu {
+            Button("Open in Browser") { onOpen() }
+            Button("Copy Link") { Clipboard.copy(item.url.absoluteString) }
+            Button("Copy Title") { Clipboard.copy(item.title) }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.title), pull request \(item.number) "
+                            + "in \(item.repoShortName) by \(item.authorLogin), "
+                            + "requested \(TimeAgo.long(since: item.pingedAt, now: now))")
+        .accessibilityAddTraits(.isButton)
         .background(
             GeometryReader { geometry in
                 Color.clear.preference(key: RowHeightsKey.self,

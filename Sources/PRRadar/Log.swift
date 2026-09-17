@@ -1,8 +1,20 @@
 import AppKit
+import OSLog
 
-/// Debug tracing, off unless PRRADAR_DEBUG=1.
+/// Debug tracing. Always recorded through unified logging, and additionally
+/// echoed to stderr when PRRADAR_DEBUG=1.
+///
+/// The stderr half only reaches anyone running the binary from a terminal,
+/// which an app started by a LaunchAgent never is — diagnosing it meant
+/// rewriting the agent to capture a file. The unified log is readable after the
+/// fact in Console.app, filtered on this subsystem, with no such surgery:
+///
+///     log stream --predicate 'subsystem == "com.rogelioacosta.prradar"'
 enum Log {
     static let enabled = ProcessInfo.processInfo.environment["PRRADAR_DEBUG"] == "1"
+
+    private static let logger = Logger(subsystem: "com.rogelioacosta.prradar",
+                                       category: "app")
 
     /// PRRADAR_EXPAND=1 opens the drawer on launch — lets the expanded state be
     /// inspected without a click.
@@ -33,7 +45,15 @@ enum Log {
     }
 
     static func debug(_ message: @autoclosure () -> String) {
+        let text = message()
+        // Notice rather than debug: debug-level records live in memory and are
+        // gone before anyone thinks to look, which is precisely the situation
+        // this exists for. Notice is persisted and readable after the fact.
+        //
+        // Public: this is a developer tool logging its own state, and redacted
+        // placeholders would make the log useless for the thing it exists for.
+        logger.notice("\(text, privacy: .public)")
         guard enabled else { return }
-        FileHandle.standardError.write(Data("[prradar] \(message())\n".utf8))
+        FileHandle.standardError.write(Data("[prradar] \(text)\n".utf8))
     }
 }

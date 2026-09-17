@@ -207,11 +207,15 @@ final class PanelController {
         // Smooths the jump when switching tabs, and the settle after a resize.
         // Never used mid-drag: animating towards a target the pointer is still
         // moving would lag behind the cursor.
-        NSAnimationContext.runAnimationGroup { context in
+        NSAnimationContext.runAnimationGroup({ context in
             context.duration = duration
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(frame, display: true)
-        }
+        }, completionHandler: { [weak self] in
+            // The drawer has finished travelling; whatever is under the pointer
+            // now is the answer, whether or not the pointer moved to get there.
+            self?.hostingView.refreshEdgeHover()
+        })
     }
 
     private static let zones = DrawerZones(headerHeight: Layout.headerHeight,
@@ -316,6 +320,10 @@ final class PanelController {
         )
         state.userContentHeight = snapped
         Prefs.setDrawerContentHeight(snapped, for: state.selectedTab)
+        // The edge jumps to the nearest row on release; .alignment is the
+        // system feedback for exactly that, and on a trackpad it makes the snap
+        // felt rather than only seen.
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
         // A touch slower than a tab switch: this is a settle, and the travel
         // is at most half a row, so a quick snap reads as a jolt.
         applyFrame(animated: true, duration: 0.22)
@@ -344,6 +352,7 @@ final class PanelController {
         state.selectedTab = tab
         applyFrame(animated: true)
         hostingView.updateTrackingAreas()
+        hostingView.refreshEdgeHover()
     }
 
     // MARK: - Screen fitting

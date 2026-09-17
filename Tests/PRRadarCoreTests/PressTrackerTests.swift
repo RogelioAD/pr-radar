@@ -73,8 +73,8 @@ final class PressTrackerTests: XCTestCase {
 
         // A fresh stationary press must not inherit the previous drag.
         tracker.begin(zone: .move)
+        // end() alone proves the reset: a leaked threshold would report .moved.
         XCTAssertEqual(tracker.end(), .click)
-        XCTAssertFalse(tracker.isDragging)
     }
 
     func testIsTrackingReflectsState() {

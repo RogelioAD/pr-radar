@@ -130,6 +130,11 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
             removeTrackingArea(existing)
             resizeTrackingArea = nil
         }
+        // The geometry just moved, possibly out from under a pointer that never
+        // budged. Enter and exit cannot report that — no event is owed when the
+        // window moves rather than the mouse — so settle the state from the
+        // pointer itself instead of waiting to be told.
+        defer { refreshEdgeHover() }
 
         let thickness = resizeEdgeThickness
         let probe = NSPoint(x: bounds.midX,
@@ -169,6 +174,19 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
 
     override func mouseExited(with event: NSEvent) {
         updateEdgeHover(with: event)
+    }
+
+    /// Re-derives the edge hover from where the pointer actually is, for the
+    /// cases no mouse event covers: switching tabs or changing a filter resizes
+    /// the drawer around a still pointer, and the answer can change without the
+    /// mouse having moved at all.
+    func refreshEdgeHover() {
+        guard !draggingResizeEdge, let window else { return }
+        let local = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        let inside = bounds.contains(local) && zoneAt(local) == .resize
+        guard inside != hoveringResizeEdge else { return }
+        hoveringResizeEdge = inside
+        applyCursor()
     }
 
     private func updateEdgeHover(with event: NSEvent) {

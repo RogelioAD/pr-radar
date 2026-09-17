@@ -32,8 +32,6 @@ public struct PressTracker: Equatable {
     }
 
     public var isTracking: Bool { zone != .none }
-    /// True once the press has committed to being a drag.
-    public var isDragging: Bool { passedThreshold }
 
     public mutating func begin(zone: Zone) {
         self.zone = zone

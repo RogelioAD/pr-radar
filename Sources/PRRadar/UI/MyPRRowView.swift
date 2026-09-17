@@ -33,6 +33,18 @@ struct MyPRRowView: View {
         .clipShape(RoundedRectangle(cornerRadius: 7))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .draggable(item.url) {
+            Text(item.title).font(.system(size: 12)).padding(6)
+        }
+        .contextMenu {
+            Button("Open in Browser") { onOpen() }
+            Button("Copy Link") { Clipboard.copy(item.url.absoluteString) }
+            Button("Copy Title") { Clipboard.copy(item.title) }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.title), pull request \(item.number) "
+                            + "in \(item.repoShortName), \(item.mergeBlocker.label)")
+        .accessibilityAddTraits(.isButton)
         .background(
             GeometryReader { geometry in
                 Color.clear.preference(key: RowHeightsKey.self,
@@ -188,7 +200,7 @@ struct MyPRRowView: View {
 
     /// Whether the branch chip already covers the merge blocker.
     private var coveredByBranchChip: Bool {
-        item.mergeBlocker == .behind || item.mergeBlocker == .dirty
+        item.mergeBlocker.wantsRebase
     }
 
     // MARK: - Actions

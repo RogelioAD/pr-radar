@@ -1,4 +1,5 @@
 import AppKit
+import Network
 import SwiftUI
 import PRRadarCore
 
@@ -21,7 +22,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var viewerLogin: String?
     private var teams: [TeamRef] = []
 
-    private let pollInterval: Duration = .seconds(60)
+    private let pathMonitor = NWPathMonitor()
+    /// Assumed true until the monitor says otherwise, so a slow first callback
+    /// cannot swallow the launch fetch.
+    private var isOnline = true
+
+    /// Low Power Mode is the user asking for less background work, and a review
+    /// request is not worth overruling that for — the drawer's Refresh is still
+    /// immediate either way.
+    private var pollInterval: Duration {
+        ProcessInfo.processInfo.isLowPowerModeEnabled ? .seconds(300) : .seconds(60)
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.debug("applicationDidFinishLaunching")
@@ -49,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.menuProvider = { [weak self] in self?.buildMenu() }
         panel.show()
 
+        startNetworkMonitor()
         startPolling()
         startClock()
         startUpdateChecks()
@@ -79,14 +91,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pollTask?.cancel()
         clockTask?.cancel()
         updateTask?.cancel()
+        pathMonitor.cancel()
     }
 
     // MARK: - Polling
 
+    /// Polling into a dead network just logs a failure a minute, and the
+    /// interesting moment — coming back online — used to wait out the rest of
+    /// the interval. Watching the path covers both.
+    private func startNetworkMonitor() {
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in
+                guard let self else { return }
+                let online = path.status == .satisfied
+                defer { self.isOnline = online }
+                Log.debug("network: \(online ? "online" : "offline")")
+                // Reconnecting is worth a fetch immediately rather than at the
+                // next tick: it is exactly when the list is most out of date.
+                if online, !self.isOnline { await self.refresh() }
+            }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "com.rogelioacosta.prradar.network"))
+    }
+
     private func startPolling() {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refresh()
+                if self?.isOnline ?? true {
+                    await self?.refresh()
+                } else {
+                    Log.debug("poll skipped: offline")
+                }
                 try? await Task.sleep(for: self?.pollInterval ?? .seconds(60))
             }
         }

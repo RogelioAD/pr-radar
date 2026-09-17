@@ -13,10 +13,35 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private let isBundled = Bundle.main.bundleIdentifier != nil
     private var authorized = false
 
+    /// Categories have to exist before a notification claims one, so they are
+    /// registered up front rather than at post time.
+    private enum Category {
+        static let review = "review-request"
+        static let update = "app-update"
+    }
+
+    private enum Action {
+        static let open = "open"
+    }
+
     func prepare() {
         guard isBundled else { return }
         let center = UNUserNotificationCenter.current()
         center.delegate = self
+        center.setNotificationCategories([
+            UNNotificationCategory(
+                identifier: Category.review,
+                actions: [UNNotificationAction(identifier: Action.open,
+                                               title: "Open PR",
+                                               options: [.foreground])],
+                intentIdentifiers: []),
+            UNNotificationCategory(
+                identifier: Category.update,
+                actions: [UNNotificationAction(identifier: Action.open,
+                                               title: "Open Release",
+                                               options: [.foreground])],
+                intentIdentifiers: []),
+        ])
         center.requestAuthorization(options: [.alert, .sound]) { [weak self] granted, error in
             self?.authorized = granted
             Log.debug("notification authorization granted=\(granted) "
@@ -55,6 +80,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         content.body = body
         content.sound = .default
         content.userInfo = ["url": url.absoluteString]
+        content.categoryIdentifier = Category.update
+        content.threadIdentifier = "pr-radar-update"
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "update-\(version)",
                                   content: content, trigger: nil))
@@ -75,10 +102,40 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         content.body = body
         content.sound = .default
         content.userInfo = ["url": item.url.absoluteString]
+        content.categoryIdentifier = Category.review
+        // One thread per repository, so a busy repo collapses into a single
+        // stack in Notification Center instead of a flat run of banners.
+        content.threadIdentifier = item.repo
+        // Already-stale requests are the ones worth interrupting for; a fresh
+        // one can wait for the next time the drawer is opened.
+        if Staleness.of(item.pingedAt, now: Date()) == .stale {
+            content.interruptionLevel = .timeSensitive
+        }
+        if let avatar = item.authorAvatarURL,
+           let attachment = Self.attachment(for: avatar, id: item.id) {
+            content.attachments = [attachment]
+        }
 
         let request = UNNotificationRequest(
             identifier: item.pingKey, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Author avatar, shown as the banner's thumbnail. Fetched synchronously
+    /// because posting is already off the critical path and an avatar is a few
+    /// kilobytes; any failure simply yields a notification without one.
+    ///
+    /// The file must outlive the call — the system copies it into its own
+    /// store when the request is accepted — so it lands in the temporary
+    /// directory rather than being cleaned up here.
+    private static func attachment(for url: URL, id: String) -> UNNotificationAttachment? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        let safe = id.replacingOccurrences(of: "/", with: "-")
+                     .replacingOccurrences(of: "#", with: "-")
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("prradar-avatar-\(safe).png")
+        guard (try? data.write(to: file)) != nil else { return nil }
+        return try? UNNotificationAttachment(identifier: "avatar", url: file)
     }
 
     /// Fallback path: works unbundled and when authorization was refused,
