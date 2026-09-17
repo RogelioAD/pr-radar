@@ -19,6 +19,7 @@ public enum Prefs {
         static let celebrateCleared = "celebrate.cleared"
         static let leadLogins = "leads.logins"
         static let repoFilter = "list.repoFilter"
+        static let accountFilter = "list.accountFilter"
         static let updateRepo = "update.repo"
         static let notifiedUpdate = "update.notifiedVersion"
         static let mascot = "mascot.choice"
@@ -83,6 +84,22 @@ public enum Prefs {
                 defaults.set(newValue, forKey: Key.repoFilter)
             } else {
                 defaults.removeObject(forKey: Key.repoFilter)
+            }
+        }
+    }
+
+    /// Which account the lists are scoped to, by `host/login`. nil means all
+    /// of them. Persisted like the repo scope, and validated on every refresh:
+    /// an account logged out of between launches must not leave the app scoped
+    /// to an identity it can no longer read, which would show an empty drawer
+    /// that looks exactly like having nothing to do.
+    public static var accountFilter: String? {
+        get { defaults.string(forKey: Key.accountFilter) }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Key.accountFilter)
+            } else {
+                defaults.removeObject(forKey: Key.accountFilter)
             }
         }
     }
