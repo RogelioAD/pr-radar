@@ -228,7 +228,7 @@ header** to move the whole thing.
 ## Mascots
 
 A small pixel-art character that keeps you company in the drawer and, by
-default, replaces the floating icon entirely. Four of them:
+default, replaces the floating icon entirely. Five of them:
 
 | | |
 |---|---|
@@ -236,6 +236,7 @@ default, replaces the floating icon entirely. Four of them:
 | **Byte** | a cat, ears tipped in the mood colour |
 | **Widget** | a CRT terminal with a face |
 | **Nimbus** | a ghost; the only one that floats rather than sits |
+| **Deacon** | a photographed portrait in a suit; the necktie takes the mood colour |
 
 **It is a status channel, not a sticker.** The character's colour, expression
 and accessory all come from the same derivation the counts do, so it and the
@@ -262,6 +263,9 @@ Some details that took a while to get right, and are worth not undoing:
 
 - **No image files.** Every character is sixteen strings of one character per
   pixel, in `PRRadarCore`, drawn by a `Canvas`. The app still ships no assets.
+  That holds for the photographed one too: the portrait was area-averaged and
+  quantised into those same sixteen strings once, at authoring time, so what is
+  in the binary is art rather than a JPEG.
 - **A halo instead of a tile.** Free-floating on the desktop, the sprite has a
   dark outline inside and a fixed near-white halo outside, so it carries both
   poles of contrast and reads on any wallpaper. That is *better* than the tile

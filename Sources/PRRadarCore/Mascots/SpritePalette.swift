@@ -35,6 +35,13 @@ public enum SpritePalette {
         case .light:   return dark ? RGB(0.969, 0.973, 0.980) : RGB(white: 1)
         case .glass:   return dark ? RGB(0.110, 0.122, 0.141) : RGB(0.165, 0.180, 0.208)
         case .blush:   return RGB(0.949, 0.635, 0.635)
+        // Sampled from the photograph, and fixed in both appearances for the
+        // same reason blush is: a person's skin is not a themed surface, and
+        // re-tinting it by system appearance would read as a different person.
+        case .skinLit:   return RGB(0.780, 0.502, 0.286)
+        case .skin:      return RGB(0.612, 0.380, 0.220)
+        case .skinShade: return RGB(0.373, 0.227, 0.137)
+        case .tan:       return RGB(0.706, 0.588, 0.463)
         // Never drawn from here: the accent is Health.tint, resolved per layer.
         case .accent:  return RGB(white: 0.5)
         }

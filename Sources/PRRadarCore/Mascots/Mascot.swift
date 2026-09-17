@@ -1,7 +1,7 @@
 import Foundation
 
 public enum MascotID: String, CaseIterable, Sendable {
-    case pip, byte, widget, nimbus
+    case pip, byte, widget, nimbus, deacon
 
     /// The picker, for anyone who finds it by clicking: each character in turn,
     /// then off, then round again.
@@ -157,7 +157,60 @@ extension Mascot {
         eyes: [Point(5, 5), Point(9, 5)], eyeInk: .accent, eyeOff: .light,
         tell: [Point(4, 8), Point(11, 8)], headRows: 16)
 
-    public static let all: [Mascot] = [pip, byte, widget, nimbus]
+    /// The one photograph. Every other character was drawn straight into the
+    /// grid; this one was area-averaged down from a 1222×1287 portrait and
+    /// quantised against colours sampled from that same photograph, so what is
+    /// below is measured rather than eyeballed.
+    ///
+    /// Three things the quantiser had to be told, because nearest-colour gets
+    /// them wrong. Where black hair meets the cream backdrop the average is a
+    /// neutral grey sitting closer to mid skin than to either parent, which put
+    /// skin above his hairline; the lighter half of that same blend went to tan
+    /// and lit two flecks either side of his crown. And the shirt is within a
+    /// few units of the backdrop, so those two are told apart by reach rather
+    /// than by colour — the shirt is walled in by the suit and runs off the
+    /// bottom edge, the backdrop is whatever pale thing you can still touch
+    /// from the top or the sides.
+    ///
+    /// No collar and no crop: the second sanctioned exception after the
+    /// floater, for a different reason. The bust runs off the bottom of the
+    /// frame rather than ending in the shared shoulders, and the tell is the
+    /// necktie, which lives entirely in the rows a 12-row crop would remove.
+    public static let deacon = Mascot(
+        id: .deacon, name: "Deacon", tellName: "necktie",
+        sprite: Sprite([
+            "................",
+            "......tkkk......",
+            "....kkkkkkkn....",
+            "...kknsssnnkn...",
+            "...nnslllsskk...",
+            "...nnsslssnsks..",
+            "...nnsssssnsns..",
+            "...slsssslsnnt..",
+            "...knnslnsnnk...",
+            "....ssllssnnk...",
+            "....kknsnnttkk..",
+            ".tknktkkwwtkkkkk",
+            "kkkkwktwwkkkkkkk",
+            "kkkwwnkwkkkkkkkk",
+            "kkkwklwtkkkkkkkk",
+            "knwwtskkkkkkkkkk",
+        ]),
+        // His eyes fall at 19% and 57% across the face, measured off the
+        // source. At this size the photograph cannot resolve them itself —
+        // they average into the cheek — so the mood system draws them, which
+        // is what it does for every other character too.
+        eyes: [Point(4, 5), Point(8, 5)], eyeInk: .outline, eyeOff: .skin,
+        // The tie's own footprint in the photograph: columns 5-6 of the bottom
+        // four rows. Its plaid quantises to a speckle of tan and shade, but lit
+        // as one block it reads as a tie, which is what a tell is for.
+        tell: [Point(5, 12), Point(6, 12),
+               Point(5, 13), Point(6, 13),
+               Point(5, 14), Point(6, 14),
+               Point(5, 15), Point(6, 15)],
+        headRows: 16)
+
+    public static let all: [Mascot] = [pip, byte, widget, nimbus, deacon]
 
     public static func named(_ id: MascotID) -> Mascot {
         all.first { $0.id == id } ?? pip
