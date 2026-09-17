@@ -10,6 +10,7 @@ final class PanelController {
     private let state: AppState
     private var hostingView: DraggableHostingView<RootView>!
     private var outsideClickMonitor: Any?
+    private var activationObservers: [Any] = []
 
     /// Source of truth for position: the badge's rect in screen coordinates.
     /// The expanded drawer is laid out relative to this, so collapsing always
@@ -92,7 +93,38 @@ final class PanelController {
         hostingView.contextMenuProvider = { [weak self] in self?.menuProvider() }
         panel.contentView = hostingView
 
+        observeActivation()
         applyFrame()
+    }
+
+    /// Hover only works while the panel is key, and a panel is only key while
+    /// its app is active. Losing active status therefore leaves an open drawer
+    /// looking normal but completely inert — no row highlights, no underlined
+    /// titles — which is what a machine waking from sleep produces.
+    ///
+    /// Clicking outside already collapses the drawer, so treating any loss of
+    /// active status the same way keeps one rule rather than two. Becoming
+    /// active again re-takes key, for the paths that do not go through a
+    /// collapse at all.
+    private func observeActivation() {
+        let centre = NotificationCenter.default
+        activationObservers = [
+            centre.addObserver(forName: NSApplication.didResignActiveNotification,
+                               object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.setExpanded(false) }
+            },
+            centre.addObserver(forName: NSApplication.didBecomeActiveNotification,
+                               object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.state.expanded else { return }
+                    self.panel.makeKeyAndOrderFront(nil)
+                }
+            },
+        ]
+    }
+
+    deinit {
+        activationObservers.forEach(NotificationCenter.default.removeObserver)
     }
 
     // MARK: - Visibility

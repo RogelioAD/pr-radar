@@ -154,13 +154,27 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
         resizeTrackingArea = area
     }
 
+    /// Enter and exit say only that *a* tracking area was crossed, not which.
+    /// Every `.onHover` in the drawer installs one owned by this same view, so
+    /// hovering any row delivers an enter here — which used to be taken as
+    /// "the pointer reached the resize strip" and raised the arrows with the
+    /// pointer hundreds of points away. Re-laying out the rows, as changing a
+    /// filter does, installs a fresh crop of them and did it every time.
+    ///
+    /// So the pointer's actual position decides, and the event only prompts
+    /// the question.
     override func mouseEntered(with event: NSEvent) {
-        hoveringResizeEdge = true
-        applyCursor()
+        updateEdgeHover(with: event)
     }
 
     override func mouseExited(with event: NSEvent) {
-        hoveringResizeEdge = false
+        updateEdgeHover(with: event)
+    }
+
+    private func updateEdgeHover(with event: NSEvent) {
+        let inside = zoneAt(convert(event.locationInWindow, from: nil)) == .resize
+        guard inside != hoveringResizeEdge else { return }
+        hoveringResizeEdge = inside
         applyCursor()
     }
 
