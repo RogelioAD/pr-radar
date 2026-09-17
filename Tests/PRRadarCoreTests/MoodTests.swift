@@ -195,3 +195,49 @@ final class SpriteLayoutTests: XCTestCase {
                       "halo stopped before the counter chips")
     }
 }
+
+final class BlinkTests: XCTestCase {
+
+    private let tempos: [Double] = [1, 2, 6, 30]
+
+    /// The point of scheduling in seconds: the badge runs at a third of the
+    /// drawer's rate and must not therefore blink a third as often.
+    func testBlinkRateIsTheSameAtEveryTempo() {
+        for fps in tempos {
+            let seconds = 70.0
+            let frames = Int(seconds * fps)
+            var blinks = 0, wasBlinking = false
+            for frame in 0..<frames {
+                let now = Blink.isBlinking(frame: frame, fps: fps)
+                if now && !wasBlinking { blinks += 1 }
+                wasBlinking = now
+            }
+            let expected = seconds / Blink.interval
+            XCTAssertEqual(Double(blinks), expected, accuracy: 1,
+                           "\(fps) fps blinked \(blinks) times in \(seconds)s")
+        }
+    }
+
+    /// A slow clock must not step straight over the blink window.
+    func testEveryTempoActuallyClosesTheEyes() {
+        for fps in tempos {
+            let period = Blink.periodFrames(fps: fps)
+            let closed = (0..<period).filter { Blink.isBlinking(frame: $0, fps: fps) }
+            XCTAssertFalse(closed.isEmpty, "\(fps) fps never blinks")
+            XCTAssertGreaterThanOrEqual(Blink.holdFrames(fps: fps), 1)
+            // And it opens them again — a blink that never ends is a shut eye.
+            XCTAssertLessThan(closed.count, period, "\(fps) fps never opens")
+        }
+    }
+
+    /// The frame index comes from a free-running clock, which is negative for
+    /// dates before the reference date.
+    func testNegativeAndHugeFrameIndicesAreSafe() {
+        for fps in tempos {
+            XCTAssertNoThrow(Blink.isBlinking(frame: -1, fps: fps))
+            XCTAssertNoThrow(Blink.isBlinking(frame: Int.max, fps: fps))
+            XCTAssertNoThrow(Blink.isBlinking(frame: Int.min + 1, fps: fps))
+        }
+        XCTAssertFalse(Blink.isBlinking(frame: 3, fps: 0), "a stopped clock never blinks")
+    }
+}

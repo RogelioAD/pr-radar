@@ -26,12 +26,16 @@ struct BadgeView: View {
 
     // MARK: - Mascot
 
-    /// The badge is on screen all day, so it holds frame zero and moves only on
-    /// an edge: a reaction to being touched, or a fetch actually in flight.
-    /// There is no free-running timeline here — that is the difference between
-    /// this and the drawer, which stops existing when it collapses.
-    private var shouldAnimate: Bool {
-        state.reaction != nil || state.isRefreshing
+    /// The badge is on screen all day, so it idles at a third of the drawer's
+    /// rate — enough for the bob and the Zzz to read as breathing, far less
+    /// than the drawer, which can afford a full clock because it stops existing
+    /// when it collapses.
+    ///
+    /// It steps up only when something is actually happening to it: a fetch in
+    /// flight, or a reaction to being touched. Those are the moments where a
+    /// slow clock reads as lag rather than calm.
+    private var tempo: MascotView.Tempo {
+        state.reaction != nil || state.isRefreshing ? .lively : .resting
     }
 
     private func mascotWidget(_ mascot: Mascot, layout: SpriteLayout) -> some View {
@@ -45,7 +49,7 @@ struct BadgeView: View {
                             reviewHealth: state.hasProblem ? .neutral
                                                            : state.worstStaleness.health,
                             readyToMerge: state.myPRsReadyToMerge),
-                          animated: shouldAnimate,
+                          tempo: tempo,
                           halo: true,
                           shadow: true)
             .frame(width: size.width, height: size.height, alignment: .topLeading)

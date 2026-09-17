@@ -274,8 +274,12 @@ Some details that took a while to get right, and are worth not undoing:
 - **Never drawn below 2×**, whatever your Dock is set to. The counter's 3×5
   digits stop being a number below that.
 - **Barely animates.** The drawer's character runs at six frames a second and
-  stops existing when the drawer closes. The badge holds still and moves only
-  on an edge — a reaction, or a fetch actually in flight. Reduce Motion pins
+  stops existing when the drawer closes. The badge, which is on screen all day,
+  idles at two — enough for the bob and the `Z` to read as breathing, a third of
+  the redraws. It steps up to the full rate only while a fetch is in flight or
+  you are touching it, because those are the moments where a slow clock reads as
+  lag rather than calm. Blinking is scheduled in seconds rather than frames, so
+  the slower surface does not blink three times less often. Reduce Motion pins
   both to a single frame.
 
 ---

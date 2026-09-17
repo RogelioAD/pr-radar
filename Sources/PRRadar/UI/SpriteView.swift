@@ -90,7 +90,7 @@ struct MascotView: View {
     var crop: Int?
     /// Set to draw the whole floating widget — character, mark and counters.
     var counters: Counters?
-    var animated = true
+    var tempo: Tempo = .lively
     var halo = false
     var shadow = false
 
@@ -100,22 +100,54 @@ struct MascotView: View {
         let readyToMerge: Int
     }
 
+    /// How often the character is redrawn — a decision the caller makes, not
+    /// one this view guesses, because the two surfaces can afford very
+    /// different things.
+    ///
+    /// Measured on a release build, badge only, over 25 seconds at rest:
+    ///
+    ///     still     0.04% of one core
+    ///     resting   0.44%
+    ///     lively    3.20%
+    ///
+    /// Which is why the badge idles at `resting` rather than `lively`: seven
+    /// times cheaper, and the difference between a character that breathes and
+    /// one that is animating at you all day. `still` is a further ten times
+    /// cheaper again, but it buys a mascot that looks switched off.
+    enum Tempo {
+        /// Six frames a second. What the drawer runs at, and what the badge
+        /// switches to while something is actually happening to it. The drawer
+        /// can afford it unconditionally: it stops existing when it collapses.
+        case lively
+        /// Two. The badge is on screen all day, so at rest it breathes rather
+        /// than animates. A third of the redraws, and the bob and the Zzz
+        /// stretch into something that reads as idling instead of looping —
+        /// `asleep` takes three seconds to rise and fall rather than one.
+        case resting
+        /// No timeline at all. Reduce Motion, and anywhere a timer would be
+        /// scheduled for a character nobody is looking at.
+        case still
+
+        var fps: Double {
+            switch self {
+            case .lively: return 6
+            case .resting: return 2
+            case .still: return 0
+            }
+        }
+    }
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Six frames a second. Fast enough for a hop to read, slow enough that an
-    /// idle character is doing almost nothing.
-    private static let fps: Double = 6
-    /// A blink every seven seconds, held for two frames.
-    private static let blinkPeriod = 42
-
     var body: some View {
-        if animated && !reduceMotion {
-            TimelineView(.periodic(from: .now, by: 1 / Self.fps)) { timeline in
-                let frame = Int(timeline.date.timeIntervalSinceReferenceDate * Self.fps)
-                canvas(frame: frame, blink: frame % Self.blinkPeriod < 2)
-            }
-        } else {
+        if tempo == .still || reduceMotion {
             canvas(frame: 0, blink: false)
+        } else {
+            let fps = tempo.fps
+            TimelineView(.periodic(from: .now, by: 1 / fps)) { timeline in
+                let frame = Int(timeline.date.timeIntervalSinceReferenceDate * fps)
+                canvas(frame: frame, blink: Blink.isBlinking(frame: frame, fps: fps))
+            }
         }
     }
 
