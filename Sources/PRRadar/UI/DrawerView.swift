@@ -97,10 +97,10 @@ struct DrawerView: View {
 
     /// Always a button, whatever it happens to be drawing.
     ///
-    /// The cast cycles pip → byte → widget → nimbus → off → pip, and "off" is a
-    /// stop on that loop rather than the end of it. Drawing the glyph as inert
-    /// art there is what strands somebody who cycles one past the last
-    /// character: the only way back in would be the context menu.
+    /// The cast cycles pip → byte → widget → nimbus → deacon → off → pip, and
+    /// "off" is a stop on that loop rather than the end of it. Drawing the
+    /// glyph as inert art there is what strands somebody who cycles one past
+    /// the last character: the only way back in would be the context menu.
     ///
     /// Clicking has to be published as a header control or the press is taken
     /// as a window drag and never arrives — the same machinery the update chip

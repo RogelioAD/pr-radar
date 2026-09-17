@@ -42,6 +42,22 @@ final class MascotTests: XCTestCase {
                           "the floater is supposed to be the one without a collar")
     }
 
+    /// The portrait is the other exception, and for a different reason than the
+    /// floater: it runs off the bottom of its frame rather than ending in the
+    /// shared shoulders, so there is no collar to match and nothing to crop to.
+    func testThePortraitHasNoCollarAndNoCrop() {
+        XCTAssertEqual(Mascot.deacon.headRows, Mascot.deacon.sprite.height)
+        XCTAssertEqual(Mascot.deacon.bobScale, 1, "the portrait sits, it does not float")
+        let collar = Sprite(Mascot.collar)
+        let bottomFour = (0..<collar.height).map { y in
+            (0..<collar.width).map { x in Mascot.deacon.sprite[x, 12 + y] }
+        }
+        let collarRows = (0..<collar.height).map { y in
+            (0..<collar.width).map { x in collar[x, y] }
+        }
+        XCTAssertNotEqual(bottomFour, collarRows)
+    }
+
     func testEyeBoxesAreInBoundsAndOnSkin() {
         for mascot in Mascot.all {
             for box in mascot.eyes {

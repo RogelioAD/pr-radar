@@ -13,6 +13,14 @@ public enum Slot: Character, CaseIterable, Sendable {
     /// appearance; this one is `Health.tint`, which is what keeps a mascot and
     /// the count it sits next to from ever disagreeing.
     case accent  = "a"
+    /// Portrait slots. The six above are a greyscale set with one pink, which
+    /// is all a drawn character needs; a photographed one needs skin, and skin
+    /// quantised into grey is a smudge rather than a face. Only the portrait
+    /// uses these, so the drawn characters are untouched by their existence.
+    case skinLit   = "l"
+    case skin      = "s"
+    case skinShade = "n"
+    case tan       = "t"
 }
 
 public struct Point: Hashable, Sendable {
