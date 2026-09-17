@@ -278,7 +278,8 @@ final class PanelController {
                             userContentHeight: state.userContentHeight,
                             maxHeight: availableMaxHeight,
                             snapping: !isDraggingHeight,
-                            tab: state.selectedTab)
+                            tab: state.selectedTab,
+                            accountStrip: state.showsAccountStrip)
     }
 
     /// The drawer grows up and to the left, keeping the badge's bottom-right
@@ -420,11 +421,13 @@ final class PanelController {
     /// frame made the drag lurch between rows rather than track the hand.
     private func previewResize(to windowHeight: CGFloat) {
         isDraggingHeight = true
-        let content = Layout.sizing(for: state.selectedTab).clamp(
-            windowHeight - Layout.chromeHeight,
+        let chrome = Layout.chromeHeight(accountStrip: state.showsAccountStrip)
+        let content = Layout.sizing(for: state.selectedTab,
+                                    accountStrip: state.showsAccountStrip).clamp(
+            windowHeight - chrome,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
-            limit: availableMaxHeight - Layout.chromeHeight
+            limit: availableMaxHeight - chrome
         )
         resizeDraft = content
         state.userContentHeight = content
@@ -438,11 +441,12 @@ final class PanelController {
         guard let draft = resizeDraft else { return }
         resizeDraft = nil
 
-        let snapped = Layout.sizing(for: state.selectedTab).snap(
+        let snapped = Layout.sizing(for: state.selectedTab,
+                                    accountStrip: state.showsAccountStrip).snap(
             draft,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
-            limit: availableMaxHeight - Layout.chromeHeight
+            limit: availableMaxHeight - Layout.chromeHeight(accountStrip: state.showsAccountStrip)
         )
         state.userContentHeight = snapped
         Prefs.setDrawerContentHeight(snapped, for: state.selectedTab)

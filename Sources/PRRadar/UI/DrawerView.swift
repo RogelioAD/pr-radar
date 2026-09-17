@@ -40,6 +40,10 @@ struct DrawerView: View {
             grabber
             header
             Divider().opacity(0.6)
+            if state.showsAccountStrip {
+                AccountStripView(state: state)
+                Divider().opacity(0.6)
+            }
             TabStripView(state: state, onSelect: onSelectTab)
             Divider().opacity(0.6)
             filterBar

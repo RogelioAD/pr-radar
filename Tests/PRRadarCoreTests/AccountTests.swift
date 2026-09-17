@@ -138,3 +138,30 @@ final class AccountTests: XCTestCase {
         XCTAssertTrue(AccountScope.apply("nobody", to: rows, accountOf: \.account).isEmpty)
     }
 }
+
+// MARK: - Partial rounds
+
+extension AccountTests {
+
+    func testNothingFailedIsNotPartial() {
+        XCTAssertFalse(AccountScope.isPartial(failed: [], scope: nil))
+        XCTAssertFalse(AccountScope.isPartial(failed: [], scope: "github.com/work"))
+    }
+
+    func testUnscopedAnyFailureIsPartialBecauseTheListClaimsEverything() {
+        XCTAssertTrue(AccountScope.isPartial(failed: ["github.com/personal"], scope: nil))
+    }
+
+    func testScopedToTheFailedAccountIsPartial() {
+        XCTAssertTrue(AccountScope.isPartial(failed: ["github.com/personal"],
+                                             scope: "github.com/personal"))
+    }
+
+    /// The case that decides whether the warning is worth obeying: looking at
+    /// one account while a *different* one is unreachable changes nothing on
+    /// screen, and warning anyway teaches the mark to be ignored.
+    func testScopedToAHealthyAccountIsNotPartial() {
+        XCTAssertFalse(AccountScope.isPartial(failed: ["github.com/personal"],
+                                              scope: "github.com/work"))
+    }
+}

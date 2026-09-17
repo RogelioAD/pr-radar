@@ -201,9 +201,7 @@ final class AppState: ObservableObject {
     /// is real but short. The badge has to say so: a number that is merely
     /// smaller than the truth looks exactly like good news.
     var isPartial: Bool {
-        guard !failedAccounts.isEmpty else { return false }
-        guard let scope = accountFilter else { return true }
-        return failedAccounts.contains(scope)
+        AccountScope.isPartial(failed: failedAccounts, scope: accountFilter)
     }
 
     /// Lights the badge's secondary dot: PRs of mine that are ready to merge.
@@ -270,7 +268,7 @@ final class AppState: ObservableObject {
                        frame: 0,
                        blink: false,
                        reviews: count,
-                       reviewHealth: hasProblem ? .neutral : worstStaleness.health,
+                       reviewHealth: hasProblem || isPartial ? .neutral : worstStaleness.health,
                        readyToMerge: myPRsReadyToMerge)
     }
 

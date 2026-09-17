@@ -103,10 +103,25 @@ enum Layout {
 
     static let estimatedRowHeight: CGFloat = estimatedRowHeight(for: .reviews)
 
-    static var chromeHeight: CGFloat {
-        // header + tab strip + filter bar + footer, plus four dividers.
+    /// The account strip's own row. Shorter than the tab strip: it carries no
+    /// icons, and it is a scope selector rather than the drawer's main control.
+    static let accountStripHeight: CGFloat = 26
+
+    /// Chrome above and below the row list.
+    ///
+    /// Takes whether the account strip is showing rather than assuming, because
+    /// the strip appears only on a machine with more than one account. Assuming
+    /// it away would clip the last row by exactly its height on the machines
+    /// that have it, and assuming it present would leave a gap on the ones that
+    /// do not.
+    static func chromeHeight(accountStrip: Bool) -> CGFloat {
+        // header + tab strip + filter bar + footer, plus four dividers,
+        // plus the account strip and its own divider when it is there.
         headerHeight + tabStripHeight + filterBarHeight + footerHeight + 4
+            + (accountStrip ? accountStripHeight + 1 : 0)
     }
+
+    static var chromeHeight: CGFloat { chromeHeight(accountStrip: false) }
 
     /// Fallback ceiling, only used if no screen can be determined. The real
     /// limit is the screen height, passed in per call.
@@ -114,11 +129,11 @@ enum Layout {
 
     static let sizing = sizing(for: .reviews)
 
-    static func sizing(for tab: DrawerTab) -> DrawerSizing {
+    static func sizing(for tab: DrawerTab, accountStrip: Bool = false) -> DrawerSizing {
         DrawerSizing(
             rowSpacing: rowSpacing,
             listPadding: listPadding,
-            chromeHeight: chromeHeight,
+            chromeHeight: chromeHeight(accountStrip: accountStrip),
             maxHeight: fallbackMaxHeight,
             estimatedRowHeight: estimatedRowHeight(for: tab)
         )
@@ -129,8 +144,9 @@ enum Layout {
                              userContentHeight: CGFloat?,
                              maxHeight: CGFloat,
                              snapping: Bool = true,
-                             tab: DrawerTab = .reviews) -> CGFloat {
-        sizing(for: tab).windowHeight(rowHeights: rowHeights,
+                             tab: DrawerTab = .reviews,
+                             accountStrip: Bool = false) -> CGFloat {
+        sizing(for: tab, accountStrip: accountStrip).windowHeight(rowHeights: rowHeights,
                             itemCount: itemCount,
                             userContentHeight: userContentHeight,
                             maxHeight: maxHeight,
