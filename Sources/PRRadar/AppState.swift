@@ -113,10 +113,20 @@ final class AppState: ObservableObject {
          RepoScope.apply(repo, to: accountScopedMyPRs, repoOf: \.repo).count)
     }
 
-    /// Counts for one account's tab in the strip, ignoring the repo filter so
-    /// the strip always shows what switching to that account would reveal.
+    /// What switching to this account would show you **in the tab you are
+    /// looking at**, ignoring the repo filter so the strip always reveals what
+    /// is there rather than what the current repo leaves of it.
+    ///
+    /// Follows the selected tab rather than always counting review requests.
+    /// Counting one thing while the tab below counts another put "0" beside an
+    /// account with eighteen open pull requests, which reads as "nothing here"
+    /// — a number whose meaning you have to already know is worse than no
+    /// number, and this app's whole badge is built on the opposite rule.
     func accountCount(_ id: String?) -> Int {
-        AccountScope.apply(id, to: items, accountOf: \.account).count
+        switch selectedTab {
+        case .reviews: return AccountScope.apply(id, to: items, accountOf: \.account).count
+        case .mine: return AccountScope.apply(id, to: myPRs, accountOf: \.account).count
+        }
     }
 
     static func shortRepoName(_ repo: String) -> String { RepoScope.shortName(repo) }
