@@ -12,6 +12,12 @@ public struct ReviewItem: Identifiable, Equatable, Sendable {
     /// Timestamp of the most recent review request aimed at the viewer (directly or via a team).
     public let pingedAt: Date
 
+    /// Which account surfaced this row. Empty until a fetch tags it, and set
+    /// after the inbox builds rather than threaded through it — the same
+    /// post-build shape `behindBy` already uses, and it keeps every existing
+    /// construction site and test compiling unchanged.
+    public var account: String = ""
+
     public var id: String { "\(repo)#\(number)" }
     /// Short repo name without the owner prefix.
     public var repoShortName: String {
@@ -22,7 +28,8 @@ public struct ReviewItem: Identifiable, Equatable, Sendable {
     public var pingKey: String { "\(id)@\(ISO8601DateFormatter().string(from: pingedAt))" }
 
     public init(repo: String, number: Int, title: String, url: URL, isDraft: Bool,
-                authorLogin: String, authorAvatarURL: URL?, pingedAt: Date) {
+                authorLogin: String, authorAvatarURL: URL?, pingedAt: Date,
+                account: String = "") {
         self.repo = repo
         self.number = number
         self.title = title
@@ -31,6 +38,7 @@ public struct ReviewItem: Identifiable, Equatable, Sendable {
         self.authorLogin = authorLogin
         self.authorAvatarURL = authorAvatarURL
         self.pingedAt = pingedAt
+        self.account = account
     }
 }
 

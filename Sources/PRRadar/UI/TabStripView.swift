@@ -17,12 +17,12 @@ struct TabStripView: View {
         .frame(height: Layout.tabStripHeight)
     }
 
-    /// Scoped to the selected repo, matching the badge — otherwise the tab
-    /// would claim a total the badge disagrees with.
+    /// Scoped to the selected repo *and* account, matching the badge —
+    /// otherwise the tab would claim a total the badge disagrees with.
     private func total(for tab: DrawerTab) -> Int {
         switch tab {
-        case .reviews: return state.repoScopedItems.count
-        case .mine: return state.repoScopedMyPRs.count
+        case .reviews: return state.scopedItems.count
+        case .mine: return state.scopedMyPRs.count
         }
     }
 
