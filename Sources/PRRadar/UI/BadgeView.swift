@@ -47,8 +47,8 @@ struct BadgeView: View {
                           scale: scale,
                           counters: MascotView.Counters(
                             reviews: state.count,
-                            reviewHealth: state.hasProblem ? .neutral
-                                                           : state.worstStaleness.health,
+                            reviewHealth: state.hasProblem || state.isPartial
+                                ? .neutral : state.worstStaleness.health,
                             readyToMerge: state.myPRsReadyToMerge),
                           tempo: tempo,
                           halo: true,
@@ -152,9 +152,24 @@ struct BadgeView: View {
         if state.hasProblem {
             dockBadge(text: "!", base: Color(white: 0.42))
         } else if state.count > 0 {
-            dockBadge(text: state.count > 99 ? "99+" : "\(state.count)",
-                      base: state.worstStaleness.tint)
+            // A partial round reads "5…" rather than "5". The number is real —
+            // these reviews really are waiting — but an account could not be
+            // reached, so it is a floor rather than a total. Left as a bare
+            // numeral it would be indistinguishable from a complete count, and
+            // smaller is exactly the direction that looks like good news.
+            dockBadge(text: countText, base: state.isPartial
+                                        ? Color(white: 0.42) : state.worstStaleness.tint)
+        } else if state.isPartial {
+            // Nothing readable came back from the accounts that answered, and
+            // the ones that did not might have had everything. Zero would be a
+            // claim nobody checked.
+            dockBadge(text: "…", base: Color(white: 0.42))
         }
+    }
+
+    private var countText: String {
+        let number = state.count > 99 ? "99+" : "\(state.count)"
+        return state.isPartial ? "\(number)…" : number
     }
 
     /// Matches a real macOS Dock badge: a flat filled circle with a bold white
@@ -182,7 +197,15 @@ struct BadgeView: View {
 
     private var tooltip: String {
         if let authError = state.authError { return authError }
-        guard let oldest = state.items.map(\.pingedAt).min() else { return "No reviews waiting" }
-        return "\(state.count) waiting · oldest \(TimeAgo.long(since: oldest, now: state.clock))"
+        // Named before the count, because the first thing to know about an
+        // incomplete number is that it is incomplete.
+        let missing = state.isPartial
+            ? "· \(state.failedAccounts.count) account(s) could not be read"
+            : ""
+        guard let oldest = state.scopedItems.map(\.pingedAt).min() else {
+            return state.isPartial ? "No reviews waiting \(missing)" : "No reviews waiting"
+        }
+        return "\(state.count) waiting · oldest "
+             + "\(TimeAgo.long(since: oldest, now: state.clock)) \(missing)"
     }
 }

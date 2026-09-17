@@ -44,12 +44,18 @@ struct DrawerView: View {
             // The room replaces everything below the header. Not hidden but
             // *absent*: a tab strip and a filter bar with nothing to act on
             // are two controls asking to be pressed and one band of chrome
-            // the shelf then has to be shorter than.
+            // the shelf then has to be shorter than. The account strip goes
+            // with them — it is a scope selector, and the shelf is the same
+            // thirty drawings whichever identity you are wearing.
             if state.showingTrophies {
                 TrophyRoomView(state: state, onRowHeights: onRowHeights)
                 Divider().opacity(0.6)
                 trophyFooter
             } else {
+                if state.showsAccountStrip {
+                    AccountStripView(state: state)
+                    Divider().opacity(0.6)
+                }
                 TabStripView(state: state, onSelect: onSelectTab)
                 Divider().opacity(0.6)
                 filterBar
