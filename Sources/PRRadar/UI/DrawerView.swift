@@ -72,12 +72,71 @@ struct DrawerView: View {
             .help("Drag to resize — snaps to whole rows")
     }
 
+    /// True when the content area is showing its own, larger mascot.
+    ///
+    /// Both surfaces are live whenever the list is empty, and the same
+    /// character twice in one 440pt panel is one too many — so the big one
+    /// wins and the header falls back to the identity glyph.
+    private var contentShowsMascot: Bool {
+        state.selectedMascot != nil && (state.authError != nil || isListEmpty)
+    }
+
+    private var isListEmpty: Bool {
+        switch state.selectedTab {
+        case .reviews: return state.items.isEmpty || state.displayedItems.isEmpty
+        case .mine: return state.myPRs.isEmpty || state.displayedMyPRs.isEmpty
+        }
+    }
+
+    /// The character the header is showing, or nil when it is showing the
+    /// plain identity glyph — either because the mascot is off, or because the
+    /// content area below is already showing a bigger one.
+    private var headerMascot: Mascot? {
+        contentShowsMascot ? nil : state.selectedMascot
+    }
+
+    /// Always a button, whatever it happens to be drawing.
+    ///
+    /// The cast cycles pip → byte → widget → nimbus → off → pip, and "off" is a
+    /// stop on that loop rather than the end of it. Drawing the glyph as inert
+    /// art there is what strands somebody who cycles one past the last
+    /// character: the only way back in would be the context menu.
+    ///
+    /// Clicking has to be published as a header control or the press is taken
+    /// as a window drag and never arrives — the same machinery the update chip
+    /// already uses.
+    private var identity: some View {
+        Button { state.cycleMascot() } label: {
+            if let mascot = headerMascot {
+                MascotView(mascot: mascot,
+                           style: state.spriteStyle,
+                           scale: Layout.headerMascotScale)
+            } else {
+                Image(systemName: "arrow.triangle.pull")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    // A 12pt glyph is a poor target; the row's full height is
+                    // already reserved, so spend it.
+                    .frame(width: 18, height: Layout.headerHeight - Layout.resizeEdge)
+                    .contentShape(Rectangle())
+            }
+        }
+        .buttonStyle(.plain)
+        .help(identityHelp)
+        .headerControl()
+    }
+
+    private var identityHelp: String {
+        guard let next = state.nextMascotName else { return "" }
+        if let mascot = headerMascot { return "\(mascot.name) — click for \(next)" }
+        if state.selectedMascot == nil { return "No mascot — click for \(next)" }
+        return "Click for \(next)"
+    }
+
     // The header also drags the window — see PanelController.zone(at:).
     private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: "arrow.triangle.pull")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
+            identity
             Text("PR Radar")
                 .font(.system(size: 12.5, weight: .semibold))
             if state.myPRsReadyToMerge > 0 {
@@ -211,9 +270,18 @@ struct DrawerView: View {
         .frame(height: Layout.footerHeight)
     }
 
+    /// The empty and error states already reserve a whole row's height for a
+    /// 20pt SF Symbol, so the mascot costs no layout at all — and it puts the
+    /// character where the drawer is otherwise at its most boring.
     private func problem(title: String, detail: String, symbol: String) -> some View {
         VStack(spacing: 6) {
-            Image(systemName: symbol).font(.system(size: 20)).foregroundStyle(.tertiary)
+            if let mascot = state.selectedMascot {
+                MascotView(mascot: mascot,
+                           style: state.spriteStyle,
+                           scale: Layout.emptyStateMascotScale)
+            } else {
+                Image(systemName: symbol).font(.system(size: 20)).foregroundStyle(.tertiary)
+            }
             Text(title).font(.system(size: 12.5, weight: .semibold))
             Text(detail)
                 .font(.system(size: 11))

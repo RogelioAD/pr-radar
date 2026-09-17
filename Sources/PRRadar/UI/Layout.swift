@@ -22,11 +22,12 @@ enum Layout {
     /// radius, so the badge's centre sits *inside* the corner and it overlaps
     /// the tile the way a Dock badge overlaps its app icon.
     static var countBadgeOverhang: CGFloat { (countBadgeSize * 0.34).rounded() }
-    /// Panel footprint. One overhang's worth on the right, and one at *each*
-    /// of top and bottom, because two same-sized badges now hang off the
-    /// tile's corners — the review count above, the ready-to-merge count below.
-    static var badgeWidth: CGFloat { badgeTileSize + countBadgeOverhang }
-    static var badgeHeight: CGFloat { badgeTileSize + countBadgeOverhang * 2 }
+    /// Panel footprint with the mascot turned off: one overhang's worth on the
+    /// right, and one at *each* of top and bottom, because two same-sized
+    /// badges hang off the tile's corners — the review count above, the
+    /// ready-to-merge count below.
+    static var tileBadgeWidth: CGFloat { badgeTileSize + countBadgeOverhang }
+    static var tileBadgeHeight: CGFloat { badgeTileSize + countBadgeOverhang * 2 }
 
     /// One width for both tabs. It is set by the My PRs row, which carries the
     /// most — approvals, checks, threads, blockers, stack position — and the
@@ -34,7 +35,14 @@ enum Layout {
     /// drawer sideways.
     static let drawerWidth: CGFloat = 440
     static let tabStripHeight: CGFloat = 30
-    static let headerHeight: CGFloat = 40
+    /// Sized for the mascot lockup: 12pt resize strip plus a 36pt row, which is
+    /// exactly what a 2x character with its bob room needs. Was 40 when the
+    /// header carried only a 12pt SF Symbol.
+    ///
+    /// Nothing else has to change for this: `chromeHeight` is derived from it
+    /// and `DrawerSizing` reads `chromeHeight`, so the drawer re-measures on
+    /// its own.
+    static let headerHeight: CGFloat = 48
     static let filterBarHeight: CGFloat = 32
     static let footerHeight: CGFloat = 28
     static let rowSpacing: CGFloat = 2
@@ -44,6 +52,40 @@ enum Layout {
     static let resizeEdge: CGFloat = 12
     /// Gap kept from the screen edges when placing the panel by default.
     static let screenInset: CGFloat = 24
+
+    // MARK: - Mascot
+
+    /// The header lockup: a full 16-row bust at 2x, mark gutter included.
+    static let headerMascotScale: CGFloat = 2
+    /// The empty states already reserve a whole row's height for a 20pt SF
+    /// Symbol, so this costs no layout at all.
+    static let emptyStateMascotScale: CGFloat = 3
+
+    /// The character plus its halo is 18 cells wide, and that is what should
+    /// match the Dock tile — the counters hang off it rather than shrinking it.
+    private static let badgeCharacterCells = 18
+
+    /// Never below 2x, whatever the Dock is doing. Not because the character
+    /// breaks, but because the counter's 3x5 digits stop being a number: at
+    /// 1.5x a digit is seven and a half points tall.
+    private static let badgeMinimumScale: CGFloat = 2
+
+    static func badgeScale(backingScale: CGFloat) -> CGFloat {
+        SpriteScale.snapped(targetPoints: dockTileSize,
+                            spriteWidth: badgeCharacterCells,
+                            backingScale: backingScale,
+                            minimum: badgeMinimumScale)
+    }
+
+    /// Padding `SpriteCanvas` adds around a haloed, shadowed composition:
+    /// one cell of halo on the leading edge, one of halo plus one of shadow on
+    /// the trailing one.
+    private static let badgePadCells = 3
+
+    static func badgeSize(for layout: SpriteLayout, scale: CGFloat) -> CGSize {
+        CGSize(width: CGFloat(layout.width + badgePadCells) * scale,
+               height: CGFloat(layout.height + badgePadCells) * scale)
+    }
 
     /// Used only before rows report their real size — which is exactly the
     /// first open on a fresh install, when nothing has been measured yet.

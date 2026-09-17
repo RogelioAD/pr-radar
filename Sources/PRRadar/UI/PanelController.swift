@@ -17,6 +17,27 @@ final class PanelController {
     /// returns the badge to exactly where the user left it.
     private var badgeFrame: NSRect
 
+    /// The collapsed footprint, which is not a constant any more: with a mascot
+    /// on, the widget grows with the counts beside it. Tracking it rather than
+    /// fixing it to the worst case matters because the hosting view takes mouse
+    /// events across the panel's whole bounds — an oversized panel is an
+    /// invisible click target sitting on the desktop.
+    private var badgeSize: CGSize {
+        guard let layout = state.badgeLayout else {
+            return CGSize(width: Layout.tileBadgeWidth, height: Layout.tileBadgeHeight)
+        }
+        return Layout.badgeSize(for: layout,
+                                scale: Layout.badgeScale(backingScale: state.backingScale))
+    }
+
+    /// Keeps the view's idea of the backing scale in step with the screen the
+    /// panel is really on, so the frame reserved and the pixels drawn agree.
+    private func syncBackingScale() {
+        let screen = NSScreen.screens.first { $0.frame.intersects(panel.frame) } ?? NSScreen.main
+        let scale = screen?.backingScaleFactor ?? 2
+        if state.backingScale != scale { state.backingScale = scale }
+    }
+
     /// Where the header's controls are, reported by the view layer. The header
     /// is the drag handle, so without these a press on the update chip or the
     /// collapse button would be taken as a window drag and never reach it.
@@ -41,7 +62,7 @@ final class PanelController {
 
     init(state: AppState) {
         self.state = state
-        self.badgeFrame = Self.initialBadgeFrame()
+        self.badgeFrame = Self.initialBadgeFrame(size: Self.startingBadgeSize(state: state))
 
         panel = FloatingPanel(
             contentRect: badgeFrame,
@@ -157,6 +178,10 @@ final class PanelController {
             return
         }
         if !panel.isVisible { panel.orderFrontRegardless() }
+        syncBackingScale()
+        // Counts move, and with a mascot on they move the widget's width with
+        // them. Cheap: returns immediately unless the size actually changed.
+        if !state.expanded { syncBadgeFrameSize() }
         applyFrame()
     }
 
@@ -210,6 +235,10 @@ final class PanelController {
     /// interpolate directly with nothing faked in between.
     private func collapse() {
         removeOutsideClickMonitor()
+        // The character may have been switched in the header while the drawer
+        // was open, so the badge it is folding back into is not necessarily the
+        // size it was when it unfolded.
+        syncBadgeFrameSize()
         animate(to: badgeFrame, curve: .easeIn) { [weak self] in
             guard let self else { return }
             self.state.expanded = false
@@ -344,13 +373,43 @@ final class PanelController {
     private func persistPosition() {
         // When expanded, the badge's notional spot is the drawer's bottom-right.
         let frame = panel.frame
+        let size = badgeSize
         badgeFrame = clamp(NSRect(
-            x: frame.maxX - Layout.badgeWidth,
+            x: frame.maxX - size.width,
             y: frame.minY,
-            width: Layout.badgeWidth,
-            height: Layout.badgeHeight
+            width: size.width,
+            height: size.height
         ))
         Prefs.badgeOrigin = badgeFrame.origin
+    }
+
+    /// Re-frames the collapsed badge when the widget's own size changes — a
+    /// count crossing into two digits, or the mascot being switched off.
+    ///
+    /// Anchored bottom-right, which is the corner everything else is measured
+    /// from: the drawer unfolds up and to the left of it, so growing leftwards
+    /// keeps a parked badge where it was parked.
+    func refreshBadgeSize() {
+        syncBackingScale()
+        guard !state.expanded, syncBadgeFrameSize() else { return }
+        applyFrame()
+    }
+
+    /// Resizes the stored badge rect in place. Separate from the above because
+    /// `collapse()` needs it while the drawer still counts as expanded — it is
+    /// animating *towards* the badge frame, so a stale size lands the drawer
+    /// somewhere the badge is not.
+    @discardableResult
+    private func syncBadgeFrameSize() -> Bool {
+        let size = badgeSize
+        guard abs(size.width - badgeFrame.width) > 0.5
+                || abs(size.height - badgeFrame.height) > 0.5 else { return false }
+        badgeFrame = clamp(NSRect(x: badgeFrame.maxX - size.width,
+                                  y: badgeFrame.minY,
+                                  width: size.width,
+                                  height: size.height))
+        Prefs.badgeOrigin = badgeFrame.origin
+        return true
     }
 
     // MARK: - Resizing
@@ -436,8 +495,19 @@ final class PanelController {
         return result
     }
 
-    private static func initialBadgeFrame() -> NSRect {
-        let width = Layout.badgeWidth, height = Layout.badgeHeight
+    /// `badgeSize` needs a panel to pick a screen from, and there is not one
+    /// yet at init. Main screen and no counts is close enough for the first
+    /// frame; the first refresh corrects it.
+    private static func startingBadgeSize(state: AppState) -> CGSize {
+        guard let layout = state.badgeLayout else {
+            return CGSize(width: Layout.tileBadgeWidth, height: Layout.tileBadgeHeight)
+        }
+        let scale = Layout.badgeScale(backingScale: NSScreen.main?.backingScaleFactor ?? 2)
+        return Layout.badgeSize(for: layout, scale: scale)
+    }
+
+    private static func initialBadgeFrame(size: CGSize) -> NSRect {
+        let width = size.width, height = size.height
         if let saved = Prefs.badgeOrigin {
             return NSRect(x: saved.x, y: saved.y, width: width, height: height)
         }

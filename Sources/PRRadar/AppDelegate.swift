@@ -242,11 +242,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state.clock = Date()
             state.lastUpdated = Date()
 
-            notifier.notifyNewPings(in: items)
+            // The one edge worth a reaction: something new landed while you
+            // were not looking.
+            if notifier.notifyNewPings(in: items) { state.startle() }
 
             await refreshMyPRs(client: client)
 
             panel.refreshLayoutIfExpanded()
+            panel.refreshBadgeSize()
             panel.syncVisibility()
             if Log.startExpanded && !(items.isEmpty && state.myPRs.isEmpty) {
                 panel.setExpanded(true)
@@ -346,6 +349,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Open review requests on GitHub",
                      action: #selector(menuOpenGitHub), keyEquivalent: "").target = self
 
+        menu.addItem(mascotMenuItem())
+
         let loginItem = NSMenuItem(title: "Start at login",
                                    action: #selector(menuToggleLoginItem), keyEquivalent: "")
         loginItem.target = self
@@ -356,6 +361,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Quit PR Radar",
                      action: #selector(menuQuit), keyEquivalent: "q").target = self
         return menu
+    }
+
+    /// There is no preferences window, and this context menu is where
+    /// "Start at login" already lives — so it is this app's settings surface,
+    /// and the character picker belongs in it.
+    ///
+    /// Clicking the mascot in the drawer header cycles the cast; this is for
+    /// picking one directly, and for turning it off.
+    private func mascotMenuItem() -> NSMenuItem {
+        let parent = NSMenuItem(title: "Mascot", action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+
+        let off = NSMenuItem(title: "Off", action: #selector(menuPickMascot(_:)),
+                             keyEquivalent: "")
+        off.target = self
+        off.representedObject = ""
+        off.state = state.mascot == nil ? .on : .off
+        submenu.addItem(off)
+        submenu.addItem(.separator())
+
+        for mascot in Mascot.all {
+            let item = NSMenuItem(title: mascot.name, action: #selector(menuPickMascot(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = mascot.id.rawValue
+            item.state = state.mascot == mascot.id ? .on : .off
+            item.toolTip = "Tell: \(mascot.tellName)"
+            submenu.addItem(item)
+        }
+
+        parent.submenu = submenu
+        return parent
+    }
+
+    @objc private func menuPickMascot(_ sender: NSMenuItem) {
+        let raw = sender.representedObject as? String ?? ""
+        state.mascot = raw.isEmpty ? nil : MascotID(rawValue: raw)
+        // The widget's footprint changes with the character — and vanishes
+        // back to the old tile when it is switched off.
+        panel.refreshBadgeSize()
     }
 
     @objc private func menuRefresh() { refreshNow() }

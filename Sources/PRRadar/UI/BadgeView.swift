@@ -1,9 +1,12 @@
 import SwiftUI
 import PRRadarCore
 
-/// The collapsed state: a rounded-square tile carrying a pull-request glyph,
-/// with a Dock-style count badge overhanging its top-right corner. Sized to
-/// sit alongside the Dock as a peer.
+/// The collapsed state.
+///
+/// With a mascot chosen this *is* the app icon: the character, its mood mark,
+/// and a counter chip per non-zero count, all on one grid. With the mascot off
+/// it is the original rounded-square tile and its Dock badges, unchanged — so
+/// "off" restores what shipped rather than leaving a gap.
 struct BadgeView: View {
     @ObservedObject var state: AppState
     @Environment(\.colorScheme) private var colorScheme
@@ -11,6 +14,50 @@ struct BadgeView: View {
     private var isDark: Bool { colorScheme == .dark }
 
     var body: some View {
+        Group {
+            if let mascot = state.selectedMascot, let layout = state.badgeLayout {
+                mascotWidget(mascot, layout: layout)
+            } else {
+                tileBadge
+            }
+        }
+        .help(tooltip)
+    }
+
+    // MARK: - Mascot
+
+    /// The badge is on screen all day, so it holds frame zero and moves only on
+    /// an edge: a reaction to being touched, or a fetch actually in flight.
+    /// There is no free-running timeline here — that is the difference between
+    /// this and the drawer, which stops existing when it collapses.
+    private var shouldAnimate: Bool {
+        state.reaction != nil || state.isRefreshing
+    }
+
+    private func mascotWidget(_ mascot: Mascot, layout: SpriteLayout) -> some View {
+        let scale = Layout.badgeScale(backingScale: state.backingScale)
+        let size = Layout.badgeSize(for: layout, scale: scale)
+        return MascotView(mascot: mascot,
+                          style: state.spriteStyle,
+                          scale: scale,
+                          counters: MascotView.Counters(
+                            reviews: state.count,
+                            reviewHealth: state.hasProblem ? .neutral
+                                                           : state.worstStaleness.health,
+                            readyToMerge: state.myPRsReadyToMerge),
+                          animated: shouldAnimate,
+                          halo: true,
+                          shadow: true)
+            .frame(width: size.width, height: size.height, alignment: .topLeading)
+            .onHover { hovering in
+                // Cheap: a bounded reaction, not a clock.
+                state.reaction = hovering ? .waking : nil
+            }
+    }
+
+    // MARK: - Tile (mascot off)
+
+    private var tileBadge: some View {
         ZStack {
             // Transparent bed at full panel size. The hosting view takes mouse
             // events across its whole bounds, so this stays draggable even
@@ -20,19 +67,18 @@ struct BadgeView: View {
             // Tile sits against the leading edge, vertically centred, leaving
             // equal overhang above and below for the two badges.
             tile
-                .frame(width: Layout.badgeWidth, height: Layout.badgeHeight,
+                .frame(width: Layout.tileBadgeWidth, height: Layout.tileBadgeHeight,
                        alignment: .leading)
 
             countBadge
-                .frame(width: Layout.badgeWidth, height: Layout.badgeHeight,
+                .frame(width: Layout.tileBadgeWidth, height: Layout.tileBadgeHeight,
                        alignment: .topTrailing)
 
             readyBadge
-                .frame(width: Layout.badgeWidth, height: Layout.badgeHeight,
+                .frame(width: Layout.tileBadgeWidth, height: Layout.tileBadgeHeight,
                        alignment: .bottomTrailing)
         }
-        .frame(width: Layout.badgeWidth, height: Layout.badgeHeight)
-        .help(tooltip)
+        .frame(width: Layout.tileBadgeWidth, height: Layout.tileBadgeHeight)
     }
 
     // MARK: - Tile

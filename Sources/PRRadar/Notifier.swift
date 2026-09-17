@@ -51,19 +51,24 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     /// Notifies about pings not seen before. The remembered key includes the
     /// ping timestamp, so a re-request correctly notifies again.
-    func notifyNewPings(in items: [ReviewItem]) {
+    /// Returns whether anything new actually fired, so the caller can react to
+    /// the same edge rather than working it out a second time — the mascot's
+    /// startle hangs off this.
+    @discardableResult
+    func notifyNewPings(in items: [ReviewItem]) -> Bool {
         var seen = Prefs.seenPings
         let fresh = items.filter { !seen.contains($0.pingKey) }
-        guard !fresh.isEmpty else { return }
+        guard !fresh.isEmpty else { return false }
 
         // On a first run, seed the store silently rather than firing a burst
         // of notifications for a backlog the user already knows about.
         let isFirstRun = seen.isEmpty
         for item in items { seen.insert(item.pingKey) }
         Prefs.seenPings = seen
-        guard !isFirstRun else { return }
+        guard !isFirstRun else { return false }
 
         for item in fresh { post(item) }
+        return true
     }
 
     /// Announces a new PR Radar release. Clicking opens the release page.

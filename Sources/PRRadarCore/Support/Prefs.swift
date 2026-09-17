@@ -18,6 +18,7 @@ public enum Prefs {
         static let repoFilter = "list.repoFilter"
         static let updateRepo = "update.repo"
         static let notifiedUpdate = "update.notifiedVersion"
+        static let mascot = "mascot.choice"
     }
 
     public static var badgeOrigin: CGPoint? {
@@ -80,6 +81,24 @@ public enum Prefs {
             }
         }
     }
+
+    /// Which character keeps you company, or nil for none.
+    ///
+    /// Stored as a string rather than an index so reordering the cast never
+    /// silently changes somebody's pick. An unrecognised value — a character
+    /// that existed in an older build — falls back to the default rather than
+    /// to nothing, because a missing mascot looks like a bug and a different
+    /// one looks like a choice.
+    public static var mascot: MascotID? {
+        get {
+            guard let raw = defaults.string(forKey: Key.mascot) else { return .pip }
+            if raw == mascotOffValue { return nil }
+            return MascotID(rawValue: raw) ?? .pip
+        }
+        set { defaults.set(newValue?.rawValue ?? mascotOffValue, forKey: Key.mascot) }
+    }
+
+    private static let mascotOffValue = "off"
 
     public static var selectedTab: DrawerTab {
         get {

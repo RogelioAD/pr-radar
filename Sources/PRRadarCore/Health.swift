@@ -25,3 +25,17 @@ public enum Health: String, Sendable, CaseIterable {
         values.max { $0.severity < $1.severity } ?? .neutral
     }
 }
+
+extension Staleness {
+    /// Where an overdue review sits on the one severity scale. Kept here rather
+    /// than in the view layer because it is the definition of the signal, not a
+    /// choice about how to paint it — and because the mascot in the drawer and
+    /// the count on the badge both have to read it to be guaranteed to agree.
+    public var health: Health {
+        switch self {
+        case .fresh: return .running    // blue: nothing wrong, just waiting
+        case .aging: return .attention
+        case .stale: return .bad
+        }
+    }
+}

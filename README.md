@@ -34,7 +34,7 @@ beyond `gh` itself.
 ```sh
 git clone <your-fork-url> pr-radar
 cd pr-radar
-make test          # 142 tests, ~17s. If these pass, your toolchain is fine.
+make test          # 180 tests, ~17s. If these pass, your toolchain is fine.
 ```
 
 Running the tests first is the fastest way to find out whether Swift and the
@@ -243,8 +243,14 @@ anything**, which is what makes it pleasant to hand to an agent:
 Sources/PRRadarCore/   fetching, parsing, and every rule worth testing:
                        the dismiss rule, the lead gate, branch state, drawer
                        sizing, hit-test zones, click-vs-drag
+Sources/PRRadarCore/Mascots/
+                       the pixel-art characters as data — sprite grids, the
+                       mood derivation, counter chips, and the layout rules
+                       for composing them
 Sources/PRRadar/       the app: panel, badge, tabs, drawer, notifications
-Tests/                 142 tests
+Sources/MakeIcon/      build-time icon generator; reads the same sprites the
+                       app draws, so the notification banner cannot drift
+Tests/                 180 tests
 Scripts/bundle.sh      assembles and ad-hoc signs PRRadar.app
 ```
 

@@ -11,6 +11,13 @@ let package = Package(
             dependencies: ["PRRadarCore"],
             path: "Sources/PRRadar"
         ),
+        // Not a script any more: it reads the app's real sprite data rather
+        // than keeping a second hand-maintained copy that would drift.
+        .executableTarget(
+            name: "MakeIcon",
+            dependencies: ["PRRadarCore"],
+            path: "Sources/MakeIcon"
+        ),
         .testTarget(
             name: "PRRadarCoreTests",
             dependencies: ["PRRadarCore"],

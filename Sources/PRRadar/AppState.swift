@@ -169,6 +169,88 @@ final class AppState: ObservableObject {
 
     var hasProblem: Bool { authError != nil }
 
+    // MARK: - Mascot
+
+    /// nil means the user turned the mascot off.
+    @Published var mascot: MascotID? = Prefs.mascot {
+        didSet { Prefs.mascot = mascot }
+    }
+
+    /// A transient reaction that outranks the derived mood while it lasts:
+    /// being hovered, being dragged, or a review arriving.
+    @Published var reaction: Reaction?
+
+    /// Backing scale of the screen the panel is actually on, published by
+    /// `PanelController`.
+    ///
+    /// The view cannot work this out for itself, and guessing `NSScreen.main`
+    /// is wrong on a mixed-DPI setup: the panel would be framed for one scale
+    /// and drawn at another, which is exactly the fractional cell size that
+    /// turns pixel art into a blurry JPEG.
+    @Published var backingScale: CGFloat = NSScreen.main?.backingScaleFactor ?? 2
+
+    var selectedMascot: Mascot? { mascot.map(Mascot.named) }
+
+    /// One derivation for every surface, so the drawer's character and the
+    /// badge's can never disagree about what is going on.
+    var mood: Mood {
+        Mood.of(reviews: count,
+                worst: worstStaleness,
+                readyToMerge: myPRsReadyToMerge,
+                isRefreshing: isRefreshing,
+                hasProblem: hasProblem)
+    }
+
+    /// What the character is actually drawn as right now.
+    var spriteStyle: SpriteStyle {
+        reaction?.style(tint: mood.style.health) ?? mood.style
+    }
+
+    /// The collapsed widget — character, mood mark and a chip per non-zero
+    /// count. Size does not depend on the animation frame, so the panel can be
+    /// framed from this without knowing what frame is on screen.
+    ///
+    /// nil when the mascot is off, which is what puts the original tile back.
+    var badgeLayout: SpriteLayout? {
+        guard let mascot = selectedMascot else { return nil }
+        return .widget(mascot: mascot,
+                       style: spriteStyle,
+                       frame: 0,
+                       blink: false,
+                       reviews: count,
+                       reviewHealth: hasProblem ? .neutral : worstStaleness.health,
+                       readyToMerge: myPRsReadyToMerge)
+    }
+
+    /// Advances to the next character, then to off, then round again. The whole
+    /// picker, for anyone who finds it by clicking.
+    ///
+    /// "Off" is a stop on the loop, not the end of it — cycling out of it has
+    /// to lead back to the first character or the control dead-ends.
+    func cycleMascot() {
+        mascot = MascotID.next(after: mascot)
+    }
+
+    /// What the next click lands on, for the tooltip.
+    var nextMascotName: String? {
+        MascotID.next(after: mascot).map { Mascot.named($0).name } ?? "no mascot"
+    }
+
+    /// One-shot reaction, used when a new review lands. Cancels any previous
+    /// one so two pings in quick succession do not leave it stuck.
+    private var startleTask: Task<Void, Never>?
+
+    func startle() {
+        guard mascot != nil else { return }
+        startleTask?.cancel()
+        reaction = .startled
+        startleTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(900))
+            guard !Task.isCancelled else { return }
+            self?.reaction = nil
+        }
+    }
+
     /// Hidden only when *both* tabs are empty. Keying this on review requests
     /// alone would make My PRs unreachable exactly when the review queue is
     /// clear, which is when you most want to look at your own work.
@@ -182,27 +264,15 @@ final class AppState: ObservableObject {
 }
 
 extension Staleness {
+    /// `health` itself now lives in PRRadarCore — it is the definition of the
+    /// signal, and the mascot needs it too. Only the colour stays here.
     var tint: Color { health.tint }
-
-    var health: Health {
-        switch self {
-        case .fresh: return .running    // blue: nothing wrong, just waiting
-        case .aging: return .attention
-        case .stale: return .bad
-        }
-    }
 }
 
 extension Health {
     /// The single place colour is assigned, so checks, blockers, approvals and
-    /// staleness cannot drift apart.
-    var tint: Color {
-        switch self {
-        case .good: return Color(red: 0.20, green: 0.70, blue: 0.38)
-        case .running: return Color(red: 0.29, green: 0.56, blue: 0.95)
-        case .attention: return Color(red: 0.95, green: 0.62, blue: 0.18)
-        case .bad: return Color(red: 0.88, green: 0.16, blue: 0.13)
-        case .neutral: return Color(white: 0.55)
-        }
-    }
+    /// staleness cannot drift apart — the values themselves now live in
+    /// PRRadarCore as `Health.rgb`, because the build-time icon generator has
+    /// to read the same scale without importing SwiftUI.
+    var tint: Color { Color(rgb) }
 }

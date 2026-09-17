@@ -10,6 +10,11 @@ drawer when clicked. Setup lives in [README.md](README.md).
 
 ## The badge
 
+With a mascot chosen — which is the default — the badge **is** the character:
+a 16×16 pixel-art sprite with a counter chip beneath it for each count that
+isn't zero. See [Mascots](#mascots) below. Turn the mascot off and you get the
+original badge, described here, unchanged.
+
 A rounded-square tile carrying a pull-request glyph, with **two Dock-style
 count badges** — identical in size and styling, differing only in colour and
 corner:
@@ -220,6 +225,61 @@ header** to move the whole thing.
 
 ---
 
+## Mascots
+
+A small pixel-art character that keeps you company in the drawer and, by
+default, replaces the floating icon entirely. Four of them:
+
+| | |
+|---|---|
+| **Pip** | a boxy little bot with an antenna — the default |
+| **Byte** | a cat, ears tipped in the mood colour |
+| **Widget** | a CRT terminal with a face |
+| **Nimbus** | a ghost; the only one that floats rather than sits |
+
+**It is a status channel, not a sticker.** The character's colour, expression
+and accessory all come from the same derivation the counts do, so it and the
+badge can never disagree:
+
+| What's happening | The character |
+|---|---|
+| Nothing waiting, nothing in flight | asleep, with a `Z` |
+| Reviews waiting, all under a day | eyes open, blue |
+| Something 1–3 days old | side-eye, amber `!` |
+| Something over 3 days | wide-eyed, red `!` |
+| A fetch in flight | eyes down, scanning |
+| One of your PRs is mergeable | green, with a spark |
+| Can't reach GitHub | dead-eyed, grey `?` |
+
+On the badge it also reacts to being touched: it wakes on hover, holds on while
+you drag it, and startles once when a new review arrives.
+
+**Choosing one.** Click the character in the drawer's header to cycle — each in
+turn, then off, then round again. Or pick one directly from the badge's
+right-click menu, under **Mascot**, which is also where **Off** lives.
+
+Some details that took a while to get right, and are worth not undoing:
+
+- **No image files.** Every character is sixteen strings of one character per
+  pixel, in `PRRadarCore`, drawn by a `Canvas`. The app still ships no assets.
+- **A halo instead of a tile.** Free-floating on the desktop, the sprite has a
+  dark outline inside and a fixed near-white halo outside, so it carries both
+  poles of contrast and reads on any wallpaper. That is *better* than the tile
+  it replaced, which has to guess light-or-dark from the system appearance.
+- **Counters are pixel art too.** A Dock badge would land exactly on the mood
+  accessory — same pixels, not merely nearby — and an anti-aliased circle in
+  SF Pro next to a 16×16 character looks like two different apps. The chips sit
+  below, centred on the character, and only appear when their count isn't zero.
+  So inbox zero is a sleeping character and nothing else.
+- **Never drawn below 2×**, whatever your Dock is set to. The counter's 3×5
+  digits stop being a number below that.
+- **Barely animates.** The drawer's character runs at six frames a second and
+  stops existing when the drawer closes. The badge holds still and moves only
+  on an edge — a reaction, or a fetch actually in flight. Reduce Motion pins
+  both to a single frame.
+
+---
+
 ## Colour
 
 One scale, used everywhere — checks, merge blockers, approvals, staleness — so
@@ -290,5 +350,8 @@ Things left out on purpose, and why:
 - **The badge never counts your own PRs.** Mixing "work you owe others" with
   "your work in flight" into one number makes it mean nothing.
 - **No wallpaper sampling for the icon colour.** It would need Screen Recording
-  permission, which is far too much to ask for an icon that adapts perfectly
-  well to the system appearance.
+  permission, which is far too much to ask. The mascot's halo solves the same
+  problem without asking for anything.
+- **No count baked into the app icon.** The `.icns` shows the default character
+  idle and nothing else; a number in a static file would be wrong the moment it
+  was written.

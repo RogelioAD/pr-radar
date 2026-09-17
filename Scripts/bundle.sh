@@ -23,7 +23,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINARY" "$APP/Contents/MacOS/PRRadar"
 
 echo "==> generating icon"
-if swift "$ROOT/Scripts/make-icon.swift" "$ROOT/.build" >/dev/null 2>&1 \
+if swift run -c "$CONFIG" --package-path "$ROOT" MakeIcon "$ROOT/.build" >/dev/null 2>&1 \
    && iconutil -c icns "$ROOT/.build/AppIcon.iconset" \
         -o "$APP/Contents/Resources/AppIcon.icns" 2>/dev/null; then
   ICON_KEY='<key>CFBundleIconFile</key><string>AppIcon</string>'
