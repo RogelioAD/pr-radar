@@ -58,7 +58,8 @@ struct AccountStripView: View {
         return Button { state.accountFilter = id } label: {
             HStack(spacing: 4) {
                 Text(label)
-                    .font(.system(size: 10.5, weight: selected ? .semibold : .regular))
+                    .font(.system(size: 10.5,
+                                  weight: failed || selected ? .semibold : .regular))
                     .lineLimit(1)
                 if failed {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -75,12 +76,20 @@ struct AccountStripView: View {
                         )
                 }
             }
-            .foregroundStyle(selected ? Color.primary : Color.secondary)
+            // The whole label carries the failure, not just the mark beside it.
+            // Two accounts on one host can differ by a single character —
+            // `octocat` and `octocät`, or a name typed twice with one letter
+            // out — and an 8pt glyph next to near-identical words asks the
+            // reader to spot the difference before they can act on it. Colour
+            // answers "which one is broken" without reading either name.
+            .foregroundStyle(failed ? Health.bad.tint
+                                    : (selected ? Color.primary : Color.secondary))
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(selected ? Color.primary.opacity(0.10) : .clear)
+                    .fill(failed ? Health.bad.tint.opacity(0.14)
+                                 : (selected ? Color.primary.opacity(0.10) : .clear))
             )
             .contentShape(Rectangle())
         }
