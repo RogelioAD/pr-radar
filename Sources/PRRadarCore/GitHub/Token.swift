@@ -41,12 +41,37 @@ public enum Token {
     }
 
     static func fromGitHubCLI() -> String? {
+        runGH(["auth", "token"])
+    }
+
+    /// The token for one named account, rather than whichever is active.
+    ///
+    /// `gh auth token` with no account answers for the active one only, which is
+    /// why the app could never see a second identity's work. Naming the account
+    /// is the whole of the fix at this layer.
+    static func fromGitHubCLI(login: String, host: String) -> String? {
+        runGH(["auth", "token", "--user", login, "--hostname", host])
+    }
+
+    /// The payload of `gh auth status --json hosts`, or nil when this `gh` is too
+    /// old to support it.
+    ///
+    /// Nil is not an error: it means "this machine can only tell us about the
+    /// active account", and the caller falls back to exactly the old behaviour
+    /// rather than reporting that the user has no accounts.
+    static func statusJSON() -> Data? {
+        runGH(["auth", "status", "--json", "hosts"]).map { Data($0.utf8) }
+    }
+
+    /// Runs `gh` and returns its trimmed stdout, or nil if it could not be run or
+    /// exited non-zero.
+    static func runGH(_ arguments: [String]) -> String? {
         guard let gh = ghCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
         else { return nil }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: gh)
-        process.arguments = ["auth", "token"]
+        process.arguments = arguments
         // Give `gh` a usable minimal environment; it needs HOME to find its config.
         var env = ProcessInfo.processInfo.environment
         env["HOME"] = env["HOME"] ?? NSHomeDirectory()
