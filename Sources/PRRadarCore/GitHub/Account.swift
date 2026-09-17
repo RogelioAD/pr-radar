@@ -22,15 +22,36 @@ public struct Account: Hashable, Sendable, Identifiable {
     /// state is not evidence of a working token.
     public let isHealthy: Bool
 
+    /// OAuth scopes `gh` reports for this account. Empty when it did not say —
+    /// an older CLI, or the stand-in used when accounts cannot be listed.
+    public let scopes: [String]
+
     /// Host-qualified, because the same login can exist on github.com and on an
     /// Enterprise host and they are different accounts with different tokens.
     public var id: String { "\(host)/\(login)" }
 
-    public init(login: String, host: String, isActive: Bool, isHealthy: Bool) {
+    /// Whether this account can discover the teams it belongs to, which is how
+    /// review requests aimed at a team rather than at you are found. nil means
+    /// `gh` did not report scopes, which is not the same as reporting that the
+    /// scope is absent.
+    ///
+    /// Unknown reads as "do not warn", the opposite of `isHealthy`, and
+    /// deliberately: an unknown token state costs one skipped fetch, while an
+    /// unknown scope would cost a standing warning about a shortfall that may
+    /// not exist. Of the two scopes this app needs, a missing `repo` fails
+    /// loudly at the first request and needs no warning of its own; `read:org`
+    /// is the one that degrades in silence.
+    public var canReadTeams: Bool? {
+        scopes.isEmpty ? nil : scopes.contains("read:org")
+    }
+
+    public init(login: String, host: String, isActive: Bool, isHealthy: Bool,
+                scopes: [String] = []) {
         self.login = login
         self.host = host
         self.isActive = isActive
         self.isHealthy = isHealthy
+        self.scopes = scopes
     }
 }
 
@@ -54,7 +75,8 @@ public enum Accounts {
                         // under an empty host and never match its token.
                         host: host,
                         isActive: $0.active ?? false,
-                        isHealthy: $0.state == "success")
+                        isHealthy: $0.state == "success",
+                        scopes: parseScopes($0.scopes))
             }
         }
         return sorted(accounts)
@@ -75,6 +97,16 @@ public enum Accounts {
         }
     }
 
+    /// `"gist, read:org, repo"` into its parts. Splitting on the comma rather
+    /// than searching the whole string for "read:org" keeps a future scope whose
+    /// name contains another's from reading as both.
+    static func parseScopes(_ raw: String?) -> [String] {
+        guard let raw else { return [] }
+        return raw.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
     private struct StatusPayload: Decodable {
         let hosts: [String: [Entry]]
 
@@ -84,6 +116,8 @@ public enum Accounts {
             /// should cost one account's metadata, never the whole list.
             let active: Bool?
             let state: String?
+            /// One comma-separated string, as `gh` prints it.
+            let scopes: String?
         }
     }
 }

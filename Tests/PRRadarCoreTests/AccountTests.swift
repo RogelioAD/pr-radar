@@ -165,3 +165,50 @@ extension AccountTests {
                                               scope: "github.com/work"))
     }
 }
+
+// MARK: - Scopes
+
+extension AccountTests {
+
+    private func account(scopes: String?) -> Account? {
+        let field = scopes.map { "\"scopes\":\"\($0)\"," } ?? ""
+        return Accounts.parse(statusJSON: Data("""
+        {"hosts":{"github.com":[
+          {"state":"success","active":true,"host":"github.com",\(field)"login":"a"}
+        ]}}
+        """.utf8)).first
+    }
+
+    func testScopesAreSplitOnTheComma() {
+        XCTAssertEqual(account(scopes: "gist, read:org, repo")?.scopes,
+                       ["gist", "read:org", "repo"])
+    }
+
+    func testReadOrgPresentMeansTeamsAreDiscoverable() {
+        XCTAssertEqual(account(scopes: "read:org, repo")?.canReadTeams, true)
+    }
+
+    func testReadOrgAbsentMeansTeamsAreNot() {
+        XCTAssertEqual(account(scopes: "gist, repo")?.canReadTeams, false)
+    }
+
+    /// Unknown is not absent. `gh` not reporting scopes must not produce a
+    /// warning about a shortfall that may not exist — the opposite of how an
+    /// unknown auth state is treated, and for a different consequence.
+    func testUnreportedScopesAreUnknownNotMissing() {
+        XCTAssertNil(account(scopes: nil)?.canReadTeams)
+        XCTAssertNil(Accounts.activeFallback.canReadTeams)
+    }
+
+    /// Splitting on the comma rather than substring-searching the whole string
+    /// is what keeps a scope whose name contains another's from reading as both.
+    func testAScopeContainingAnothersNameDoesNotCount() {
+        XCTAssertEqual(account(scopes: "gist, no-read:org-here, repo")?.canReadTeams,
+                       false)
+    }
+
+    func testWhitespaceAndEmptyEntriesAreDropped() {
+        XCTAssertEqual(account(scopes: "  repo ,, read:org  ")?.scopes,
+                       ["repo", "read:org"])
+    }
+}
