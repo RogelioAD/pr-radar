@@ -35,42 +35,78 @@ enum Diagnostics {
         var exitCode: Int32 = 0
 
         Task {
-            do {
-                let (token, source) = try Token.resolveWithSource()
-                print("token: resolved via \(source.rawValue) (\(token.prefix(4))…)")
+            let accounts = Accounts.discover()
+            print("accounts: \(accounts.count)")
 
-                let client = GitHubClient(token: token)
-                let (login, teams) = try await client.fetchViewerAndTeams()
-                print("viewer: \(login)")
-                print("teams:  \(teams.isEmpty ? "none" : teams.map(\.qualified).joined(separator: ", "))")
-
-                let searches = try await client.fetchPullRequests(teams: teams)
-                let rawCounts = searches
-                    .sorted { $0.key < $1.key }
-                    .map { "\($0.key)=\($0.value.nodes.count)" }
-                    .joined(separator: " ")
-                print("scopes: \(rawCounts)")
-
-                let items = ReviewInbox(viewerLogin: login, teams: teams).build(from: searches)
-                print("\nwaiting on you: \(items.count)")
-                for item in items {
-                    let age = TimeAgo.short(since: item.pingedAt)
-                    print("  #\(item.number)  \(age.padding(toLength: 4, withPad: " ", startingAt: 0)) "
-                          + "\(item.authorLogin.padding(toLength: 22, withPad: " ", startingAt: 0)) "
-                          + "\(item.repoShortName)")
-                    print("        \(item.title)")
+            // One section per account, and one account's failure does not end
+            // the run — the whole point of the diagnostic is to show which
+            // identity is the one that cannot be reached.
+            var reached = 0
+            for account in accounts {
+                let name = account.login.isEmpty ? "(active account)" : account.login
+                let location = account.host.isEmpty ? "" : " @ \(account.host)"
+                print("\n── \(name)\(location)"
+                      + (account.isActive ? "  [active]" : "")
+                      + (account.isHealthy ? "" : "  [gh reports auth trouble]"))
+                do {
+                    try await printAccount(account)
+                    reached += 1
+                } catch {
+                    FileHandle.standardError.write(
+                        Data("  error: \(error.localizedDescription)\n".utf8))
                 }
-
-                try await printMyPRs(client: client)
-            } catch {
-                FileHandle.standardError.write(Data("error: \(error.localizedDescription)\n".utf8))
-                exitCode = 1
             }
+
+            // Non-zero only when nothing could be read at all, matching the app:
+            // a partial round is a real result, just an incomplete one.
+            if reached == 0 { exitCode = 1 }
             semaphore.signal()
         }
 
         semaphore.wait()
         exit(exitCode)
+    }
+
+    static func printAccount(_ account: Account) async throws {
+        guard let token = Accounts.token(for: account) else {
+            print("  no token available")
+            return
+        }
+        print("token:  \(token.prefix(4))…")
+        // "access", not "scopes": the line below already uses that word for the
+        // search scopes a fetch is split into, and they are unrelated.
+        if account.scopes.isEmpty {
+            print("access: (gh did not report them)")
+        } else {
+            print("access: \(account.scopes.joined(separator: ", "))"
+                  + (account.canReadTeams == false
+                     ? "   !! no read:org — team review requests are invisible here"
+                     : ""))
+        }
+
+        let client = GitHubClient(token: token)
+        let (login, teams) = try await client.fetchViewerAndTeams()
+        print("viewer: \(login)")
+        print("teams:  \(teams.isEmpty ? "none" : teams.map(\.qualified).joined(separator: ", "))")
+
+        let searches = try await client.fetchPullRequests(teams: teams)
+        let rawCounts = searches
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value.nodes.count)" }
+            .joined(separator: " ")
+        print("scopes: \(rawCounts)")
+
+        let items = ReviewInbox(viewerLogin: login, teams: teams).build(from: searches)
+        print("\nwaiting on you: \(items.count)")
+        for item in items {
+            let age = TimeAgo.short(since: item.pingedAt)
+            print("  #\(item.number)  \(age.padding(toLength: 4, withPad: " ", startingAt: 0)) "
+                  + "\(item.authorLogin.padding(toLength: 22, withPad: " ", startingAt: 0)) "
+                  + "\(item.repoShortName)")
+            print("        \(item.title)")
+        }
+
+        try await printMyPRs(client: client)
     }
 
     static func printMyPRs(client: GitHubClient) async throws {

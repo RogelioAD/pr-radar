@@ -22,6 +22,32 @@ final class AppState: ObservableObject {
         didSet { Prefs.repoFilter = repoFilter }
     }
 
+    /// Narrows **both** tabs to one account, by `host/login`. nil means all of
+    /// them, which is the only value under which the badge answers "who is
+    /// waiting on you" for the whole of your work.
+    @Published var accountFilter: String? = Prefs.accountFilter {
+        didSet {
+            Prefs.accountFilter = accountFilter
+            // Switching account is the second way a repo filter can go stale,
+            // and it goes stale immediately rather than at the next refresh:
+            // the repo you were narrowed to may not exist for this identity at
+            // all, which would leave an empty drawer beside a non-zero strip.
+            dropStaleRepoFilter()
+        }
+    }
+
+    /// Every account discovered on this machine, active one first.
+    @Published var accounts: [Account] = []
+
+    /// Accounts whose fetch failed this round, by `host/login`.
+    ///
+    /// Kept separate from `lastError` because the consequence is different: a
+    /// total failure leaves the previous list standing, while a partial one
+    /// produces a list and a count that are **real but incomplete**. Nothing
+    /// about a smaller number looks wrong, so the incompleteness has to be
+    /// carried explicitly or it is not communicated at all.
+    @Published var failedAccounts: Set<String> = []
+
     // MARK: - My PRs tab
 
     @Published var myPRs: [MyPullRequest] = []
@@ -63,7 +89,7 @@ final class AppState: ObservableObject {
     // MARK: - Displayed lists
 
     var displayedItems: [ReviewItem] {
-        var filtered = RepoScope.apply(repoFilter, to: items, repoOf: \.repo)
+        var filtered = scopedItems
         if let author = authorFilter {
             filtered = filtered.filter { $0.authorLogin == author }
         }
@@ -71,26 +97,65 @@ final class AppState: ObservableObject {
     }
 
     var displayedMyPRs: [MyPullRequest] {
-        let scoped = RepoScope.apply(repoFilter, to: myPRs, repoOf: \.repo)
-        return myPRSortOrder.apply(to: myPRFilter.apply(to: scoped))
+        myPRSortOrder.apply(to: myPRFilter.apply(to: scopedMyPRs))
     }
 
     /// Authors available to filter by, within the current repo filter — so the
     /// author menu never offers someone the repo filter has already excluded.
     var authors: [String] {
-        let scoped = RepoScope.apply(repoFilter, to: items, repoOf: \.repo)
-        return Array(Set(scoped.map(\.authorLogin)))
+        Array(Set(scopedItems.map(\.authorLogin)))
             .sorted { $0.lowercased() < $1.lowercased() }
     }
 
-    /// Every repo appearing in either tab, so the menu covers both.
+    /// Every repo appearing in either tab, so the menu covers both — within the
+    /// account scope, so the menu never offers a repo the account strip has
+    /// already excluded. Same rule the author menu follows one level down.
     var repos: [String] {
-        RepoScope.names(reviews: items.map(\.repo), mine: myPRs.map(\.repo))
+        RepoScope.names(reviews: accountScopedItems.map(\.repo),
+                        mine: accountScopedMyPRs.map(\.repo))
     }
 
     func repoCount(_ repo: String) -> (reviews: Int, mine: Int) {
-        (RepoScope.apply(repo, to: items, repoOf: \.repo).count,
-         RepoScope.apply(repo, to: myPRs, repoOf: \.repo).count)
+        (RepoScope.apply(repo, to: accountScopedItems, repoOf: \.repo).count,
+         RepoScope.apply(repo, to: accountScopedMyPRs, repoOf: \.repo).count)
+    }
+
+    /// What switching to this account would show you **in the tab you are
+    /// looking at**, ignoring the repo filter so the strip always reveals what
+    /// is there rather than what the current repo leaves of it.
+    ///
+    /// Follows the selected tab rather than always counting review requests.
+    /// Counting one thing while the tab below counts another put "0" beside an
+    /// account with eighteen open pull requests, which reads as "nothing here"
+    /// — a number whose meaning you have to already know is worse than no
+    /// number, and this app's whole badge is built on the opposite rule.
+    func accountCount(_ id: String?) -> Int {
+        switch selectedTab {
+        case .reviews: return AccountScope.apply(id, to: items, accountOf: \.account).count
+        case .mine: return AccountScope.apply(id, to: myPRs, accountOf: \.account).count
+        }
+    }
+
+    /// Drops a repo filter that matches nothing for the current account scope.
+    ///
+    /// Lives here rather than in the refresh loop because there are now two
+    /// ways to invalidate it — a refresh, and an account switch — and a rule
+    /// with two triggers and one implementation cannot drift between them.
+    func dropStaleRepoFilter() {
+        guard let repo = repoFilter else { return }
+        let counts = repoCount(repo)
+        if counts.reviews == 0 && counts.mine == 0 { repoFilter = nil }
+    }
+
+    /// The account to name on a row, or nil when naming it would be noise:
+    /// only one account exists, the list is already scoped to one, or the row
+    /// predates the tag.
+    func accountLabel(for id: String) -> String? {
+        guard showsAccountStrip, accountFilter == nil else { return nil }
+        guard let account = accounts.first(where: { $0.id == id }),
+              !account.login.isEmpty
+        else { return nil }
+        return Accounts.shortLogin(account.login)
     }
 
     static func shortRepoName(_ repo: String) -> String { RepoScope.shortName(repo) }
@@ -137,37 +202,61 @@ final class AppState: ObservableObject {
         }
     }
 
-    // MARK: - Repo scope
+    // MARK: - Scope
     //
-    // The repo filter behaves as a *scope* — "I'm working in this repo today" —
-    // so the badge follows it. The author and state filters are temporary view
-    // narrowing and deliberately do not, or the badge would flicker every time
-    // you poked at a menu.
+    // The repo and account filters behave as *scopes* — "I'm working in this
+    // repo today", "I'm working as this identity today" — so the badge follows
+    // both. The author and state filters are temporary view narrowing and
+    // deliberately do not, or the badge would flicker every time you poked at a
+    // menu.
+    //
+    // Account is applied first: the repo menu is built from what the scoped
+    // account can see, so narrowing to an account cannot leave a repo selected
+    // that the account has nothing in.
 
-    var repoScopedItems: [ReviewItem] {
-        RepoScope.apply(repoFilter, to: items, repoOf: \.repo)
+    var accountScopedItems: [ReviewItem] {
+        AccountScope.apply(accountFilter, to: items, accountOf: \.account)
     }
 
-    var repoScopedMyPRs: [MyPullRequest] {
-        RepoScope.apply(repoFilter, to: myPRs, repoOf: \.repo)
+    var accountScopedMyPRs: [MyPullRequest] {
+        AccountScope.apply(accountFilter, to: myPRs, accountOf: \.account)
+    }
+
+    var scopedItems: [ReviewItem] {
+        RepoScope.apply(repoFilter, to: accountScopedItems, repoOf: \.repo)
+    }
+
+    var scopedMyPRs: [MyPullRequest] {
+        RepoScope.apply(repoFilter, to: accountScopedMyPRs, repoOf: \.repo)
     }
 
     // MARK: - Badge
 
     /// The badge counts review requests only — the number you owe other people.
     /// Your own PRs are informational and must not inflate it.
-    var count: Int { repoScopedItems.count }
+    var count: Int { scopedItems.count }
+
+    /// True when this round could not reach every account in scope, so `count`
+    /// is real but short. The badge has to say so: a number that is merely
+    /// smaller than the truth looks exactly like good news.
+    var isPartial: Bool {
+        AccountScope.isPartial(failed: failedAccounts, scope: accountFilter)
+    }
 
     /// Lights the badge's secondary dot: PRs of mine that are ready to merge.
-    var myPRsReadyToMerge: Int { repoScopedMyPRs.filter(\.isReadyToMerge).count }
+    var myPRsReadyToMerge: Int { scopedMyPRs.filter(\.isReadyToMerge).count }
 
     /// The most overdue request in scope.
     var worstStaleness: Staleness {
-        guard let oldest = repoScopedItems.map(\.pingedAt).min() else { return .fresh }
+        guard let oldest = scopedItems.map(\.pingedAt).min() else { return .fresh }
         return Staleness.of(oldest, now: clock)
     }
 
     var hasProblem: Bool { authError != nil }
+
+    /// Accounts to show in the strip. Hidden entirely below two, since a strip
+    /// offering one choice is a control that cannot be used.
+    var showsAccountStrip: Bool { accounts.count > 1 }
 
     // MARK: - Mascot
 
@@ -218,7 +307,7 @@ final class AppState: ObservableObject {
                        frame: 0,
                        blink: false,
                        reviews: count,
-                       reviewHealth: hasProblem ? .neutral : worstStaleness.health,
+                       reviewHealth: hasProblem || isPartial ? .neutral : worstStaleness.health,
                        readyToMerge: myPRsReadyToMerge)
     }
 
@@ -258,8 +347,12 @@ final class AppState: ObservableObject {
     /// Deliberately ignores the repo scope: a filter matching nothing would
     /// otherwise hide the badge, leaving no way to reach the drawer and clear
     /// the very filter causing it.
+    /// Never hidden on a short round. Hiding on a partial result would state
+    /// "nothing is waiting on you" on the strength of accounts that were never
+    /// read — the single reading this whole feature exists to prevent — and it
+    /// would take the badge, and with it the only way back in, off the screen.
     var shouldHidePanel: Bool {
-        items.isEmpty && myPRs.isEmpty && !hasProblem
+        items.isEmpty && myPRs.isEmpty && !hasProblem && !isPartial
     }
 }
 

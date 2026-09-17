@@ -7,6 +7,8 @@ import PRRadarCore
 struct MyPRRowView: View {
     let item: MyPullRequest
     let now: Date
+    /// Which account surfaced this row, or nil when saying so would be noise.
+    var accountLabel: String?
     let onOpen: () -> Void
 
     @State private var hovering = false
@@ -85,6 +87,10 @@ struct MyPRRowView: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
+            if let accountLabel {
+                Chip(text: accountLabel, symbol: "person.crop.circle",
+                     health: .neutral)
+            }
             if item.isDraft {
                 Chip(text: "draft", health: .neutral)
             }

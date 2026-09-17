@@ -144,6 +144,12 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
     public let approvals: [Approval]
     public let awaitingReviewers: [String]
     public let unresolvedThreadCount: Int
+    /// Which account surfaced this row. Empty until a fetch tags it, and set
+    /// after the inbox builds rather than threaded through it — the same
+    /// post-build shape `behindBy` already uses, and it keeps every existing
+    /// construction site and test compiling unchanged.
+    public var account: String = ""
+
     public let totalThreadCount: Int
     public let checks: ChecksSummary
     public let additions: Int
@@ -237,7 +243,7 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
                 totalThreadCount: Int, checks: ChecksSummary,
                 additions: Int, deletions: Int, changedFiles: Int,
                 behindBy: Int? = nil, stackedOn: Int? = nil,
-                blocksRestackOf: [Int] = []) {
+                blocksRestackOf: [Int] = [], account: String = "") {
         self.repo = repo
         self.number = number
         self.title = title
@@ -260,5 +266,6 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
         self.behindBy = behindBy
         self.stackedOn = stackedOn
         self.blocksRestackOf = blocksRestackOf
+        self.account = account
     }
 }

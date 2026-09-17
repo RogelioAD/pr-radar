@@ -19,8 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isCheckingForUpdate = false
 
     /// Discovered once per launch and reused for every poll.
-    private var viewerLogin: String?
-    private var teams: [TeamRef] = []
+    /// Viewer login and teams per account id. One entry per identity, because
+    /// the teams that decide which review requests are yours are a property of
+    /// the account, not of the machine.
+    private var viewerCache: [String: (login: String, teams: [TeamRef])] = [:]
 
     private let pathMonitor = NWPathMonitor()
     /// Assumed true until the monitor says otherwise, so a slow first callback
@@ -203,114 +205,235 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.isRefreshing = true
         defer { state.isRefreshing = false }
 
-        let token: String
-        do {
-            token = try Token.resolve()
-        } catch {
-            state.authError = error.localizedDescription
-            panel.syncVisibility()
+        // Off the main actor: discovery runs `gh auth status`, which validates
+        // every token over the network to report its state. Synchronously on
+        // the main thread that is a beachball on every poll, where the old code
+        // made one fast local call.
+        let accounts = await Task.detached { Accounts.discover() }.value
+        state.accounts = accounts
+        validateAccountFilter(against: accounts)
+
+        // Sequential rather than concurrent. Each account is a couple of round
+        // trips on a background poll, and doing them in turn keeps the viewer
+        // cache a plain dictionary touched only from this actor. Worth
+        // parallelising if anyone runs enough accounts to feel it.
+        var fetches: [AccountFetch] = []
+        for account in accounts {
+            fetches.append(await fetch(account))
+        }
+
+        let reachable = fetches.filter { $0.error == nil }
+
+        // Every account failing is the old total-failure case: keep the last
+        // known list rather than blanking out on a transient network problem.
+        // Some failing is different in kind — the lists below are real, just
+        // short — and is carried by failedAccounts instead.
+        guard !reachable.isEmpty else {
+            let message = fetches.compactMap(\.error).first ?? "No GitHub account available."
+            Log.debug("refresh failed for every account: \(message)")
+            // The list left standing is the previous round's, and that one was
+            // whole. Marking accounts here would put "…" against a total that
+            // is complete and merely a minute old, which is a different fault
+            // with a different remedy.
+            state.failedAccounts = []
+            state.lastError = message
+            if state.items.isEmpty {
+                state.authError = message
+                panel.syncVisibility()
+            }
             return
+        }
+
+        // Marked after the all-failed case above, which is not a short round.
+        state.failedAccounts = Set(fetches.filter(\.isShort).map(\.account.id))
+
+        let items = AccountMerge.merge(reachable.map(\.items))
+        // An account whose pull requests could not be read keeps the ones it
+        // contributed last round. Replacing them with nothing would turn a
+        // transient failure into "you have no open PRs", which is what this
+        // code path did before accounts were split out and is the behaviour
+        // worth keeping.
+        let mine = AccountMerge.merge(reachable.map {
+            $0.myPRs ?? previousMyPRs(for: $0.account)
+        })
+
+        Log.debug("refresh ok: \(items.count) items from \(reachable.count)/\(accounts.count) account(s)")
+        state.authError = nil
+        // The first account's failure, so a partial round still names one cause.
+        // The count of what failed lives in failedAccounts; this is the wording.
+        state.lastError = fetches.compactMap(\.error).first
+        state.items = items
+        // Drop measurements for rows that are gone, and an author filter
+        // whose author no longer has anything waiting — otherwise the
+        // drawer would sit empty next to a non-zero badge.
+        state.rowHeights = RowHeightKeys.pruned(state.rowHeights,
+                                                tab: .reviews,
+                                                liveIDs: Set(items.map(\.id)))
+        if let author = state.authorFilter,
+           !items.contains(where: { $0.authorLogin == author }) {
+            state.authorFilter = nil
+        }
+        state.clock = Date()
+        state.lastUpdated = Date()
+
+        // The one edge worth a reaction: something new landed while you
+        // were not looking.
+        if notifier.notifyNewPings(in: items) { state.startle() }
+
+        state.rowHeights = RowHeightKeys.pruned(state.rowHeights,
+                                                tab: .mine,
+                                                liveIDs: Set(mine.map(\.id)))
+        state.myPRs = mine
+        validateRepoFilter()
+        Log.debug("my PRs: \(mine.count), ready to merge: \(state.myPRsReadyToMerge)")
+
+        panel.refreshLayoutIfExpanded()
+        panel.refreshBadgeSize()
+        panel.syncVisibility()
+        if Log.startExpanded && !(items.isEmpty && state.myPRs.isEmpty) {
+            panel.setExpanded(true)
+        }
+    }
+
+    // MARK: - Per-account fetch
+
+    /// One account's contribution to the two lists, kept whole until every
+    /// account has reported.
+    ///
+    /// The error is carried rather than thrown because a failure here is not a
+    /// failure of the refresh: the other accounts' rows are still good, and the
+    /// only wrong answer is to discard them or to present what is left as
+    /// complete.
+    private struct AccountFetch {
+        let account: Account
+        var items: [ReviewItem] = []
+        /// nil when this half could not be fetched — which is not the same as
+        /// fetching it and finding none, and must not be stored as if it were.
+        var myPRs: [MyPullRequest]?
+        var error: String?
+
+        /// Whether this account's contribution is short, for any reason. An
+        /// account can be perfectly reachable and still return half a round.
+        var isShort: Bool { error != nil || myPRs == nil }
+    }
+
+    private func fetch(_ account: Account) async -> AccountFetch {
+        guard account.isHealthy else {
+            // gh already knows this token is bad, so there is nothing to learn
+            // from spending a round trip to be told again.
+            return AccountFetch(account: account,
+                                error: "\(account.login.isEmpty ? "This account" : account.login) needs `gh auth login`.")
+        }
+        guard let token = Accounts.token(for: account) else {
+            // The empty login is the no-`gh` machine, where the only useful
+            // thing to say names both ways of supplying a token.
+            return AccountFetch(account: account,
+                                error: account.login.isEmpty
+                                    ? TokenError.notFound.localizedDescription
+                                    : "No token for \(account.login). Run `gh auth login`.")
+        }
+
+        if Log.failAccount == account.login {
+            return AccountFetch(account: account,
+                                error: "forced failure (PRRADAR_FAIL_ACCOUNT)")
         }
 
         let client = GitHubClient(token: token)
         do {
-            if viewerLogin == nil {
+            let viewer: (login: String, teams: [TeamRef])
+            if let cached = viewerCache[account.id] {
+                viewer = cached
+            } else {
                 let discovered = try await client.fetchViewerAndTeams()
-                viewerLogin = discovered.login
-                teams = discovered.teams
+                viewer = (discovered.login, discovered.teams)
+                viewerCache[account.id] = viewer
             }
-            guard let login = viewerLogin else { return }
 
-            let searches = try await client.fetchPullRequests(teams: teams)
-            let inbox = ReviewInbox(viewerLogin: login, teams: teams)
-            let items = inbox.build(from: searches)
+            let searches = try await client.fetchPullRequests(teams: viewer.teams)
+            let inbox = ReviewInbox(viewerLogin: viewer.login, teams: viewer.teams)
+            var result = AccountFetch(account: account,
+                                      items: tagged(inbox.build(from: searches), with: account))
 
-            Log.debug("refresh ok: \(items.count) items")
-            state.authError = nil
-            state.lastError = nil
-            state.items = items
-            // Drop measurements for rows that are gone, and an author filter
-            // whose author no longer has anything waiting — otherwise the
-            // drawer would sit empty next to a non-zero badge.
-            state.rowHeights = RowHeightKeys.pruned(state.rowHeights,
-                                                    tab: .reviews,
-                                                    liveIDs: Set(items.map(\.id)))
-            if let author = state.authorFilter,
-               !items.contains(where: { $0.authorLogin == author }) {
-                state.authorFilter = nil
+            // The My PRs half is independently fallible: losing it must not cost
+            // the review requests this account already returned.
+            do {
+                guard Log.failAccount != "mine" else {
+                    throw TokenError.notFound  // any error; the path is what matters
+                }
+                result.myPRs = tagged(try await fetchMyPRs(client: client), with: account)
+            } catch {
+                // Left nil deliberately. The account stays reachable — its
+                // review requests arrived — but it is short, so it is marked,
+                // and the caller keeps this account's previous pull requests
+                // rather than replacing them with nothing.
+                Log.debug("my PRs fetch failed for \(account.id): \(error)")
             }
-            state.clock = Date()
-            state.lastUpdated = Date()
-
-            // The one edge worth a reaction: something new landed while you
-            // were not looking.
-            if notifier.notifyNewPings(in: items) { state.startle() }
-
-            await refreshMyPRs(client: client)
-
-            panel.refreshLayoutIfExpanded()
-            panel.refreshBadgeSize()
-            panel.syncVisibility()
-            if Log.startExpanded && !(items.isEmpty && state.myPRs.isEmpty) {
-                panel.setExpanded(true)
-            }
+            return result
         } catch {
-            Log.debug("refresh failed: \(error)")
-            // Keep showing the last known list rather than blanking out on a
-            // transient network failure.
-            state.lastError = error.localizedDescription
-            if state.items.isEmpty {
-                state.authError = error.localizedDescription
-                panel.syncVisibility()
-            }
+            Log.debug("fetch failed for \(account.id): \(error)")
+            return AccountFetch(account: account, error: error.localizedDescription)
         }
     }
 
-    /// The My PRs tab. Failures here must not blank the Reviews tab, so they
-    /// are recorded and swallowed rather than thrown.
-    private func refreshMyPRs(client: GitHubClient) async {
+    /// What this account contributed to the last round, kept when a fetch for
+    /// it fails.
+    private func previousMyPRs(for account: Account) -> [MyPullRequest] {
+        state.myPRs.filter { $0.account == account.id }
+    }
+
+    private func tagged(_ items: [ReviewItem], with account: Account) -> [ReviewItem] {
+        items.map { var copy = $0; copy.account = account.id; return copy }
+    }
+
+    private func tagged(_ prs: [MyPullRequest], with account: Account) -> [MyPullRequest] {
+        prs.map { var copy = $0; copy.account = account.id; return copy }
+    }
+
+    /// One account's own pull requests.
+    private func fetchMyPRs(client: GitHubClient) async throws -> [MyPullRequest] {
+        let result = try await client.fetchMyPullRequests()
+        var mine = MyPRInbox(leadLogins: Prefs.leadLogins).build(from: result)
+
+        // Second phase, independently fallible: if it fails, behindBy stays
+        // nil and the row shows "behind ?" rather than claiming "behind 0".
         do {
-            let result = try await client.fetchMyPullRequests()
-            var mine = MyPRInbox(leadLogins: Prefs.leadLogins).build(from: result)
-
-            // Second phase, independently fallible: if it fails, behindBy stays
-            // nil and the row shows "behind ?" rather than claiming "behind 0".
-            do {
-                let compares = try await client.fetchCompares(for: mine)
-                mine = MyPRInbox.applyCompares(compares, to: mine)
-            } catch {
-                Log.debug("compare phase failed: \(error)")
-            }
-
-            if let fake = Log.fakeBehind {
-                mine = mine.map { var copy = $0; copy.behindBy = fake; return copy }
-            }
-            if Log.fakeReady {
-                mine = mine.map { var copy = $0; copy.mergeBlocker = .clean; return copy }
-            }
-
-            let liveIDs = Set(mine.map(\.id))
-            state.rowHeights = RowHeightKeys.pruned(state.rowHeights,
-                                                    tab: .mine,
-                                                    liveIDs: liveIDs)
-            state.myPRs = mine
-            validateRepoFilter()
-            Log.debug("my PRs: \(mine.count), ready to merge: \(state.myPRsReadyToMerge)")
+            let compares = try await client.fetchCompares(for: mine)
+            mine = MyPRInbox.applyCompares(compares, to: mine)
         } catch {
-            Log.debug("my PRs fetch failed: \(error)")
-            state.lastError = error.localizedDescription
+            Log.debug("compare phase failed: \(error)")
+        }
+
+        if let fake = Log.fakeBehind {
+            mine = mine.map { var copy = $0; copy.behindBy = fake; return copy }
+        }
+        if Log.fakeReady {
+            mine = mine.map { var copy = $0; copy.mergeBlocker = .clean; return copy }
+        }
+        return mine
+    }
+
+    /// Drops a scope naming an account that is no longer logged in — otherwise
+    /// logging out between launches leaves the drawer scoped to an identity it
+    /// cannot read, which looks exactly like having nothing to do.
+    private func validateAccountFilter(against accounts: [Account]) {
+        guard let scope = state.accountFilter else { return }
+        if !accounts.contains(where: { $0.id == scope }) {
+            Log.debug("clearing stale account filter: \(scope)")
+            state.accountFilter = nil
         }
     }
 
     /// Drops a persisted repo filter that no longer matches anything in either
     /// tab — otherwise a repo you finished with would leave both drawers empty
     /// next to non-zero badges, with no obvious cause.
+    ///
+    /// The rule itself lives on AppState, which is also where an account switch
+    /// reaches it. One implementation, because the two triggers must agree.
     private func validateRepoFilter() {
-        guard let repo = state.repoFilter else { return }
-        let counts = state.repoCount(repo)
-        if counts.reviews == 0 && counts.mine == 0 {
-            Log.debug("clearing stale repo filter: \(repo)")
-            state.repoFilter = nil
+        let before = state.repoFilter
+        state.dropStaleRepoFilter()
+        if before != nil, state.repoFilter == nil {
+            Log.debug("cleared stale repo filter: \(before ?? "")")
         }
     }
 
