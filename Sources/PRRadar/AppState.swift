@@ -243,7 +243,7 @@ final class AppState: ObservableObject {
         guard let account = accounts.first(where: { $0.id == id }),
               !account.login.isEmpty
         else { return nil }
-        return account.login
+        return Accounts.shortLogin(account.login)
     }
 
     static func shortRepoName(_ repo: String) -> String { RepoScope.shortName(repo) }
@@ -474,8 +474,12 @@ final class AppState: ObservableObject {
     /// Deliberately ignores the repo scope: a filter matching nothing would
     /// otherwise hide the badge, leaving no way to reach the drawer and clear
     /// the very filter causing it.
+    /// Never hidden on a short round. Hiding on a partial result would state
+    /// "nothing is waiting on you" on the strength of accounts that were never
+    /// read — the single reading this whole feature exists to prevent — and it
+    /// would take the badge, and with it the only way back in, off the screen.
     var shouldHidePanel: Bool {
-        items.isEmpty && myPRs.isEmpty && !hasProblem
+        items.isEmpty && myPRs.isEmpty && !hasProblem && !isPartial
     }
 }
 

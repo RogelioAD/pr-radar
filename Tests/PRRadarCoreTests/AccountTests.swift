@@ -212,3 +212,81 @@ extension AccountTests {
                        ["repo", "read:org"])
     }
 }
+
+// MARK: - Merging across accounts
+
+final class AccountMergeTests: XCTestCase {
+
+    private struct Row: Identifiable, Equatable {
+        let id: String
+        let from: String
+    }
+
+    private func rows(_ from: String, _ ids: [String]) -> [Row] {
+        ids.map { Row(id: $0, from: from) }
+    }
+
+    func testConcatenatesInAccountOrder() {
+        let merged = AccountMerge.merge([rows("a", ["1", "2"]), rows("b", ["3"])])
+        XCTAssertEqual(merged.map(\.id), ["1", "2", "3"])
+    }
+
+    func testOrderWithinAnAccountIsPreserved() {
+        let merged = AccountMerge.merge([rows("a", ["9", "1", "5"])])
+        XCTAssertEqual(merged.map(\.id), ["9", "1", "5"])
+    }
+
+    /// The case the type exists for: a review asked of a team both identities
+    /// belong to arrives once per account with the same owner/repo#number. Left
+    /// in, it inflates the badge and hands SwiftUI two rows with one id.
+    func testARowSeenByTwoAccountsAppearsOnce() {
+        let merged = AccountMerge.merge([rows("a", ["1", "2"]), rows("b", ["2", "3"])])
+        XCTAssertEqual(merged.map(\.id), ["1", "2", "3"])
+    }
+
+    func testTheFirstAccountKeepsASharedRow() {
+        let merged = AccountMerge.merge([rows("a", ["2"]), rows("b", ["2"])])
+        XCTAssertEqual(merged.map(\.from), ["a"])
+    }
+
+    /// Load-bearing for the strip: the per-account counts only sum to the "All"
+    /// count because a shared row is counted once, by its first account.
+    func testMergedCountIsNotTheSumWhenARowIsShared() {
+        let merged = AccountMerge.merge([rows("a", ["1", "2"]), rows("b", ["2"])])
+        XCTAssertEqual(merged.count, 2)
+    }
+
+    func testEmptyAccountsContributeNothingAndBreakNothing() {
+        let merged = AccountMerge.merge([rows("a", []), rows("b", ["1"]), rows("c", [])])
+        XCTAssertEqual(merged.map(\.id), ["1"])
+    }
+
+    func testNoAccountsMergesToNothing() {
+        XCTAssertTrue(AccountMerge.merge([[Row]]()).isEmpty)
+    }
+
+    func testADuplicateWithinOneAccountIsAlsoDropped() {
+        let merged = AccountMerge.merge([rows("a", ["1", "1", "2"])])
+        XCTAssertEqual(merged.map(\.id), ["1", "2"])
+    }
+}
+
+// MARK: - Display names
+
+extension AccountTests {
+
+    func testAShortLoginIsLeftAlone() {
+        XCTAssertEqual(Accounts.shortLogin("octocat"), "octocat")
+    }
+
+    func testALoginAtTheLimitIsLeftAlone() {
+        XCTAssertEqual(Accounts.shortLogin(String(repeating: "x", count: 14)).count, 14)
+    }
+
+    /// Capped rather than allowed to truncate the repo name beside it.
+    func testALongLoginIsCappedAndMarked() {
+        let capped = Accounts.shortLogin("averylonggithublogin")
+        XCTAssertEqual(capped.count, 14)
+        XCTAssertTrue(capped.hasSuffix("…"))
+    }
+}

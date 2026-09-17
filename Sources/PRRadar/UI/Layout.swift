@@ -282,6 +282,7 @@ enum Layout {
         }
     }
 
+
     /// Fallback ceiling, only used if no screen can be determined. The real
     /// limit is the screen height, passed in per call.
     static let fallbackMaxHeight: CGFloat = 900

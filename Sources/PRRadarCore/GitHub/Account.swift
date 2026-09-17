@@ -148,11 +148,31 @@ extension Accounts {
     static let activeFallback = Account(login: "", host: "",
                                         isActive: true, isHealthy: true)
 
-    /// The token for an account, preferring a named lookup and falling back to
-    /// the active-account token for the placeholder above.
+    /// A login capped for display beside other things.
+    ///
+    /// The row chip that uses it is `fixedSize` and cannot compress, so left
+    /// whole a long login would win its argument with the repo name next to it
+    /// and truncate *that* instead — and of the two, the repo is what the row
+    /// is about. Capping the login is choosing which one loses.
+    public static func shortLogin(_ login: String, limit: Int = 14) -> String {
+        login.count <= limit ? login : login.prefix(limit - 1) + "…"
+    }
+
+    /// The token for an account.
+    ///
+    /// Falls through to `Token.resolve()` — and therefore to the Keychain —
+    /// only for the account `gh` would have answered for anyway. A named
+    /// account that `gh` cannot produce a token for gets nil rather than the
+    /// Keychain's, which belongs to whoever put it there and is almost
+    /// certainly a different identity.
+    ///
+    /// The placeholder account is the case that matters: a machine with no `gh`
+    /// at all has no account list, so every token it will ever have comes
+    /// through here. Routing it anywhere but `resolve()` silently retires the
+    /// Keychain setup the README documents as a first-class alternative.
     public static func token(for account: Account) -> String? {
-        guard !account.login.isEmpty else { return Token.fromGitHubCLI() }
+        guard !account.login.isEmpty else { return try? Token.resolve() }
         return Token.fromGitHubCLI(login: account.login, host: account.host)
-            ?? (account.isActive ? Token.fromGitHubCLI() : nil)
+            ?? (account.isActive ? try? Token.resolve() : nil)
     }
 }

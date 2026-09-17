@@ -37,6 +37,18 @@ enum Log {
         ProcessInfo.processInfo.environment["PRRADAR_FAKE_BEHIND"].flatMap(Int.init)
     }
 
+    /// PRRADAR_FAIL_ACCOUNT=login forces that account's fetch to fail, so the
+    /// short-round badge and the strip's mark can be inspected. Every account
+    /// on a working machine is healthy, which otherwise leaves the one state
+    /// this feature exists for as the one state nobody has ever seen. Same
+    /// reason the two fakes below exist.
+    ///
+    /// PRRADAR_FAIL_ACCOUNT=mine fails only the My PRs half, which is the
+    /// quieter case: the account answers, and still returns half a round.
+    static var failAccount: String? {
+        ProcessInfo.processInfo.environment["PRRADAR_FAIL_ACCOUNT"]
+    }
+
     /// PRRADAR_FAKE_READY=1 forces every one of my PRs to look mergeable, so
     /// the badge's green dot can be inspected. Both real PRs are BLOCKED on
     /// reviews, so there is otherwise no way to see it.
