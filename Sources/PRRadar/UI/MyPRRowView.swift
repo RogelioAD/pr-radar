@@ -33,7 +33,7 @@ struct MyPRRowView: View {
         .clipShape(RoundedRectangle(cornerRadius: 7))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .draggable(item.url) {
+        .draggable(PRLink(url: item.url)) {
             Text(item.title).font(.system(size: 12)).padding(6)
         }
         .contextMenu {

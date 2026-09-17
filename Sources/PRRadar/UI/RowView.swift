@@ -70,7 +70,7 @@ struct RowView: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
         .onHover { hovering = $0 }
-        .draggable(item.url) {
+        .draggable(PRLink(url: item.url)) {
             Text(item.title).font(.system(size: 12)).padding(6)
         }
         .contextMenu {
