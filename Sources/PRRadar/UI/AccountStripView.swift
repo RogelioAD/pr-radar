@@ -19,11 +19,13 @@ struct AccountStripView: View {
         HStack(spacing: 4) {
             button(id: nil,
                    label: "All",
-                   failed: !state.failedAccounts.isEmpty)
+                   failed: !state.failedAccounts.isEmpty,
+                   account: nil)
             ForEach(state.accounts) { account in
                 button(id: account.id,
                        label: account.login.isEmpty ? "account" : account.login,
-                       failed: state.failedAccounts.contains(account.id))
+                       failed: state.failedAccounts.contains(account.id),
+                       account: account)
             }
             Spacer()
         }
@@ -35,7 +37,23 @@ struct AccountStripView: View {
     /// An account that could not be read contributes nothing, and a tab reading
     /// `personal 0` is indistinguishable from an account with nothing waiting —
     /// which is the one reading that must never be produced by a failure.
-    private func button(id: String?, label: String, failed: Bool) -> some View {
+    /// Carried in the tooltip rather than shown as a mark.
+    ///
+    /// A missing `read:org` is a standing condition the app cannot fix and the
+    /// user may have chosen, so a permanent badge would become furniture — and
+    /// the day something was actually wrong it would not be seen. The hover is
+    /// exactly when someone is asking why this account reads zero.
+    private func hint(_ label: String, failed: Bool, account: Account?) -> String {
+        if failed { return "\(label): could not be read this refresh" }
+        if account?.canReadTeams == false {
+            return "\(label): missing read:org — reviews requested of a team "
+                 + "will not appear here"
+        }
+        return label
+    }
+
+    private func button(id: String?, label: String, failed: Bool,
+                        account: Account?) -> some View {
         let selected = state.accountFilter == id
         return Button { state.accountFilter = id } label: {
             HStack(spacing: 4) {
@@ -67,6 +85,6 @@ struct AccountStripView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(failed ? "\(label): could not be read this refresh" : label)
+        .help(hint(label, failed: failed, account: account))
     }
 }

@@ -73,6 +73,16 @@ enum Diagnostics {
             return
         }
         print("token:  \(token.prefix(4))…")
+        // "access", not "scopes": the line below already uses that word for the
+        // search scopes a fetch is split into, and they are unrelated.
+        if account.scopes.isEmpty {
+            print("access: (gh did not report them)")
+        } else {
+            print("access: \(account.scopes.joined(separator: ", "))"
+                  + (account.canReadTeams == false
+                     ? "   !! no read:org — team review requests are invisible here"
+                     : ""))
+        }
 
         let client = GitHubClient(token: token)
         let (login, teams) = try await client.fetchViewerAndTeams()
