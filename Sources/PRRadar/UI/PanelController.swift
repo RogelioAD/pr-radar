@@ -6,7 +6,7 @@ import PRRadarCore
 /// user-resizable drawer height, and click-outside-to-collapse.
 @MainActor
 final class PanelController {
-    let panel: NSPanel
+    let panel: FloatingPanel
     private let state: AppState
     private var hostingView: DraggableHostingView<RootView>!
     private var outsideClickMonitor: Any?
@@ -24,6 +24,11 @@ final class PanelController {
 
     /// Height the user is dragging towards, live during a resize.
     private var resizeDraft: CGFloat?
+    /// Set while the window is travelling between the badge and the drawer.
+    /// Layout requests arriving mid-flight would retarget it and fight the
+    /// animation, and a second toggle would start a competing one.
+    private var isAnimatingFrame = false
+
     /// True only between mouse-down and mouse-up on the resize edge. While
     /// set, heights are clamped but not snapped, so the edge follows the
     /// pointer instead of jumping row to row.
@@ -38,7 +43,7 @@ final class PanelController {
         self.state = state
         self.badgeFrame = Self.initialBadgeFrame()
 
-        panel = NSPanel(
+        panel = FloatingPanel(
             contentRect: badgeFrame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -85,12 +90,24 @@ final class PanelController {
         hostingView.onResize = { [weak self] in self?.previewResize(to: $0) }
         hostingView.onResizeFinished = { [weak self] in self?.commitResize() }
         hostingView.onClick = { [weak self] in
+            guard let self else { return }
             // A press on the resize edge that never moved: clear the drag flag
             // before treating it as a click, or layout would stay unsnapped.
-            self?.isDraggingHeight = false
-            self?.toggle()
+            self.isDraggingHeight = false
+            // Only the badge opens on a click. The expanded drawer's header is
+            // for dragging the window, and closing belongs to the × in it —
+            // a stray click while repositioning used to shut the drawer.
+            guard !self.state.expanded else { return }
+            self.setExpanded(true)
         }
-        hostingView.contextMenuProvider = { [weak self] in self?.menuProvider() }
+        hostingView.contextMenuProvider = { [weak self] point in
+            guard let self else { return nil }
+            // Below the header the rows own the right-click — each carries its
+            // own Open and Copy items. The app menu stays where it has always
+            // been reachable: the collapsed badge, and the drawer's header.
+            if self.state.expanded, self.zone(at: point) == .none { return nil }
+            return self.menuProvider()
+        }
         panel.contentView = hostingView
 
         observeActivation()
@@ -111,13 +128,18 @@ final class PanelController {
         activationObservers = [
             centre.addObserver(forName: NSApplication.didResignActiveNotification,
                                object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.setExpanded(false) }
+                Task { @MainActor in
+                    Log.debug("app resigned active (expanded=\(self?.state.expanded ?? false))")
+                    self?.setExpanded(false)
+                }
             },
             centre.addObserver(forName: NSApplication.didBecomeActiveNotification,
                                object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in
                     guard let self, self.state.expanded else { return }
                     self.panel.makeKeyAndOrderFront(nil)
+                    Log.debug("app became active; re-keyed "
+                              + "(key=\(self.panel.isKeyWindow))")
                 }
             },
         ]
@@ -152,20 +174,64 @@ final class PanelController {
     func toggle() { setExpanded(!state.expanded) }
 
     func setExpanded(_ expanded: Bool) {
-        guard state.expanded != expanded else { return }
-        state.expanded = expanded
-        applyFrame()
+        guard state.expanded != expanded, !isAnimatingFrame else { return }
+        expanded ? expand() : collapse()
+    }
 
-        if expanded {
-            // A non-activating panel would otherwise leave the rows unclickable.
-            NSApp.activate(ignoringOtherApps: true)
-            panel.makeKeyAndOrderFront(nil)
-            installOutsideClickMonitor()
-            logZoneMap()
-        } else {
-            removeOutsideClickMonitor()
+    /// Unfolds the drawer out of the badge.
+    ///
+    /// The state flips first so the drawer is being drawn while the window
+    /// grows, which is what makes the travel visible at all — an empty window
+    /// changing size shows nothing.
+    private func expand() {
+        state.expanded = true
+        // A non-activating panel would otherwise leave the rows unclickable,
+        // and a borderless one only takes key because FloatingPanel allows it.
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
+        installOutsideClickMonitor()
+        animate(to: targetFrame(), curve: .easeOut) { [weak self] in
+            guard let self else { return }
+            // Hover is live only in the key window of an active app, so these
+            // two flags are the difference between a working drawer and an
+            // inert one that looks identical.
+            Log.debug("expanded: appActive=\(NSApp.isActive) key=\(self.panel.isKeyWindow)")
+            self.logZoneMap()
         }
-        hostingView.updateTrackingAreas()
+    }
+
+    /// Folds the drawer back into the badge.
+    ///
+    /// The state flip waits for the travel to finish, for the same reason in
+    /// reverse: swapping to the badge first leaves an empty transparent window
+    /// animating, so the drawer appears to vanish instead of collapsing.
+    ///
+    /// The badge is the drawer's own bottom-right corner, so the two frames
+    /// interpolate directly with nothing faked in between.
+    private func collapse() {
+        removeOutsideClickMonitor()
+        animate(to: badgeFrame, curve: .easeIn) { [weak self] in
+            guard let self else { return }
+            self.state.expanded = false
+            self.applyFrame()
+        }
+    }
+
+    private func animate(to frame: NSRect,
+                         curve: CAMediaTimingFunctionName,
+                         then finish: @escaping () -> Void) {
+        isAnimatingFrame = true
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.2
+            context.timingFunction = CAMediaTimingFunction(name: curve)
+            panel.animator().setFrame(frame, display: true)
+        }, completionHandler: { [weak self] in
+            guard let self else { return }
+            self.isAnimatingFrame = false
+            finish()
+            self.hostingView.updateTrackingAreas()
+            self.hostingView.refreshEdgeHover()
+        })
     }
 
     // MARK: - Geometry
@@ -182,7 +248,8 @@ final class PanelController {
                             itemCount: state.activeRowCount,
                             userContentHeight: state.userContentHeight,
                             maxHeight: availableMaxHeight,
-                            snapping: !isDraggingHeight)
+                            snapping: !isDraggingHeight,
+                            tab: state.selectedTab)
     }
 
     /// The drawer grows up and to the left, keeping the badge's bottom-right
@@ -294,7 +361,7 @@ final class PanelController {
     /// frame made the drag lurch between rows rather than track the hand.
     private func previewResize(to windowHeight: CGFloat) {
         isDraggingHeight = true
-        let content = Layout.sizing.clamp(
+        let content = Layout.sizing(for: state.selectedTab).clamp(
             windowHeight - Layout.chromeHeight,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
@@ -312,7 +379,7 @@ final class PanelController {
         guard let draft = resizeDraft else { return }
         resizeDraft = nil
 
-        let snapped = Layout.sizing.snap(
+        let snapped = Layout.sizing(for: state.selectedTab).snap(
             draft,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
@@ -337,12 +404,12 @@ final class PanelController {
         }
         guard changed else { return }
         state.rowHeights.merge(heights) { _, new in new }
-        if state.expanded { applyFrame() }
+        if state.expanded, !isAnimatingFrame { applyFrame() }
     }
 
     /// Re-lays out an open drawer after the list changes.
     func refreshLayoutIfExpanded() {
-        if state.expanded { applyFrame() }
+        if state.expanded, !isAnimatingFrame { applyFrame() }
     }
 
     /// Switching tabs changes which rows — and so which measured heights — are

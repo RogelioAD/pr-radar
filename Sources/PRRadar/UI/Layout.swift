@@ -45,8 +45,21 @@ enum Layout {
     /// Gap kept from the screen edges when placing the panel by default.
     static let screenInset: CGFloat = 24
 
-    /// Used only before rows report their real size.
-    static let estimatedRowHeight: CGFloat = 80
+    /// Used only before rows report their real size — which is exactly the
+    /// first open on a fresh install, when nothing has been measured yet.
+    ///
+    /// Per tab, because a My PRs row carries far more than a review row does:
+    /// approvals, checks, blockers, stack position. Estimating both at the
+    /// review row's height opened that tab well short of a row boundary, and
+    /// it only squared up once the rows reported and the layout ran again.
+    static func estimatedRowHeight(for tab: DrawerTab) -> CGFloat {
+        switch tab {
+        case .reviews: return 80
+        case .mine: return 130
+        }
+    }
+
+    static let estimatedRowHeight: CGFloat = estimatedRowHeight(for: .reviews)
 
     static var chromeHeight: CGFloat {
         // header + tab strip + filter bar + footer, plus four dividers.
@@ -57,20 +70,25 @@ enum Layout {
     /// limit is the screen height, passed in per call.
     static let fallbackMaxHeight: CGFloat = 900
 
-    static let sizing = DrawerSizing(
-        rowSpacing: rowSpacing,
-        listPadding: listPadding,
-        chromeHeight: chromeHeight,
-        maxHeight: fallbackMaxHeight,
-        estimatedRowHeight: estimatedRowHeight
-    )
+    static let sizing = sizing(for: .reviews)
+
+    static func sizing(for tab: DrawerTab) -> DrawerSizing {
+        DrawerSizing(
+            rowSpacing: rowSpacing,
+            listPadding: listPadding,
+            chromeHeight: chromeHeight,
+            maxHeight: fallbackMaxHeight,
+            estimatedRowHeight: estimatedRowHeight(for: tab)
+        )
+    }
 
     static func drawerHeight(rowHeights: [CGFloat],
                              itemCount: Int,
                              userContentHeight: CGFloat?,
                              maxHeight: CGFloat,
-                             snapping: Bool = true) -> CGFloat {
-        sizing.windowHeight(rowHeights: rowHeights,
+                             snapping: Bool = true,
+                             tab: DrawerTab = .reviews) -> CGFloat {
+        sizing(for: tab).windowHeight(rowHeights: rowHeights,
                             itemCount: itemCount,
                             userContentHeight: userContentHeight,
                             maxHeight: maxHeight,

@@ -24,7 +24,9 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     /// Reports the window height the user is dragging towards.
     var onResize: (CGFloat) -> Void = { _ in }
     var onResizeFinished: () -> Void = {}
-    var contextMenuProvider: () -> NSMenu? = { nil }
+    /// Given the press location, so the owner can decide whether this part of
+    /// the drawer has a menu of its own.
+    var contextMenuProvider: (NSPoint) -> NSMenu? = { _ in nil }
 
     /// Click-vs-drag decision lives in PRRadarCore so it can be unit-tested.
     private var tracker = PressTracker(threshold: 4)
@@ -45,6 +47,11 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     required init?(coder: NSCoder) {
         fatalError("not supported")
     }
+
+    /// Without this the first click on an inactive panel is spent activating
+    /// it and never reaches the view, so opening the drawer took two clicks —
+    /// one to wake the window, one to be heard.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
         tracker.begin(zone: zoneAt(convert(event.locationInWindow, from: nil)))
@@ -102,7 +109,10 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        guard let menu = contextMenuProvider() else {
+        // Handing the event on is what lets a SwiftUI .contextMenu underneath
+        // be seen at all: popping a menu here consumes the press, which is why
+        // the rows' own menus never appeared.
+        guard let menu = contextMenuProvider(convert(event.locationInWindow, from: nil)) else {
             super.rightMouseDown(with: event)
             return
         }
@@ -170,10 +180,16 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     /// the question.
     override func mouseEntered(with event: NSEvent) {
         updateEdgeHover(with: event)
+        // Handed on, always. SwiftUI drives .onHover from these very events, so
+        // an override that keeps them to itself silently disables every hover
+        // in the drawer — no row highlight, no underlined title — while the
+        // resize cursor this override exists for goes on working.
+        super.mouseEntered(with: event)
     }
 
     override func mouseExited(with event: NSEvent) {
         updateEdgeHover(with: event)
+        super.mouseExited(with: event)
     }
 
     /// Re-derives the edge hover from where the pointer actually is, for the
@@ -212,6 +228,12 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     /// supported hook for asserting a cursor, and it reasserts after anything
     /// else changes it.
     override func cursorUpdate(with event: NSEvent) {
+        // Only claim the cursor on the strip this view is responsible for;
+        // anywhere else SwiftUI should be free to pick its own.
+        guard hoveringResizeEdge || draggingResizeEdge else {
+            super.cursorUpdate(with: event)
+            return
+        }
         applyCursor()
     }
 

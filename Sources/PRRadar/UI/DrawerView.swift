@@ -99,12 +99,12 @@ struct DrawerView: View {
                 .headerControl()
             }
             Button(action: onCollapse) {
-                Image(systemName: "chevron.down")
+                Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Collapse")
+            .help("Close")
             .headerControl()
         }
         .padding(.horizontal, 12)
