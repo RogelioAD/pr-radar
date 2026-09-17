@@ -380,12 +380,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Drops a persisted repo filter that no longer matches anything in either
     /// tab — otherwise a repo you finished with would leave both drawers empty
     /// next to non-zero badges, with no obvious cause.
+    ///
+    /// The rule itself lives on AppState, which is also where an account switch
+    /// reaches it. One implementation, because the two triggers must agree.
     private func validateRepoFilter() {
-        guard let repo = state.repoFilter else { return }
-        let counts = state.repoCount(repo)
-        if counts.reviews == 0 && counts.mine == 0 {
-            Log.debug("clearing stale repo filter: \(repo)")
-            state.repoFilter = nil
+        let before = state.repoFilter
+        state.dropStaleRepoFilter()
+        if before != nil, state.repoFilter == nil {
+            Log.debug("cleared stale repo filter: \(before ?? "")")
         }
     }
 

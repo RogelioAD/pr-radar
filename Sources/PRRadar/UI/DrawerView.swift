@@ -211,7 +211,10 @@ struct DrawerView: View {
             ScrollView {
                 VStack(spacing: Layout.rowSpacing) {
                     ForEach(items) { item in
-                        RowView(item: item, now: state.clock) { onOpen(item) }
+                        RowView(item: item, now: state.clock,
+                                accountLabel: state.accountLabel(for: item.account)) {
+                            onOpen(item)
+                        }
                     }
                 }
                 .padding(.horizontal, 6)
@@ -236,6 +239,7 @@ struct DrawerView: View {
                 VStack(spacing: Layout.rowSpacing) {
                     ForEach(items) { item in
                         MyPRRowView(item: item, now: state.clock,
+                                    accountLabel: state.accountLabel(for: item.account),
                                     onOpen: { onOpenMyPR(item) })
                     }
                 }
