@@ -62,20 +62,26 @@ security add-generic-password -s PRRadar -a token -w ghp_yourtoken
 
 ## 3. Make it yours
 
-Two things are specific to whoever built this. Change both before installing.
+Two things are specific to whoever built this. Set both before installing.
 
 ### The bundle identifier
 
-It appears in three files. Replace it with your own reverse-DNS id:
+Pass your own reverse-DNS id at install time. Nothing in the source needs
+editing:
 
 ```sh
-grep -rl com.rogelioacosta.prradar Makefile Scripts/bundle.sh Sources/ \
-  | xargs sed -i '' 's/com\.rogelioacosta\.prradar/com.yourname.prradar/g'
+make install BUNDLE_ID=com.yourname.prradar
 ```
+
+Export it from your shell profile and every later `make install` picks it up.
 
 This matters more than it looks: the identifier is the key macOS uses for
 notification permission, saved preferences, and the login item. Leaving someone
 else's id in place means colliding with their settings if you ever run both.
+
+`make uninstall` reads the identifier back out of the installed app rather than
+trusting the variable, so it removes the right login item even if you forget to
+pass `BUNDLE_ID` the second time.
 
 ### Your review leads
 

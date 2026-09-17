@@ -1,5 +1,15 @@
 .PHONY: build test run print bundle install uninstall clean release
 
+# The identifier macOS keys notification permission, saved preferences and the
+# login item off. Override it to install under your own:
+#
+#     make install BUNDLE_ID=com.yourname.prradar
+#
+# Only exported, never defaulted: Scripts/bundle.sh holds the one default and
+# writes the value into Info.plist, and the targets below read it back out of
+# the bundle rather than keeping a second copy that could disagree.
+export BUNDLE_ID
+
 build:
 	swift build
 
@@ -47,21 +57,43 @@ install: bundle
 	@rm -rf "$(CURDIR)/PRRadar.app"
 	@echo "==> registering login item"
 	@mkdir -p ~/Library/LaunchAgents
-	@/usr/libexec/PlistBuddy -c "Clear dict" \
-		-c "Add :Label string com.rogelioacosta.prradar" \
-		-c "Add :ProgramArguments array" \
-		-c "Add :ProgramArguments:0 string /Applications/PRRadar.app/Contents/MacOS/PRRadar" \
-		-c "Add :RunAtLoad bool true" \
-		-c "Add :KeepAlive bool false" \
-		-c "Add :ProcessType string Interactive" \
-		~/Library/LaunchAgents/com.rogelioacosta.prradar.plist >/dev/null
-	@launchctl unload ~/Library/LaunchAgents/com.rogelioacosta.prradar.plist 2>/dev/null || true
-	@launchctl load ~/Library/LaunchAgents/com.rogelioacosta.prradar.plist
+	@# The label is read back out of the bundle that was just installed, so it
+	@# cannot drift from the identifier the app itself declares. launchctl treats
+	@# the label as the service name: one that names nothing installed loads an
+	@# agent macOS never associates with the running app, and the failure looks
+	@# like "start at login does not work" rather than like a mismatched string.
+	@# PlistBuddy reports a missing file on stdout and signals it only through
+	@# the exit status, so the read is trusted on status alone — captured output
+	@# from a failed read would otherwise be taken for an identifier.
+	@id="$$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
+		/Applications/PRRadar.app/Contents/Info.plist)" \
+		|| { echo "could not read CFBundleIdentifier from the installed app" >&2; exit 1; }; \
+		/usr/libexec/PlistBuddy -c "Clear dict" \
+			-c "Add :Label string $$id" \
+			-c "Add :ProgramArguments array" \
+			-c "Add :ProgramArguments:0 string /Applications/PRRadar.app/Contents/MacOS/PRRadar" \
+			-c "Add :RunAtLoad bool true" \
+			-c "Add :KeepAlive bool false" \
+			-c "Add :ProcessType string Interactive" \
+			"$$HOME/Library/LaunchAgents/$$id.plist" >/dev/null; \
+		launchctl unload "$$HOME/Library/LaunchAgents/$$id.plist" 2>/dev/null || true; \
+		launchctl load "$$HOME/Library/LaunchAgents/$$id.plist"
 	@echo "==> running. right-click the badge for the menu (including Quit)."
 
 uninstall:
-	-launchctl unload ~/Library/LaunchAgents/com.rogelioacosta.prradar.plist 2>/dev/null
-	-rm -f ~/Library/LaunchAgents/com.rogelioacosta.prradar.plist
+	@# Same source as install, for the same reason: uninstalling under a
+	@# different identifier than the one installed would leave the LaunchAgent
+	@# behind, still trying to start an app that is no longer there.
+	@#
+	@# The bundle being gone already is the ordinary case — dragging the app to
+	@# the Trash and then running this is how most of them end — so falling back
+	@# to the identifier this checkout would build under keeps that agent from
+	@# outliving the app it starts.
+	@id="$$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
+		/Applications/PRRadar.app/Contents/Info.plist 2>/dev/null)" || id=""; \
+		[ -n "$$id" ] || id="$$(./Scripts/bundle.sh --print-id)"; \
+		launchctl unload "$$HOME/Library/LaunchAgents/$$id.plist" 2>/dev/null || true; \
+		rm -f "$$HOME/Library/LaunchAgents/$$id.plist"
 	-pkill -f /Applications/PRRadar.app/Contents/MacOS/PRRadar
 	-rm -rf /Applications/PRRadar.app
 	@echo "==> uninstalled"

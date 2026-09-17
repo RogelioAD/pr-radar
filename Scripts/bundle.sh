@@ -9,7 +9,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${CONFIG:-release}"
 APP="$ROOT/PRRadar.app"
-BUNDLE_ID="com.rogelioacosta.prradar"
+BUNDLE_ID="${BUNDLE_ID:-com.rogelioacosta.prradar}"
+
+# Lets the Makefile ask what the identifier would be without building
+# anything, so it needs no second copy of the default to keep in step.
+if [ "${1:-}" = "--print-id" ]; then echo "$BUNDLE_ID"; exit 0; fi
 VERSION="1.10.0"
 
 echo "==> building ($CONFIG)"

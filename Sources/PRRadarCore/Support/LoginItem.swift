@@ -6,7 +6,10 @@ import Foundation
 /// signed bundle and is unreliable for the ad-hoc-signed local build this
 /// project produces, so a plain LaunchAgent plist is used instead.
 public enum LoginItem {
-    public static let label = "com.rogelioacosta.prradar"
+    /// Must match the app's own bundle identifier: `launchctl` treats the
+    /// label as the service name, and a label that names nothing installed
+    /// loads an agent macOS will never associate with the running app.
+    public static let label = BundleID.current
 
     public static var plistURL: URL {
         FileManager.default.homeDirectoryForCurrentUser

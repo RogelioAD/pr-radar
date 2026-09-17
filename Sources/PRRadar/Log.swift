@@ -1,5 +1,6 @@
 import AppKit
 import OSLog
+import PRRadarCore
 
 /// Debug tracing. Always recorded through unified logging, and additionally
 /// echoed to stderr when PRRADAR_DEBUG=1.
@@ -10,10 +11,13 @@ import OSLog
 /// fact in Console.app, filtered on this subsystem, with no such surgery:
 ///
 ///     log stream --predicate 'subsystem == "com.rogelioacosta.prradar"'
+///
+/// The subsystem is the build's bundle identifier, so substitute your own
+/// if you built with a different `BUNDLE_ID`.
 enum Log {
     static let enabled = ProcessInfo.processInfo.environment["PRRADAR_DEBUG"] == "1"
 
-    private static let logger = Logger(subsystem: "com.rogelioacosta.prradar",
+    private static let logger = Logger(subsystem: BundleID.current,
                                        category: "app")
 
     /// PRRADAR_EXPAND=1 opens the drawer on launch — lets the expanded state be

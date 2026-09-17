@@ -111,7 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if online, !self.isOnline { await self.refresh() }
             }
         }
-        pathMonitor.start(queue: DispatchQueue(label: "com.rogelioacosta.prradar.network"))
+        pathMonitor.start(queue: DispatchQueue(label: "\(BundleID.current).network"))
     }
 
     private func startPolling() {
