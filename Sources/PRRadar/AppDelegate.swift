@@ -205,7 +205,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.isRefreshing = true
         defer { state.isRefreshing = false }
 
-        let accounts = Accounts.discover()
+        // Off the main actor: discovery runs `gh auth status`, which validates
+        // every token over the network to report its state. Synchronously on
+        // the main thread that is a beachball on every poll, where the old code
+        // made one fast local call.
+        let accounts = await Task.detached { Accounts.discover() }.value
         state.accounts = accounts
         validateAccountFilter(against: accounts)
 
@@ -219,15 +223,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let reachable = fetches.filter { $0.error == nil }
-        state.failedAccounts = Set(fetches.compactMap { $0.error == nil ? nil : $0.account.id })
 
         // Every account failing is the old total-failure case: keep the last
         // known list rather than blanking out on a transient network problem.
         // Some failing is different in kind — the lists below are real, just
         // short — and is carried by failedAccounts instead.
         guard !reachable.isEmpty else {
-            let message = fetches.first?.error ?? "No GitHub account available."
+            let message = fetches.compactMap(\.error).first ?? "No GitHub account available."
             Log.debug("refresh failed for every account: \(message)")
+            // The list left standing is the previous round's, and that one was
+            // whole. Marking accounts here would put "…" against a total that
+            // is complete and merely a minute old, which is a different fault
+            // with a different remedy.
+            state.failedAccounts = []
             state.lastError = message
             if state.items.isEmpty {
                 state.authError = message
@@ -236,8 +244,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Marked after the all-failed case above, which is not a short round.
+        state.failedAccounts = Set(fetches.filter(\.isShort).map(\.account.id))
+
         let items = AccountMerge.merge(reachable.map(\.items))
-        let mine = AccountMerge.merge(reachable.map(\.myPRs))
+        // An account whose pull requests could not be read keeps the ones it
+        // contributed last round. Replacing them with nothing would turn a
+        // transient failure into "you have no open PRs", which is what this
+        // code path did before accounts were split out and is the behaviour
+        // worth keeping.
+        let mine = AccountMerge.merge(reachable.map {
+            $0.myPRs ?? previousMyPRs(for: $0.account)
+        })
 
         Log.debug("refresh ok: \(items.count) items from \(reachable.count)/\(accounts.count) account(s)")
         state.authError = nil
@@ -289,8 +307,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private struct AccountFetch {
         let account: Account
         var items: [ReviewItem] = []
-        var myPRs: [MyPullRequest] = []
+        /// nil when this half could not be fetched — which is not the same as
+        /// fetching it and finding none, and must not be stored as if it were.
+        var myPRs: [MyPullRequest]?
         var error: String?
+
+        /// Whether this account's contribution is short, for any reason. An
+        /// account can be perfectly reachable and still return half a round.
+        var isShort: Bool { error != nil || myPRs == nil }
     }
 
     private func fetch(_ account: Account) async -> AccountFetch {
@@ -301,7 +325,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 error: "\(account.login.isEmpty ? "This account" : account.login) needs `gh auth login`.")
         }
         guard let token = Accounts.token(for: account) else {
-            return AccountFetch(account: account, error: "No token for \(account.login).")
+            // The empty login is the no-`gh` machine, where the only useful
+            // thing to say names both ways of supplying a token.
+            return AccountFetch(account: account,
+                                error: account.login.isEmpty
+                                    ? TokenError.notFound.localizedDescription
+                                    : "No token for \(account.login). Run `gh auth login`.")
+        }
+
+        if Log.failAccount == account.login {
+            return AccountFetch(account: account,
+                                error: "forced failure (PRRADAR_FAIL_ACCOUNT)")
         }
 
         let client = GitHubClient(token: token)
@@ -323,16 +357,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The My PRs half is independently fallible: losing it must not cost
             // the review requests this account already returned.
             do {
+                guard Log.failAccount != "mine" else {
+                    throw TokenError.notFound  // any error; the path is what matters
+                }
                 result.myPRs = tagged(try await fetchMyPRs(client: client), with: account)
             } catch {
+                // Left nil deliberately. The account stays reachable — its
+                // review requests arrived — but it is short, so it is marked,
+                // and the caller keeps this account's previous pull requests
+                // rather than replacing them with nothing.
                 Log.debug("my PRs fetch failed for \(account.id): \(error)")
-                state.lastError = error.localizedDescription
             }
             return result
         } catch {
             Log.debug("fetch failed for \(account.id): \(error)")
             return AccountFetch(account: account, error: error.localizedDescription)
         }
+    }
+
+    /// What this account contributed to the last round, kept when a fetch for
+    /// it fails.
+    private func previousMyPRs(for account: Account) -> [MyPullRequest] {
+        state.myPRs.filter { $0.account == account.id }
     }
 
     private func tagged(_ items: [ReviewItem], with account: Account) -> [ReviewItem] {

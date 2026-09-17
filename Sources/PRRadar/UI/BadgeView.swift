@@ -193,15 +193,17 @@ struct BadgeView: View {
 
     private var tooltip: String {
         if let authError = state.authError { return authError }
-        // Named before the count, because the first thing to know about an
-        // incomplete number is that it is incomplete.
+        // Appended, never interpolated into a gap: an empty suffix used to
+        // leave a trailing space on every complete round.
         let missing = state.isPartial
-            ? "· \(state.failedAccounts.count) account(s) could not be read"
+            ? " · \(state.failedAccounts.count) "
+                + (state.failedAccounts.count == 1 ? "account" : "accounts")
+                + " could not be read"
             : ""
         guard let oldest = state.scopedItems.map(\.pingedAt).min() else {
-            return state.isPartial ? "No reviews waiting \(missing)" : "No reviews waiting"
+            return "No reviews waiting" + missing
         }
         return "\(state.count) waiting · oldest "
-             + "\(TimeAgo.long(since: oldest, now: state.clock)) \(missing)"
+             + TimeAgo.long(since: oldest, now: state.clock) + missing
     }
 }

@@ -121,7 +121,6 @@ enum Layout {
             + (accountStrip ? accountStripHeight + 1 : 0)
     }
 
-    static var chromeHeight: CGFloat { chromeHeight(accountStrip: false) }
 
     /// Fallback ceiling, only used if no screen can be determined. The real
     /// limit is the screen height, passed in per call.
