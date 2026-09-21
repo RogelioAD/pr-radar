@@ -9,10 +9,11 @@ import Foundation
 /// approval would make the lead chip claim a PR is unblocked when GitHub
 /// considers it blocked.
 public struct MyPRInbox {
-    public let leadLogins: Set<String>
+    /// Leads per repo, keyed by `Leads.key(for:)`.
+    public let leads: [String: Set<String>]
 
-    public init(leadLogins: [String] = Leads.defaultLogins) {
-        self.leadLogins = Set(leadLogins)
+    public init(leads: [String: [String]] = [:]) {
+        self.leads = leads.mapValues(Set.init)
     }
 
     public func build(from result: MyPRSearchResult) -> [MyPullRequest] {
@@ -31,6 +32,8 @@ public struct MyPRInbox {
               let base = node.baseRefName
         else { return nil }
 
+        let repoLeads = leads[Leads.key(for: repo)] ?? []
+
         let approvals = (node.latestReviews?.nodes ?? []).compactMap { review -> Approval? in
             guard let login = review.author?.login,
                   let raw = review.state,
@@ -39,7 +42,7 @@ public struct MyPRInbox {
             // Bot "COMMENTED" reviews are noise on this tab.
             if state == .commented { return nil }
             return Approval(login: login, state: state,
-                            isLead: leadLogins.contains(login))
+                            isLead: repoLeads.contains(login))
         }
 
         let awaiting = (node.reviewRequests?.nodes ?? []).compactMap { request -> String? in
@@ -65,6 +68,7 @@ public struct MyPRInbox {
             mergeBlocker: node.mergeStateStatus
                 .flatMap(MergeBlocker.init(rawValue:)) ?? .unknown,
             approvals: approvals,
+            hasLeadGate: !repoLeads.isEmpty,
             awaitingReviewers: awaiting,
             unresolvedThreadCount: unresolved,
             totalThreadCount: node.reviewThreads?.totalCount ?? threads.count,

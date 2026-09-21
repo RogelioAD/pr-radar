@@ -362,9 +362,9 @@ struct DrawerView: View {
             problem(title: "No open PRs", detail: "Nothing of yours is in flight.",
                     symbol: "tray")
         } else if items.isEmpty {
-            problem(title: state.myPRStackedOnly && state.myPRFilter == .all
+            problem(title: state.myPRStackedOnly && state.effectiveMyPRFilter == .all
                         ? "Nothing is stacked"
-                        : "Nothing matches \(state.myPRFilter.label)",
+                        : "Nothing matches \(state.effectiveMyPRFilter.label)",
                     detail: "Clear the filter to see all \(state.myPRs.count).",
                     symbol: "line.3.horizontal.decrease.circle")
         } else {

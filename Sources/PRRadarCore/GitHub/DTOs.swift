@@ -103,3 +103,27 @@ public struct TeamConn: Decodable {
 public struct TeamDTO: Decodable {
     public let slug: String
 }
+
+public struct MembersPayload: Decodable {
+    public let repository: MembersRepository?
+}
+
+public struct MembersRepository: Decodable {
+    public let mentionableUsers: MemberConnection
+}
+
+public struct MemberConnection: Decodable {
+    public let nodes: [Member]
+}
+
+public struct Member: Decodable, Identifiable, Equatable, Sendable {
+    public let login: String
+    public let name: String?
+
+    public var id: String { login }
+
+    public init(login: String, name: String?) {
+        self.login = login
+        self.name = name
+    }
+}

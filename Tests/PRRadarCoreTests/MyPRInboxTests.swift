@@ -3,8 +3,8 @@ import XCTest
 
 final class MyPRInboxTests: XCTestCase {
 
-    let inbox = MyPRInbox(leadLogins: ["alice", "bob",
-                                       "carol", "dave"])
+    let inbox = MyPRInbox(leads: ["acme/repo": ["alice", "bob",
+                                                 "carol", "dave"]])
 
     func decode(_ json: String) throws -> MyPRSearchResult {
         let decoder = JSONDecoder()
@@ -370,15 +370,11 @@ final class LeadsTests: XCTestCase {
         XCTAssertEqual(Leads.shortName(for: "some-login"), "some-login")
     }
 
-    func testDefaultsShipEmptySoNoTeamIsBakedIn() {
-        XCTAssertTrue(Leads.defaultLogins.isEmpty)
+    func testNoDisplayNamesAreBakedIn() {
         XCTAssertTrue(Leads.displayNames.isEmpty)
     }
 
-    /// An empty lead list must leave every PR reading "lead needed" rather
-    /// than crashing or accidentally satisfying the gate.
-    func testNoLeadsConfiguredMeansTheGateIsNeverSatisfied() throws {
-        let inbox = MyPRInbox(leadLogins: [])
+    private func result(repo: String, approver: String) throws -> MyPRSearchResult {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let json = """
@@ -388,16 +384,67 @@ final class LeadsTests: XCTestCase {
           "headRefName":"h","baseRefName":"b","reviewDecision":"APPROVED",
           "mergeStateStatus":"CLEAN","mergeable":"MERGEABLE",
           "additions":1,"deletions":0,"changedFiles":1,
-          "repository":{"nameWithOwner":"acme/repo"},
-          "latestReviews":{"nodes":[{"author":{"login":"anyone"},"state":"APPROVED"}]},
+          "repository":{"nameWithOwner":"\(repo)"},
+          "latestReviews":{"nodes":[{"author":{"login":"\(approver)"},"state":"APPROVED"}]},
           "reviewRequests":{"nodes":[]},
           "reviewThreads":{"totalCount":0,"nodes":[]},
           "commits":{"nodes":[]}
         }]}}
         """
-        let result = try decoder.decode(MyPRPayload.self, from: Data(json.utf8)).mine
-        let items = inbox.build(from: result)
-        XCTAssertTrue(items[0].needsLead)
-        XCTAssertEqual(items[0].liveApprovals.count, 1, "the approval still counts")
+        return try decoder.decode(MyPRPayload.self, from: Data(json.utf8)).mine
+    }
+
+    /// No leads for a repo means no gate: nothing lead-related applies.
+    func testRepoWithoutLeadsHasNoGate() throws {
+        let items = MyPRInbox().build(from: try result(repo: "acme/repo", approver: "anyone"))
+        XCTAssertFalse(items[0].hasLeadGate)
+        XCTAssertFalse(items[0].needsLead)
+        XCTAssertNotEqual(items[0].health, .attention)
+    }
+
+    func testLeadsApplyOnlyToTheirOwnRepo() throws {
+        let inbox = MyPRInbox(leads: ["acme/other": ["alice"]])
+        let items = inbox.build(from: try result(repo: "acme/repo", approver: "alice"))
+        XCTAssertFalse(items[0].hasLeadGate)
+        XCTAssertNil(items[0].approvingLead)
+    }
+
+    func testConfiguredRepoGatesAndMatchesCaseInsensitively() throws {
+        let inbox = MyPRInbox(leads: [Leads.key(for: "Acme/Repo"): ["alice"]])
+        let approved = inbox.build(from: try result(repo: "Acme/Repo", approver: "alice"))
+        XCTAssertTrue(approved[0].hasLeadGate)
+        XCTAssertFalse(approved[0].needsLead)
+        let other = inbox.build(from: try result(repo: "Acme/Repo", approver: "bob"))
+        XCTAssertTrue(other[0].needsLead)
+    }
+
+    func testAddNormalizesAndDedupes() {
+        var all = Leads.add("@Alice ", to: "Acme/Repo", in: [:])
+        all = Leads.add("alice", to: "acme/repo", in: all)
+        all = Leads.add("  ", to: "acme/repo", in: all)
+        XCTAssertEqual(all, ["acme/repo": ["Alice"]])
+    }
+
+    func testRemovingLastLeadDropsTheRepoKey() {
+        let all = Leads.add("alice", to: "acme/repo", in: [:])
+        XCTAssertEqual(Leads.remove("ALICE", from: "acme/repo", in: all), [:])
+    }
+
+    func testMentionableUsersQueryEscapesText() throws {
+        let query = try XCTUnwrap(Query.mentionableUsers(repo: "acme/repo", matching: "a\"b\\"))
+        XCTAssertTrue(query.contains(#"query: "a\"b\\""#))
+        XCTAssertTrue(query.contains(#"repository(owner: "acme", name: "repo")"#))
+        XCTAssertNil(Query.mentionableUsers(repo: "no-slash", matching: ""))
+    }
+
+    func testMembersDecode() throws {
+        let json = """
+        {"repository":{"mentionableUsers":{"nodes":[
+          {"login":"mislav","name":"Mislav"},{"login":"bot","name":null}]}}}
+        """
+        let payload = try JSONDecoder().decode(MembersPayload.self, from: Data(json.utf8))
+        XCTAssertEqual(payload.repository?.mentionableUsers.nodes,
+                       [Member(login: "mislav", name: "Mislav"),
+                        Member(login: "bot", name: nil)])
     }
 }

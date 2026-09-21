@@ -17,7 +17,7 @@ public enum Prefs {
         static let myPRFilter = "mine.filter"
         static let myPRStackedOnly = "mine.stackedOnly"
         static let celebrateCleared = "celebrate.cleared"
-        static let leadLogins = "leads.logins"
+        static let leadsByRepo = "leads.byRepo"
         static let repoFilter = "list.repoFilter"
         static let accountFilter = "list.accountFilter"
         static let updateRepo = "update.repo"
@@ -229,13 +229,10 @@ public enum Prefs {
         set { defaults.set(newValue.rawValue, forKey: Key.myPRFilter) }
     }
 
-    /// Overrides the built-in lead list, so a team change needs no rebuild.
-    public static var leadLogins: [String] {
-        get {
-            let stored = defaults.stringArray(forKey: Key.leadLogins) ?? []
-            return stored.isEmpty ? Leads.defaultLogins : stored
-        }
-        set { defaults.set(newValue, forKey: Key.leadLogins) }
+    /// Leads per repository, keyed by lowercase `owner/repo`.
+    public static var leadsByRepo: [String: [String]] {
+        get { defaults.dictionary(forKey: Key.leadsByRepo) as? [String: [String]] ?? [:] }
+        set { defaults.set(newValue, forKey: Key.leadsByRepo) }
     }
 
     /// Height of the row list the user dragged the drawer to, if they have.

@@ -170,11 +170,13 @@ struct MyPRRowView: View {
     /// Approvals and the lead gate.
     private var reviewChips: some View {
         ChipFlow(spacing: 4) {
-            if let lead = item.approvingLead {
-                Chip(text: "lead: \(lead.shortName)", symbol: "checkmark.seal.fill",
-                     health: .good, filled: true)
-            } else {
-                Chip(text: "lead needed", symbol: "seal", health: .attention)
+            if item.hasLeadGate {
+                if let lead = item.approvingLead {
+                    Chip(text: "lead: \(lead.shortName)", symbol: "checkmark.seal.fill",
+                         health: .good, filled: true)
+                } else {
+                    Chip(text: "lead needed", symbol: "seal", health: .attention)
+                }
             }
 
             let others = item.liveApprovals.filter { !$0.isLead }

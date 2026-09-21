@@ -71,11 +71,11 @@ struct MyPRFilterBar: View {
 
     private var filterMenu: some View {
         Menu {
-            ForEach(MyPRFilter.allCases, id: \.self) { filter in
+            ForEach(state.availableMyPRFilters, id: \.self) { filter in
                 Button {
                     state.myPRFilter = filter
                 } label: {
-                    if state.myPRFilter == filter {
+                    if state.effectiveMyPRFilter == filter {
                         Label(label(for: filter), systemImage: "checkmark")
                     } else {
                         Text(label(for: filter))
@@ -84,7 +84,7 @@ struct MyPRFilterBar: View {
             }
         } label: {
             FilterPill(symbol: "line.3.horizontal.decrease",
-                       text: state.myPRFilter.label,
+                       text: state.effectiveMyPRFilter.label,
                        active: state.isMyPRFiltered)
         }
         .menuStyle(.borderlessButton)

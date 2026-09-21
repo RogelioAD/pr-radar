@@ -255,7 +255,7 @@ final class AppState: ObservableObject {
         // `scopedMyPRs` rather than the repo filter alone: an account is a
         // scope in the same sense a repo is, and a stack half of which belongs
         // to an identity you have scoped away is not a stack you are looking at.
-        let filtered = myPRFilter.apply(to: scopedMyPRs)
+        let filtered = effectiveMyPRFilter.apply(to: scopedMyPRs)
         // Grouping is what the pancake button is *for*. Everywhere else the
         // list stays a flat list of PRs, exactly as it was — a plate and a
         // column of pancakes is a lot of furniture to impose on someone who
@@ -338,7 +338,20 @@ final class AppState: ObservableObject {
 
     var isRepoFiltered: Bool { repoFilter != nil }
     var isFiltered: Bool { authorFilter != nil }
-    var isMyPRFiltered: Bool { myPRFilter != .all || myPRStackedOnly }
+    var isMyPRFiltered: Bool { effectiveMyPRFilter != .all || myPRStackedOnly }
+
+    /// Whether any PR belongs to a repo with leads configured.
+    var hasLeadGate: Bool { myPRs.contains(where: \.hasLeadGate) }
+
+    /// "Needs lead" means nothing until a lead is configured, so it is
+    /// neither offered nor applied then.
+    var effectiveMyPRFilter: MyPRFilter {
+        myPRFilter == .needsLead && !hasLeadGate ? .all : myPRFilter
+    }
+
+    var availableMyPRFilters: [MyPRFilter] {
+        MyPRFilter.allCases.filter { $0 != .needsLead || hasLeadGate }
+    }
 
     /// Whether anything in scope is stacked.
     ///
