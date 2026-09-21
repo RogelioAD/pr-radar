@@ -416,42 +416,129 @@ ranks what is wrong.
 
 ---
 
-## Clearing the queue
+## Trophies
 
-Empty the review queue and a pixel banner drops in from the top of the screen:
-a green star, `ACHIEVEMENT UNLOCKED`, and `REVIEWS CLEARED`. It holds for about
-three seconds and lifts back out.
+Thirty of them, on a shelf behind the trophy button in the header. Five across,
+six rows, every one a 32x32 pixel drawing — four times the budget a mascot gets,
+which is what lets a trophy carry a readable picture inside a readable frame.
+
+Locked ones are drawn in grey. Not a second set of art: the *same* drawing with
+its colour taken out, so unlocking is the picture gaining its hue rather than
+one image being swapped for another. Hover any of them for the name and what
+earns it — that tooltip is the only explanation a trophy ever gets, so it is
+written as an instruction rather than a description.
+
+### The room
+
+The button sits beside the close box, and it is a **toggle**: it is the only
+way in, so it has to be the way out. Pressing it again puts back whichever tab
+you were on — the tab was never changed underneath, so there is nothing to
+restore.
+
+Opening it replaces **everything below the header**. The tab strip and the
+filter bar are not hidden but absent: two controls with nothing to act on are
+two controls asking to be pressed, and a band of chrome the shelf then has to
+be shorter than. The footer becomes the count.
+
+**The drawer still resizes by rows**, and a row of trophies is a row. It
+remembers a height of its own, separately from both tabs — a grid row is 64pt
+and a My PRs row can be four times that, so one shared height would fight
+itself the way the two tabs already would.
+
+**The count never says how many hidden ones are left.** It reads `14 / 30 · 3
+hidden found`, and only mentions hidden ones once you have found one. Saying
+`3 / 7` would give away most of what makes them hidden. Once they are all found
+it says so, because at that point there is nothing left to give away.
+
+### What earns one
+
+Roughly: clearing your review queue, and clearing it at strange hours; how many
+reviews are waiting and from how many people; how many of your own PRs are
+open, ready, approved or stacked; how long you have had the app running and
+what you have done to the badge; and how many pull requests you have ever
+merged.
+
+That last one is the only thing needing anything GitHub does not already send.
+One extra search per refresh asks for `issueCount` on `is:pr is:merged
+author:@me` — a search's *total*, not its results, so one page of one is enough
+to learn a lifetime figure. It means the merge ladder is true the day you
+install rather than starting everyone at zero. It is allowed to fail on its
+own: an unanswered count reads as **unknown**, never as none.
+
+**Seven are hidden.** They show a question mark and say `???` until found, and
+get bespoke art rather than the shared frames — a composed badge says *this is
+one of a set*, and a hidden trophy has spent its whole life so far as a grey
+question mark, so the moment it turns over is worth a picture that owes nothing
+to a frame. What they are for is somewhere between contributing to PR Radar
+itself, numerical coincidence, and poking at the app.
+
+### The rules behind the rules
+
+- **Nothing is ever taken back.** Merging the stack does not un-earn the trophy
+  for having had one. Almost every rule is written as *is this true now*, and
+  unlocking is idempotent, so there is nothing to keep in step.
+- **Only clearing the queue is a transition**, and it is measured against the
+  count the *badge* is showing rather than the whole inbox — so the banner
+  arrives exactly when the badge's red count goes out, rather than disagreeing
+  with it about what "clear" means while a repo filter is on. Everything that
+  counts or groups reviews reads the unfiltered list instead: how many people
+  are waiting on you is a fact about your week, not about the pane you are
+  looking through.
+- **The first evaluation is silent.** Installing this into a working setup
+  satisfies a dozen rules at once, and a dozen banners over whatever you were
+  doing is a worse introduction than none. Everything already true goes onto
+  the shelf quietly and the button wears a dot; everything after that announces
+  itself.
+- **Long service counts days, not hours.** An app that lives in the corner is
+  running whenever the machine is, so hours would measure your laptop's habits
+  rather than yours.
+- **Every rule is a pure function of one value.** No rule reaches past the
+  snapshot it is handed — not to the clock, not to preferences, not to a view —
+  which is what makes thirty of them testable without a screen, a network or a
+  real Tuesday.
+
+### The banner
+
+Earning one drops a pixel banner in from the top of the screen: the trophy, and
+`ACHIEVEMENT UNLOCKED` over its name. It holds for about three seconds and
+lifts back out.
 
 It is drawn on the same grid as everything else — a 5x7 pixel font, and the
 green is `Health.good`, the very colour the ready-to-merge count already wears,
 so the app has one idea of *nothing is in your way* rather than two.
 
 **It sizes itself to the screen it lands on.** Everything about it — type,
-star, padding, the gaps — is a multiple of one scale, and that scale is the
-largest whole number keeping the banner inside about a ninth of the screen's
-width. Whole, because a sprite is only crisp when one source pixel covers a
-whole number of pixels, so the banner steps between sizes across displays
-rather than sliding. A narrow screen gets the floor instead of an unreadable
-fraction of a scale — at 1x a capital is seven points tall. On a second display
-it arrives on the screen the badge is already on, not wherever the keyboard
-happens to be.
+padding, the gaps — is a multiple of one scale, and that scale is the largest
+whole number keeping the banner inside about a ninth of the screen's width.
+Whole, because a sprite is only crisp when one source pixel covers a whole
+number of pixels, so the banner steps between sizes across displays rather than
+sliding. A narrow screen gets the floor instead of an unreadable fraction of a
+scale — at 1x a capital is seven points tall. On a second display it arrives on
+the screen the badge is already on, not wherever the keyboard happens to be.
 
-The rules are all about not wearing out:
+The emblem gets a rule of its own, because the emblems are no longer one size:
+it draws at whatever whole scale brings it to about the height of the words
+beside it. That gives the old star the 2x it always had and a 32-cell trophy
+the 1x it needs, from one rule rather than two.
 
-- **Only on the transition.** Going from some to none is the achievement; being
-  at none is not. Every refresh of an already-empty queue would otherwise
-  celebrate again, which turns the one moment worth marking into wallpaper.
-- **Never on the first refresh of a session**, however empty it finds things.
-  Launching into an empty queue has not cleared anything.
+The rest is all about not wearing out:
+
+- **Several at once play in turn**, not on top of each other. A second unlock
+  while the first is still on screen queues behind it.
+- **Past five in a row it gives up and says so.** Five banners is around
+  eighteen seconds of screen nobody asked for; twenty-five would be a minute
+  and a half. A burst that size is almost always a backlog surfacing rather
+  than twenty-five things you just did, and it is worth one line.
 - **It takes no clicks, so it never needs one.** The window ignores the mouse
   entirely — a banner that swallowed a click on whatever it flew over would be
   worse than no banner — and it leaves on its own.
 - **Its own window**, not part of the drawer or the badge. The drawer is
-  usually shut at that moment, and the badge is about to hide itself because
-  nothing is waiting, which is the wrong place to celebrate having nothing.
+  usually shut at that moment, and for the original of these the badge was
+  about to hide itself because nothing was waiting, which is the wrong place to
+  celebrate having nothing.
 
-`defaults write com.yourname.prradar celebrate.cleared -bool false` turns it
-off, for anyone who would rather it did not.
+`defaults write com.yourname.prradar celebrate.cleared -bool false` turns the
+banner off, for anyone who would rather it did not. The shelf still fills.
 
 ## Notifications
 

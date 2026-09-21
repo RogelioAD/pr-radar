@@ -109,6 +109,24 @@ public enum Query {
         """
     }
 
+    /// How many pull requests the viewer has ever merged.
+    ///
+    /// `issueCount` is the *total* a search matched, not the number of nodes
+    /// it returned — so one page of one is enough to learn a lifetime figure,
+    /// and the trophy ladder is true on the day PR Radar is installed instead
+    /// of starting everyone at zero.
+    ///
+    /// One alias, not several. The review ladder that would have wanted
+    /// `reviewed-by:@me` is not in the roster, and a query that fetches a
+    /// number nothing reads is a request per refresh spent on nothing.
+    public static let mergedCount = """
+    query {
+      merged: search(query: "is:pr is:merged author:@me", type: ISSUE, first: 1) {
+        issueCount
+      }
+    }
+    """
+
     /// One aliased `compare` per pull request, to learn how far behind each head
     /// branch is. Aliases are `c0`, `c1`, … matching the input order.
     public static func compares(

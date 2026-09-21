@@ -30,7 +30,7 @@ struct TabStripView: View {
     /// claims a count the list below it is not showing.
     private func countLabel(for tab: DrawerTab) -> String {
         let total = total(for: tab)
-        let shown = state.rowCount(for: tab)
+        let shown = state.rowCount(for: DrawerSurface(tab))
         return shown == total ? "\(total)" : "\(shown)/\(total)"
     }
 

@@ -61,6 +61,16 @@ enum Log {
         ProcessInfo.processInfo.environment["PRRADAR_FAKE_CLEARED"] == "1"
     }
 
+    /// PRRADAR_FAKE_TROPHIES=1 unlocks the whole shelf in memory, so the room
+    /// can be looked at as a finished thing. Thirty drawings only work as a
+    /// set if they can be seen as one, and earning them honestly to find out
+    /// whether the greens fight each other is not a workflow.
+    ///
+    /// In memory only: it never writes, so quitting puts the real shelf back.
+    static var fakeTrophies: Bool {
+        ProcessInfo.processInfo.environment["PRRADAR_FAKE_TROPHIES"] == "1"
+    }
+
     static func debug(_ message: @autoclosure () -> String) {
         let text = message()
         // Notice rather than debug: debug-level records live in memory and are

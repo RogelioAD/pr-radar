@@ -15,6 +15,38 @@ public enum Slot: Character, CaseIterable, Sendable {
     /// pancakes change colour with the mood, which is not what a pancake does.
     case batter  = "b"
     case syrup   = "s"
+
+    // MARK: - Trophies
+    //
+    // The cast is drawn in greyscale so a mood can tint it; a trophy is the
+    // opposite kind of picture. It has to be recognisable as *itself* across
+    // fifty of them in one grid, and it has nothing to be tinted by — so the
+    // colour is the drawing rather than a property of the moment.
+    //
+    // The three metals come in pairs. A tier is swapped by exchanging one pair
+    // for another, which is what makes the ten/fifty/hundred/five-hundred
+    // ladder read as one ladder instead of four unrelated pictures — see
+    // `TrophyTier`.
+    case gold        = "o"
+    case goldShade   = "n"
+    case silver      = "e"
+    case silverShade = "m"
+    case bronze      = "z"
+    case bronzeShade = "x"
+    /// The motif hues. Deliberately few: a grid of fifty drawings each reaching
+    /// for its own palette is a colour chart, not a set.
+    case crimson = "r"
+    case azure   = "u"
+    case violet  = "y"
+    case leaf    = "f"
+    /// Interior linework, softer than `outline` — a 32-cell drawing needs a
+    /// line *inside* the silhouette, and the full outline black closes shapes
+    /// that were meant to stay open.
+    case ink   = "t"
+    /// Paper, engraving plates, the whites of things. Warm rather than
+    /// `light`'s neutral, so a plaque does not read as a hole in the grid.
+    case cream = "c"
+
     /// The only slot that takes a live colour. Everything else is fixed by the
     /// appearance; this one is `Health.tint`, which is what keeps a mascot and
     /// the count it sits next to from ever disagreeing.

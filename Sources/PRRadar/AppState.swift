@@ -34,13 +34,17 @@ final class AppState: ObservableObject {
     /// Narrows the list to stacks. A second axis rather than a `MyPRFilter`
     /// case, so it combines with whatever the filter menu is set to.
     @Published var myPRStackedOnly: Bool = Prefs.myPRStackedOnly {
-        didSet { Prefs.myPRStackedOnly = myPRStackedOnly }
+        didSet {
+            Prefs.myPRStackedOnly = myPRStackedOnly
+            if myPRStackedOnly { trophyState.record(TrophyFact.usedStackedFilter) }
+        }
     }
     // MARK: - Shared
 
     @Published var selectedTab: DrawerTab = Prefs.selectedTab {
         didSet { Prefs.selectedTab = selectedTab }
     }
+
     @Published var expanded = false
     @Published var authError: String?
     @Published var lastError: String?
@@ -51,16 +55,63 @@ final class AppState: ObservableObject {
     /// Ticks so relative timestamps re-render without a network round trip.
     @Published var clock = Date()
 
-    /// Measured height of each row, keyed by a tab-namespaced row id.
-    @Published var rowHeights: [String: CGFloat] = [:]
-    /// Row-list height the user dragged to, per tab: My PR rows are far taller
-    /// than review rows, so a single shared height would fight itself.
-    @Published var userContentHeights: [DrawerTab: CGFloat] = AppState.loadHeights()
+    // MARK: - Trophy room
 
-    static func loadHeights() -> [DrawerTab: CGFloat] {
-        var result: [DrawerTab: CGFloat] = [:]
-        for tab in DrawerTab.allCases {
-            if let height = Prefs.drawerContentHeight(for: tab) { result[tab] = height }
+    /// Whether the drawer is showing the shelf instead of a list.
+    ///
+    /// A mode rather than a third `DrawerTab`: the room replaces the tab
+    /// strip, so a tab that hides the control it lives in would be a strange
+    /// kind of tab. Keeping `selectedTab` underneath is what lets leaving the
+    /// room put you back where you were.
+    @Published var showingTrophies: Bool = Prefs.showingTrophies {
+        didSet { Prefs.showingTrophies = showingTrophies }
+    }
+
+    @Published var trophyState: TrophyState = AppState.loadTrophies() {
+        // Never written while the debug flag is on: looking at the room as a
+        // finished thing must not *make* it one.
+        didSet { if !Log.fakeTrophies { Prefs.trophyState = trophyState } }
+    }
+
+    static func loadTrophies() -> TrophyState {
+        Log.fakeTrophies ? .everythingUnlocked(at: Date()) : Prefs.trophyState
+    }
+
+    /// Mascot cycles since the drawer was last opened.
+    ///
+    /// Not persisted, and reset on every open: `Carousel` is for sitting
+    /// there clicking the thing, and ten clicks spread over ten weeks is not
+    /// that.
+    @Published var mascotCycles = 0
+
+    /// What the drawer is actually showing below the header.
+    var activeSurface: DrawerSurface {
+        showingTrophies ? .trophies : DrawerSurface(selectedTab)
+    }
+
+    var trophyRows: [[Trophy]] { TrophyGrid.rows() }
+
+    var trophyProgress: String {
+        TrophyGrid.progress(unlocked: trophyState.unlockedIDs)
+    }
+
+    /// Opening the room is what counts as having looked at the shelf.
+    func openTrophyRoom() {
+        showingTrophies = true
+        if trophyState.hasUnseen { trophyState.markAllSeen() }
+    }
+
+    /// Measured height of each row, keyed by a surface-namespaced row id.
+    @Published var rowHeights: [String: CGFloat] = [:]
+    /// Row-list height the user dragged to, per surface: My PR rows are far
+    /// taller than review rows and a shelf row is shorter than either, so a
+    /// single shared height would fight itself.
+    @Published var userContentHeights: [DrawerSurface: CGFloat] = AppState.loadHeights()
+
+    static func loadHeights() -> [DrawerSurface: CGFloat] {
+        var result: [DrawerSurface: CGFloat] = [:]
+        for surface in DrawerSurface.allCases {
+            if let height = Prefs.drawerContentHeight(for: surface) { result[surface] = height }
         }
         return result
     }
@@ -138,11 +189,11 @@ final class AppState: ObservableObject {
         MyPRGrouping.containsStack(RepoScope.apply(repoFilter, to: myPRs, repoOf: \.repo))
     }
 
-    // MARK: - Active-tab geometry
+    // MARK: - Active-surface geometry
 
-    /// Row ids are namespaced by tab so the two lists cannot collide.
-    func rowKey(_ tab: DrawerTab, _ id: String) -> String {
-        RowHeightKeys.key(tab: tab, id: id)
+    /// Row ids are namespaced by surface so no two can collide.
+    func rowKey(_ surface: DrawerSurface, _ id: String) -> String {
+        RowHeightKeys.key(surface: surface, id: id)
     }
 
     /// How many rows the drawer's height snaps to.
@@ -150,16 +201,19 @@ final class AppState: ObservableObject {
     /// Pull requests, not units: a stack is one card but several rows, and a
     /// drawer that could only stop at whole cards could not be dragged at all
     /// while the pancake filter is the only thing showing.
-    func rowCount(for tab: DrawerTab) -> Int {
-        switch tab {
+    func rowCount(for surface: DrawerSurface) -> Int {
+        switch surface {
         case .reviews: return displayedItems.count
         case .mine: return displayedMyPRs.count
+        // A grid row, not a trophy. The drawer snaps to what the eye reads as
+        // a line, and nobody reads a shelf a trophy at a time.
+        case .trophies: return trophyRows.count
         }
     }
 
     /// Measured heights of a tab's rows, in display order.
-    func rowHeights(for tab: DrawerTab) -> [CGFloat] {
-        switch tab {
+    func rowHeights(for surface: DrawerSurface) -> [CGFloat] {
+        switch surface {
         case .reviews:
             return displayedItems.compactMap { rowHeights[rowKey(.reviews, $0.id)] }
         case .mine:
@@ -167,19 +221,23 @@ final class AppState: ObservableObject {
                 units: displayedMyPRUnits,
                 stackChrome: Layout.stackGroupPadding * 2,
                 height: { rowHeights[rowKey(.mine, $0.id)] })
+        case .trophies:
+            return trophyRows.indices.compactMap {
+                rowHeights[rowKey(.trophies, TrophyGrid.rowID($0))]
+            }
         }
     }
 
-    var activeRowCount: Int { rowCount(for: selectedTab) }
-    var activeRowHeights: [CGFloat] { rowHeights(for: selectedTab) }
+    var activeRowCount: Int { rowCount(for: activeSurface) }
+    var activeRowHeights: [CGFloat] { rowHeights(for: activeSurface) }
 
     var userContentHeight: CGFloat? {
-        get { userContentHeights[selectedTab] }
+        get { userContentHeights[activeSurface] }
         set {
             if let newValue {
-                userContentHeights[selectedTab] = newValue
+                userContentHeights[activeSurface] = newValue
             } else {
-                userContentHeights.removeValue(forKey: selectedTab)
+                userContentHeights.removeValue(forKey: activeSurface)
             }
         }
     }
@@ -220,7 +278,10 @@ final class AppState: ObservableObject {
 
     /// nil means the user turned the mascot off.
     @Published var mascot: MascotID? = Prefs.mascot {
-        didSet { Prefs.mascot = mascot }
+        didSet {
+            Prefs.mascot = mascot
+            if let mascot { trophyState.record(TrophyFact.mascotSeen(mascot)) }
+        }
     }
 
     /// A transient reaction that outranks the derived mood while it lasts:
@@ -286,6 +347,7 @@ final class AppState: ObservableObject {
     /// to lead back to the first character or the control dead-ends.
     func cycleMascot() {
         mascot = MascotID.next(after: mascot)
+        mascotCycles += 1
     }
 
     /// What the next click lands on, for the tooltip.

@@ -20,6 +20,17 @@ public struct SearchResult: Decodable {
     public let nodes: [PRNode]
 }
 
+/// A search asked only for its total. Shares no shape with `SearchResult`
+/// on purpose — asking for `nodes` we would throw away is the kind of query
+/// that grows a page of pull requests back into it a year later.
+public struct CountResult: Decodable {
+    public let issueCount: Int
+}
+
+public struct MergedCountPayload: Decodable {
+    public let merged: CountResult
+}
+
 public struct PRNode: Decodable {
     public let number: Int?
     public let title: String?

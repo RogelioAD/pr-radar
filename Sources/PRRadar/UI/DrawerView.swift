@@ -32,6 +32,7 @@ struct DrawerView: View {
     let onRefresh: () -> Void
     let onRowHeights: ([String: CGFloat]) -> Void
     let onSelectTab: (DrawerTab) -> Void
+    let onToggleTrophies: () -> Void
     let onHeaderControls: ([CGRect]) -> Void
 
     var body: some View {
@@ -40,13 +41,23 @@ struct DrawerView: View {
             grabber
             header
             Divider().opacity(0.6)
-            TabStripView(state: state, onSelect: onSelectTab)
-            Divider().opacity(0.6)
-            filterBar
-            Divider().opacity(0.6)
-            content
-            Divider().opacity(0.6)
-            footer
+            // The room replaces everything below the header. Not hidden but
+            // *absent*: a tab strip and a filter bar with nothing to act on
+            // are two controls asking to be pressed and one band of chrome
+            // the shelf then has to be shorter than.
+            if state.showingTrophies {
+                TrophyRoomView(state: state, onRowHeights: onRowHeights)
+                Divider().opacity(0.6)
+                trophyFooter
+            } else {
+                TabStripView(state: state, onSelect: onSelectTab)
+                Divider().opacity(0.6)
+                filterBar
+                Divider().opacity(0.6)
+                content
+                Divider().opacity(0.6)
+                footer
+            }
         }
         .frame(width: Layout.drawerWidth)
         .background(.regularMaterial)
@@ -77,8 +88,13 @@ struct DrawerView: View {
     /// Both surfaces are live whenever the list is empty, and the same
     /// character twice in one 440pt panel is one too many — so the big one
     /// wins and the header falls back to the identity glyph.
+    ///
+    /// Never in the trophy room: there is no empty state down there to carry
+    /// a character, so surrendering the header's would leave the drawer with
+    /// no mascot at all and no way to reach the button that cycles it.
     private var contentShowsMascot: Bool {
-        state.selectedMascot != nil && (state.authError != nil || isListEmpty)
+        guard !state.showingTrophies else { return false }
+        return state.selectedMascot != nil && (state.authError != nil || isListEmpty)
     }
 
     private var isListEmpty: Bool {
@@ -157,6 +173,7 @@ struct DrawerView: View {
                 .help("A newer PR Radar release is available")
                 .headerControl()
             }
+            trophyButton
             Button(action: onCollapse) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
@@ -169,6 +186,59 @@ struct DrawerView: View {
         .padding(.horizontal, 12)
         .frame(height: Layout.headerHeight - Layout.resizeEdge)
         .contentShape(Rectangle())
+    }
+
+    /// The way into the shelf, and back out of it.
+    ///
+    /// A toggle rather than a one-way door: it is the only control that opens
+    /// the room, so it has to be the one that closes it — the X beside it
+    /// shuts the whole drawer, which is a different thing to want.
+    ///
+    /// The dot is the entire announcement for a silent backfill. Nothing
+    /// banners on first run, so without it a shelf could fill up with nobody
+    /// ever learning there was a shelf.
+    private var trophyButton: some View {
+        Button(action: onToggleTrophies) {
+            Image(systemName: state.showingTrophies ? "trophy.fill" : "trophy")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(state.showingTrophies ? Color.accentColor : .secondary)
+                .overlay(alignment: .topTrailing) {
+                    if state.trophyState.hasUnseen && !state.showingTrophies {
+                        Circle()
+                            .fill(Health.good.tint)
+                            .frame(width: 5, height: 5)
+                            .offset(x: 3, y: -2)
+                    }
+                }
+                .frame(width: 18, height: Layout.headerHeight - Layout.resizeEdge)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(trophyHelp)
+        .headerControl()
+    }
+
+    private var trophyHelp: String {
+        if state.showingTrophies { return "Back to your pull requests" }
+        let unseen = state.trophyState.unseenCount
+        guard unseen > 0 else { return "Trophy room" }
+        return unseen == 1 ? "Trophy room — 1 new" : "Trophy room — \(unseen) new"
+    }
+
+    /// What the room has instead of a footer.
+    ///
+    /// The count, and nothing else: the refresh button below a list is about
+    /// the list, and a shelf does not refresh — it is the same thirty
+    /// drawings whatever GitHub says.
+    private var trophyFooter: some View {
+        HStack(spacing: 6) {
+            Text(state.trophyProgress)
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .frame(height: Layout.footerHeight)
     }
 
     @ViewBuilder

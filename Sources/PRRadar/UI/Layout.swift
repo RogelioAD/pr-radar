@@ -91,8 +91,39 @@ enum Layout {
     /// emblem, padding, the gaps — is a multiple of this one number, so the
     /// whole thing sizes itself to whatever display it lands on. The rule is in
     /// `Achievement` so it can be tested without a screen.
-    static func achievementScale(on screen: NSScreen?) -> CGFloat {
-        Achievement.scale(forScreenWidth: screen?.visibleFrame.width ?? 1440)
+    static func achievementScale(on screen: NSScreen?,
+                                 emblem: Sprite,
+                                 title: String) -> CGFloat {
+        Achievement.scale(forScreenWidth: screen?.visibleFrame.width ?? 1440,
+                          emblem: emblem, title: title)
+    }
+
+    // MARK: - Trophies
+
+    /// Trophy art is 32 cells square and draws at 2x, so a cell is 64pt.
+    ///
+    /// Whole, like every other sprite in the app: at a fractional scale the
+    /// grid would be thirty blurry JPEGs. 2x is also what makes the room
+    /// affordable — five 64pt drawings across the drawer's 440pt leaves real
+    /// gaps between them, where 3x would fit three.
+    static let trophyScale: CGFloat = 2
+    static var trophyCell: CGFloat { CGFloat(TrophyArt.size) * trophyScale }
+    /// Five across, which is what `TrophyGrid` chunks the roster into.
+    static let trophyColumns = TrophyGrid.columns
+    /// Air between cells, and between rows. Wider than a list's 2pt: rows in a
+    /// list are separated by their own borders, and a grid has none — the gap
+    /// *is* the separation.
+    static let trophyGridSpacing: CGFloat = 12
+
+    /// Padding at each side of the grid, so it sits centred in the drawer.
+    ///
+    /// Derived rather than picked, because the cells and the gaps are both
+    /// fixed: whatever is left over is the margin, and splitting it is the only
+    /// way the row lands centred at every width this drawer might take.
+    static var trophyGridInset: CGFloat {
+        let content = CGFloat(trophyColumns) * trophyCell
+            + CGFloat(trophyColumns - 1) * trophyGridSpacing
+        return max(0, (drawerWidth - content) / 2)
     }
 
     // MARK: - Pancakes
@@ -206,19 +237,37 @@ enum Layout {
     /// approvals, checks, blockers, stack position. Estimating both at the
     /// review row's height opened that tab well short of a row boundary, and
     /// it only squared up once the rows reported and the layout ran again.
-    static func estimatedRowHeight(for tab: DrawerTab) -> CGFloat {
-        switch tab {
+    static func estimatedRowHeight(for surface: DrawerSurface) -> CGFloat {
+        switch surface {
         case .reviews: return 80
         case .mine: return 130
+        // Not an estimate at all: every grid row is one cell tall, and a cell
+        // is a fixed sprite at a fixed scale. The trophy room is the one
+        // surface that knows its row height before a row has measured itself.
+        case .trophies: return trophyCell
         }
     }
 
     static let estimatedRowHeight: CGFloat = estimatedRowHeight(for: .reviews)
 
-    static var chromeHeight: CGFloat {
+    /// What the drawer carries above and below the scrolling part.
+    ///
+    /// Per surface, because the trophy room hides the tab strip and the filter
+    /// bar. Charging it for two controls it is not drawing would leave it
+    /// 62pt taller than its own contents — a band of empty material under the
+    /// last row of trophies.
+    static func chromeHeight(for surface: DrawerSurface) -> CGFloat {
+        switch surface {
         // header + tab strip + filter bar + footer, plus four dividers.
-        headerHeight + tabStripHeight + filterBarHeight + footerHeight + 4
+        case .reviews, .mine:
+            return headerHeight + tabStripHeight + filterBarHeight + footerHeight + 4
+        // header + progress footer, plus two dividers.
+        case .trophies:
+            return headerHeight + footerHeight + 2
+        }
     }
+
+    static var chromeHeight: CGFloat { chromeHeight(for: .reviews) }
 
     /// Fallback ceiling, only used if no screen can be determined. The real
     /// limit is the screen height, passed in per call.
@@ -226,13 +275,13 @@ enum Layout {
 
     static let sizing = sizing(for: .reviews)
 
-    static func sizing(for tab: DrawerTab) -> DrawerSizing {
+    static func sizing(for surface: DrawerSurface) -> DrawerSizing {
         DrawerSizing(
-            rowSpacing: rowSpacing,
+            rowSpacing: surface == .trophies ? trophyGridSpacing : rowSpacing,
             listPadding: listPadding,
-            chromeHeight: chromeHeight,
+            chromeHeight: chromeHeight(for: surface),
             maxHeight: fallbackMaxHeight,
-            estimatedRowHeight: estimatedRowHeight(for: tab)
+            estimatedRowHeight: estimatedRowHeight(for: surface)
         )
     }
 
@@ -241,8 +290,8 @@ enum Layout {
                              userContentHeight: CGFloat?,
                              maxHeight: CGFloat,
                              snapping: Bool = true,
-                             tab: DrawerTab = .reviews) -> CGFloat {
-        sizing(for: tab).windowHeight(rowHeights: rowHeights,
+                             surface: DrawerSurface = .reviews) -> CGFloat {
+        sizing(for: surface).windowHeight(rowHeights: rowHeights,
                             itemCount: itemCount,
                             userContentHeight: userContentHeight,
                             maxHeight: maxHeight,

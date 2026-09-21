@@ -11,6 +11,7 @@ struct RootView: View {
     let onRefresh: () -> Void
     let onRowHeights: ([String: CGFloat]) -> Void
     let onSelectTab: (DrawerTab) -> Void
+    let onToggleTrophies: () -> Void
     let onHeaderControls: ([CGRect]) -> Void
 
     var body: some View {
@@ -24,6 +25,7 @@ struct RootView: View {
                            onRefresh: onRefresh,
                            onRowHeights: onRowHeights,
                            onSelectTab: onSelectTab,
+                           onToggleTrophies: onToggleTrophies,
                            onHeaderControls: onHeaderControls)
             } else {
                 BadgeView(state: state)

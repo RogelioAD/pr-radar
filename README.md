@@ -235,6 +235,9 @@ PRRADAR_FAKE_STACKS=1     # cut the longest stack in half, so the list shows two
                           # groups — how several stacks lay out together
 PRRADAR_FAKE_CLEARED=1    # drop the "reviews cleared" banner on the first
                           # refresh, which otherwise needs an emptying queue
+PRRADAR_FAKE_TROPHIES=1   # fill the trophy shelf, to look at all thirty
+                          # drawings as a set. In memory only — it never
+                          # writes, so quitting puts the real shelf back
 ```
 
 ### Working on this with Claude Code
@@ -265,10 +268,15 @@ Sources/PRRadarCore/Mascots/
                        the pixel-art characters as data — sprite grids, the
                        mood derivation, counter chips, and the layout rules
                        for composing them
+Sources/PRRadarCore/Trophies/
+                       the thirty trophies: the roster, the drawings and the
+                       composer that builds one from a frame, a metal and a
+                       motif, and the pure evaluator every unlock rule lives
+                       in
 Sources/PRRadar/       the app: panel, badge, tabs, drawer, notifications
 Sources/MakeIcon/      build-time icon generator; reads the same sprites the
                        app draws, so the notification banner cannot drift
-Tests/                 180 tests
+Tests/                 338 tests
 Scripts/bundle.sh      assembles and ad-hoc signs PRRadar.app
 ```
 

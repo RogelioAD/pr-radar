@@ -79,6 +79,16 @@ public struct GitHubClient {
         try await run(Query.myPullRequests(), as: MyPRPayload.self).mine
     }
 
+    /// How many pull requests the viewer has ever merged.
+    ///
+    /// Its own request rather than another alias on either existing document:
+    /// both of those decode as homogeneous dictionaries of `SearchResult`, and
+    /// a differently-shaped alias breaks them — the same reason
+    /// `myPullRequests` is separate.
+    public func fetchMergedCount() async throws -> Int {
+        try await run(Query.mergedCount, as: MergedCountPayload.self).merged.issueCount
+    }
+
     /// The latest published release of PR Radar itself.
     public func fetchLatestRelease(repo: String) async throws -> ReleaseNode? {
         guard let query = Query.latestRelease(repo: repo) else { return nil }

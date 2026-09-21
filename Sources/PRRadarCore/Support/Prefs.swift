@@ -22,6 +22,8 @@ public enum Prefs {
         static let updateRepo = "update.repo"
         static let notifiedUpdate = "update.notifiedVersion"
         static let mascot = "mascot.choice"
+        static let trophies = "trophies.state"
+        static let showingTrophies = "drawer.showingTrophies"
     }
 
     public static var badgeOrigin: CGPoint? {
@@ -145,6 +147,28 @@ public enum Prefs {
         set { defaults.set(newValue, forKey: Key.celebrateCleared) }
     }
 
+    /// The trophy shelf, as one JSON blob.
+    ///
+    /// One key rather than a key per trophy: the whole thing is rewritten on
+    /// every refresh, and thirty writes to say nothing changed is twenty-nine
+    /// more than the job needs. Decoding is total — a corrupt or absent value
+    /// reads as an empty shelf rather than throwing, because a trophy room is
+    /// not worth failing a launch over.
+    public static var trophyState: TrophyState {
+        get { TrophyState.decoded(from: defaults.data(forKey: Key.trophies)) }
+        set { defaults.set(newValue.encoded(), forKey: Key.trophies) }
+    }
+
+    /// Whether the drawer is showing the trophy room rather than a list.
+    ///
+    /// Persisted, like the selected tab, so the drawer opens on whatever you
+    /// were last looking at. The tab underneath is kept as well, so leaving
+    /// the room puts you back where you were rather than on the default tab.
+    public static var showingTrophies: Bool {
+        get { defaults.bool(forKey: Key.showingTrophies) }
+        set { defaults.set(newValue, forKey: Key.showingTrophies) }
+    }
+
     public static var selectedTab: DrawerTab {
         get {
             defaults.string(forKey: Key.selectedTab)
@@ -179,20 +203,21 @@ public enum Prefs {
     }
 
     /// Height of the row list the user dragged the drawer to, if they have.
-    /// Stored per tab: My PR rows are much taller than review rows, so one
-    /// shared height would fight itself every time the tab changed.
+    /// Stored per surface: My PR rows are much taller than review rows and a
+    /// trophy grid row is shorter than either, so one shared height would
+    /// fight itself every time the drawer changed what it was showing.
     ///
     /// The author filter is deliberately *not* persisted: restoring one would
     /// show an empty drawer next to a non-zero badge.
-    public static func drawerContentHeight(for tab: DrawerTab) -> CGFloat? {
-        let key = "\(Key.drawerContentHeight).\(tab.rawValue)"
+    public static func drawerContentHeight(for surface: DrawerSurface) -> CGFloat? {
+        let key = "\(Key.drawerContentHeight).\(surface.rawValue)"
         guard defaults.object(forKey: key) != nil else { return nil }
         let value = defaults.double(forKey: key)
         return value > 0 ? value : nil
     }
 
-    public static func setDrawerContentHeight(_ height: CGFloat?, for tab: DrawerTab) {
-        let key = "\(Key.drawerContentHeight).\(tab.rawValue)"
+    public static func setDrawerContentHeight(_ height: CGFloat?, for surface: DrawerSurface) {
+        let key = "\(Key.drawerContentHeight).\(surface.rawValue)"
         if let height {
             defaults.set(Double(height), forKey: key)
         } else {

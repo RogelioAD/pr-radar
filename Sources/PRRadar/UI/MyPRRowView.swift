@@ -71,7 +71,7 @@ struct MyPRRowView: View {
             GeometryReader { geometry in
                 Color.clear.preference(
                     key: RowHeightsKey.self,
-                    value: [RowHeightKeys.key(tab: .mine, id: item.id): geometry.size.height])
+                    value: [RowHeightKeys.key(surface: .mine, id: item.id): geometry.size.height])
             }
         )
     }

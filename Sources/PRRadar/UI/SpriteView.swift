@@ -21,6 +21,13 @@ struct SpriteCanvas: View {
     let scale: CGFloat
     var halo = false
     var shadow = false
+    /// Draws the same art with its colour taken out.
+    ///
+    /// A flag rather than a second set of sprites, because a locked trophy and
+    /// an unlocked one have to be *the same picture* — anything that draws
+    /// them separately is an arrangement in which they can drift apart, and
+    /// the whole moment the room is built around is one gaining its colour.
+    var locked = false
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -60,7 +67,9 @@ struct SpriteCanvas: View {
                 for point in layout.halo() { fill(point.x, point.y, Self.haloColor) }
             }
             for layer in layout.layers {
-                let accent = layer.accent.tint
+                let accent = locked
+                    ? Color(SpritePalette.locked(layer.accent.rgb))
+                    : layer.accent.tint
                 for point in layer.sprite.litPoints {
                     guard let slot = layer.sprite[point.x, point.y] else { continue }
                     fill(layer.origin.x + point.x, layer.origin.y + point.y,
@@ -73,7 +82,8 @@ struct SpriteCanvas: View {
     }
 
     private func color(for slot: Slot) -> Color {
-        Color(SpritePalette.color(for: slot, dark: colorScheme == .dark))
+        let rgb = SpritePalette.color(for: slot, dark: colorScheme == .dark)
+        return Color(locked ? SpritePalette.locked(rgb) : rgb)
     }
 }
 

@@ -30,10 +30,14 @@ final class BannerFontTests: XCTestCase {
         }
     }
 
-    /// The alphabet the banner actually needs. A missing letter draws as a gap,
-    /// which is the kind of thing nobody notices until it ships.
+    /// The alphabet the banner actually needs. A missing letter draws as a
+    /// gap, which is the kind of thing nobody notices until it ships — and
+    /// the banner now says any of thirty trophy names rather than one fixed
+    /// line, so the whole roster is the alphabet.
     func testEveryLetterTheBannerUsesExists() {
-        for character in (Achievement.headline + Achievement.title) {
+        var wanted = Achievement.headline + Achievement.manyTitle(12)
+        wanted += Trophy.all.map(\.name).joined()
+        for character in wanted.uppercased() {
             XCTAssertNotNil(BannerFont.glyphs[character],
                             "no glyph for '\(character)'")
         }
@@ -103,25 +107,39 @@ final class BannerFontTests: XCTestCase {
 
     // MARK: - Sizing to the screen
 
+    /// What the sizing tests below measure. The original banner's pairing —
+    /// the star and a title of typical length — so these keep testing the
+    /// rule rather than whichever trophy happens to have the longest name.
+    private var emblem: Sprite { Achievement.emblem }
+    private var title: String { "REVIEWS CLEARED" }
+
+    private func scale(_ width: CGFloat) -> CGFloat {
+        Achievement.scale(forScreenWidth: width, emblem: emblem, title: title)
+    }
+
+    private func size(_ scale: CGFloat) -> CGSize {
+        Achievement.size(emblem: emblem, title: title, scale: scale)
+    }
+
     /// Whole scales only. A sprite is crisp when one source pixel covers a
     /// whole number of pixels, so the banner steps between sizes across screens
     /// rather than sliding.
     func testScaleIsAlwaysWholeAndInRange() {
         for width in stride(from: CGFloat(800), through: 6000, by: 40) {
-            let scale = Achievement.scale(forScreenWidth: width)
-            XCTAssertEqual(scale, scale.rounded(), "\(width)")
-            XCTAssertGreaterThanOrEqual(scale, Achievement.minimumScale)
-            XCTAssertLessThanOrEqual(scale, Achievement.maximumScale)
+            let chosen = scale(width)
+            XCTAssertEqual(chosen, chosen.rounded(), "\(width)")
+            XCTAssertGreaterThanOrEqual(chosen, Achievement.minimumScale)
+            XCTAssertLessThanOrEqual(chosen, Achievement.maximumScale)
         }
     }
 
     /// A bigger screen never gets a smaller banner.
     func testScaleNeverShrinksAsTheScreenGrows() {
-        var previous = Achievement.scale(forScreenWidth: 800)
+        var previous = scale(800)
         for width in stride(from: CGFloat(800), through: 6000, by: 40) {
-            let scale = Achievement.scale(forScreenWidth: width)
-            XCTAssertGreaterThanOrEqual(scale, previous, "\(width)")
-            previous = scale
+            let chosen = scale(width)
+            XCTAssertGreaterThanOrEqual(chosen, previous, "\(width)")
+            previous = chosen
         }
     }
 
@@ -129,9 +147,9 @@ final class BannerFontTests: XCTestCase {
     /// the floor, where being readable outranks being small.
     func testBannerStaysWithinItsShareUnlessItIsAtTheFloor() {
         for width in stride(from: CGFloat(800), through: 6000, by: 40) {
-            let scale = Achievement.scale(forScreenWidth: width)
-            guard scale > Achievement.minimumScale else { continue }
-            XCTAssertLessThanOrEqual(Achievement.size(scale: scale).width,
+            let chosen = scale(width)
+            guard chosen > Achievement.minimumScale else { continue }
+            XCTAssertLessThanOrEqual(size(chosen).width,
                                      width * Achievement.widthFraction, "\(width)")
         }
     }
@@ -140,9 +158,9 @@ final class BannerFontTests: XCTestCase {
     /// is leaving usable size on the table.
     func testTheChosenScaleIsTheLargestThatFits() {
         for width in stride(from: CGFloat(800), through: 6000, by: 40) {
-            let scale = Achievement.scale(forScreenWidth: width)
-            guard scale < Achievement.maximumScale else { continue }
-            XCTAssertGreaterThan(Achievement.size(scale: scale + 1).width,
+            let chosen = scale(width)
+            guard chosen < Achievement.maximumScale else { continue }
+            XCTAssertGreaterThan(size(chosen + 1).width,
                                  width * Achievement.widthFraction, "\(width)")
         }
     }
@@ -150,16 +168,16 @@ final class BannerFontTests: XCTestCase {
     /// A narrow screen gets the floor rather than an unreadable fraction of a
     /// scale — a 5x7 capital at 1x is seven points tall.
     func testNarrowScreensGetTheFloorRatherThanSomethingUnreadable() {
-        XCTAssertEqual(Achievement.scale(forScreenWidth: 640), Achievement.minimumScale)
-        XCTAssertEqual(Achievement.scale(forScreenWidth: 1),
+        XCTAssertEqual(scale(640), Achievement.minimumScale)
+        XCTAssertEqual(scale(1),
                        Achievement.minimumScale, "and nothing divides by a screen")
     }
 
     /// Every metric is a multiple of the one scale, so the banner grows in
     /// proportion rather than stretching.
     func testSizeGrowsInProportionWithTheScale() {
-        let two = Achievement.size(scale: 2)
-        let four = Achievement.size(scale: 4)
+        let two = size(2)
+        let four = size(4)
         XCTAssertGreaterThan(four.width, two.width)
         XCTAssertGreaterThan(four.height, two.height)
     }

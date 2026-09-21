@@ -39,9 +39,55 @@ public enum SpritePalette {
         // drawer's material, which is far darker than a white plate expects.
         case .batter:  return dark ? RGB(0.878, 0.675, 0.365) : RGB(0.839, 0.616, 0.290)
         case .syrup:   return dark ? RGB(0.596, 0.353, 0.153) : RGB(0.545, 0.310, 0.118)
+
+        // The metals, each a lit face and the shade under it. Lifted in Dark
+        // for the same reason the batter is: the drawer's material is far
+        // darker than the white plate these were mixed against, and a metal
+        // that goes muddy stops being a metal.
+        case .gold:        return dark ? RGB(0.937, 0.757, 0.259) : RGB(0.855, 0.655, 0.133)
+        case .goldShade:   return dark ? RGB(0.706, 0.514, 0.114) : RGB(0.620, 0.439, 0.063)
+        case .silver:      return dark ? RGB(0.804, 0.831, 0.878) : RGB(0.722, 0.753, 0.804)
+        case .silverShade: return dark ? RGB(0.561, 0.592, 0.651) : RGB(0.502, 0.533, 0.584)
+        case .bronze:      return dark ? RGB(0.843, 0.561, 0.341) : RGB(0.780, 0.490, 0.278)
+        case .bronzeShade: return dark ? RGB(0.604, 0.373, 0.204) : RGB(0.549, 0.318, 0.161)
+
+        // The motif hues. Each is the same colour the app already uses for the
+        // idea it stands for where one exists — crimson and leaf sit beside
+        // `Health.bad` and `Health.good` rather than arguing with them.
+        case .crimson: return dark ? RGB(0.882, 0.290, 0.310) : RGB(0.800, 0.200, 0.239)
+        case .azure:   return dark ? RGB(0.329, 0.580, 0.925) : RGB(0.200, 0.471, 0.851)
+        case .violet:  return dark ? RGB(0.631, 0.439, 0.867) : RGB(0.529, 0.329, 0.780)
+        case .leaf:    return dark ? RGB(0.329, 0.710, 0.420) : RGB(0.239, 0.620, 0.329)
+
+        // Darker than `outline` in Dark and lighter in Light: interior line
+        // work has to read *against* the fill it divides, not against the
+        // desktop behind the whole drawing.
+        case .ink:   return dark ? RGB(0.157, 0.169, 0.196) : RGB(0.200, 0.212, 0.239)
+        case .cream: return dark ? RGB(0.949, 0.922, 0.843) : RGB(0.980, 0.953, 0.882)
+
         // Never drawn from here: the accent is Health.tint, resolved per layer.
         case .accent:  return RGB(white: 0.5)
         }
+    }
+
+    /// The same colour with its hue taken out — what a locked trophy is drawn
+    /// in.
+    ///
+    /// A transform rather than a second palette, and certainly not a second set
+    /// of sprites: unlocking should be the *same picture* gaining its colour,
+    /// and any arrangement where the two are drawn separately is one where they
+    /// can drift apart.
+    ///
+    /// Rec. 601 luma, because it weights green the way an eye does — an even
+    /// average turns gold and azure into the same grey, which is exactly the
+    /// distinction a shelf of locked trophies needs to keep.
+    public static func locked(_ rgb: RGB) -> RGB {
+        let luma = 0.299 * rgb.red + 0.587 * rgb.green + 0.114 * rgb.blue
+        // Pulled towards mid-grey rather than used straight. At full range a
+        // locked gold cup is still the brightest thing in the grid, and the
+        // eye reads brightness as "lit" long before it reads colour.
+        let flattened = 0.45 + (luma - 0.5) * 0.36
+        return RGB(white: flattened, alpha: rgb.alpha * 0.85)
     }
 
     /// Fixed in both appearances on purpose. Paired with the dark outline

@@ -14,6 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// told from a queue that was already there. nil until the first refresh
     /// lands: launching into an empty queue is not an achievement.
     private var lastReviewCount: Int?
+    /// Pull requests ever merged, from the count query. nil until it answers,
+    /// which the rules read as *unknown* rather than as none.
+    private var mergedLifetime: Int?
     private var pollTask: Task<Void, Never>?
     private var clockTask: Task<Void, Never>?
     private var updateTask: Task<Void, Never>?
@@ -163,6 +166,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let current = Bundle.main
             .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
 
+        // Acted on the chip: the version now running is one this app once
+        // told you about. Checked here rather than at launch because
+        // `notifiedUpdate` is only ever written here, and the two readings
+        // would otherwise be a launch apart.
+        if let current, let running = AppVersion(current),
+           let announced = Prefs.notifiedUpdate.flatMap(AppVersion.init),
+           running >= announced {
+            state.trophyState.record(TrophyFact.installedOfferedUpdate)
+        }
+
         do {
             let release = try await GitHubClient(token: token).fetchLatestRelease(repo: repo)
             let status = UpdateCheck.evaluate(current: current,
@@ -238,7 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // whose author no longer has anything waiting — otherwise the
             // drawer would sit empty next to a non-zero badge.
             state.rowHeights = RowHeightKeys.pruned(state.rowHeights,
-                                                    tab: .reviews,
+                                                    surface: .reviews,
                                                     liveIDs: Set(items.map(\.id)))
             if let author = state.authorFilter,
                !items.contains(where: { $0.authorLogin == author }) {
@@ -246,13 +259,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             state.clock = Date()
             state.lastUpdated = Date()
-            celebrateIfCleared(count: state.count)
 
             // The one edge worth a reaction: something new landed while you
             // were not looking.
             if notifier.notifyNewPings(in: items) { state.startle() }
 
             await refreshMyPRs(client: client)
+            await refreshMergedCount(client: client)
+            evaluateTrophies()
 
             panel.refreshLayoutIfExpanded()
             panel.refreshBadgeSize()
@@ -272,27 +286,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Drops the banner when the review queue reaches zero.
+    /// Works out what has been earned, and says so.
     ///
-    /// Only on the *transition*. Every refresh of an already-empty queue would
-    /// otherwise celebrate again, which turns the one moment worth marking into
-    /// wallpaper. And the first refresh of a session never fires, however empty
-    /// it finds things: arriving at zero is the achievement, not being there.
+    /// Run once per refresh, after *both* tabs have landed: a third of the
+    /// rules read the review queue, a third read your own pull requests, and
+    /// three of them read both. Evaluating between the two fetches would give
+    /// every rule a view of half a refresh.
     ///
-    /// The count is the repo-scoped one, which is deliberately the same number
-    /// the badge shows — so the banner arrives exactly when the badge's red
-    /// count goes out, rather than disagreeing with it about what "clear"
-    /// means while a repo filter is on.
-    private func celebrateIfCleared(count: Int) {
-        defer { lastReviewCount = count }
-        guard Prefs.celebrateCleared else { return }
+    /// All the rules themselves live in `TrophyEvaluator`. This assembles
+    /// what it is allowed to see and does what it says.
+    private func evaluateTrophies() {
+        // The banner needs something to be earned, and most of what earns one
+        // is not arrangeable on demand. This drops a real one on the first
+        // refresh so the thing can be looked at. See `Log.fakeCleared`.
         if Log.fakeCleared, lastReviewCount == nil {
-            banner.show(on: panel.currentScreen)
-            return
+            banner.show([.inboxZero], on: panel.currentScreen)
         }
-        guard let previous = lastReviewCount, previous > 0, count == 0 else { return }
-        Log.debug("reviews cleared: \(previous) -> 0")
-        banner.show(on: panel.currentScreen)
+
+        var snapshot = TrophySnapshot()
+        snapshot.reviews = state.items
+        snapshot.myPRs = state.myPRs
+        snapshot.scopedReviewCount = state.count
+        snapshot.previousScopedReviewCount = lastReviewCount
+        snapshot.mergedLifetime = mergedLifetime
+        snapshot.badgeTileSize = state.badgeTileSize
+        snapshot.badgeMinimum = Layout.badgeSizing.minimum
+        snapshot.badgeMaximum = Layout.badgeSizing.maximum
+        snapshot.mascotCyclesThisSession = state.mascotCycles
+        snapshot.now = Date()
+        // From the same pref the update check watches, so a fork rewards
+        // contributions to the fork rather than to the original.
+        snapshot.homeRepo = Prefs.updateRepo
+        lastReviewCount = state.count
+
+        let (next, unlocked) = TrophyEvaluator.evaluate(snapshot, state: state.trophyState)
+        state.trophyState = next
+        guard !unlocked.isEmpty else { return }
+        Log.debug("unlocked: \(unlocked.map(\.rawValue).joined(separator: ", "))")
+        // Looking at the shelf is what marks it read. Doing it here as well
+        // as on opening the room covers the case of something unlocking
+        // while the room is already the thing on screen — the dot would
+        // otherwise appear for trophies being looked at.
+        if state.expanded, state.showingTrophies {
+            state.trophyState.markAllSeen()
+        }
+        guard Prefs.celebrateCleared else { return }
+        banner.show(unlocked, on: panel.currentScreen)
+    }
+
+    /// How many pull requests the viewer has ever merged.
+    ///
+    /// Swallowed on failure, like the My PRs fetch and for the same reason:
+    /// a count that did not answer must read as *unknown* to the rules, not
+    /// as zero — and certainly not as a reason to fail the refresh that
+    /// carries both tabs.
+    private func refreshMergedCount(client: GitHubClient) async {
+        do {
+            mergedLifetime = try await client.fetchMergedCount()
+        } catch {
+            Log.debug("merged count failed: \(error)")
+        }
     }
 
     /// The My PRs tab. Failures here must not blank the Reviews tab, so they
@@ -322,7 +375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let liveIDs = Set(mine.map(\.id))
             state.rowHeights = RowHeightKeys.pruned(state.rowHeights,
-                                                    tab: .mine,
+                                                    surface: .mine,
                                                     liveIDs: liveIDs)
             state.myPRs = mine
             validateRepoFilter()

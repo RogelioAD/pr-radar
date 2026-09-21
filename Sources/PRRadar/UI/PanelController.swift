@@ -145,6 +145,7 @@ final class PanelController {
             onRefresh: { [weak self] in self?.onRefresh() },
             onRowHeights: { [weak self] in self?.adoptRowHeights($0) },
             onSelectTab: { [weak self] in self?.selectTab($0) },
+            onToggleTrophies: { [weak self] in self?.toggleTrophyRoom() },
             onHeaderControls: { [weak self] in self?.headerControls = $0 }
         )
         hostingView = DraggableHostingView(rootView: root)
@@ -267,6 +268,14 @@ final class PanelController {
     /// changing size shows nothing.
     private func expand() {
         state.expanded = true
+        // `Carousel` is for sitting there clicking the mascot, so the count
+        // starts again every time the drawer does.
+        state.mascotCycles = 0
+        // The room is persisted, so the drawer can open straight onto it
+        // without `openTrophyRoom` ever being called.
+        if state.showingTrophies, state.trophyState.hasUnseen {
+            state.trophyState.markAllSeen()
+        }
         // A non-activating panel would otherwise leave the rows unclickable,
         // and a borderless one only takes key because FloatingPanel allows it.
         NSApp.activate(ignoringOtherApps: true)
@@ -344,7 +353,7 @@ final class PanelController {
                             userContentHeight: state.userContentHeight,
                             maxHeight: availableMaxHeight,
                             snapping: !isDraggingHeight,
-                            tab: state.selectedTab)
+                            surface: state.activeSurface)
     }
 
     /// The drawer grows up and to the left, keeping the badge's bottom-right
@@ -492,6 +501,20 @@ final class PanelController {
             height: size.height
         ))
         Prefs.badgeOrigin = badgeFrame.origin
+        recordParkedCorner()
+    }
+
+    /// Remembers which quarter of the screen the badge was left in.
+    ///
+    /// Quarters rather than anything tighter: `Four Corners` is about having
+    /// moved the badge all the way round at some point, and a rule that
+    /// wanted the badge within some number of points of a literal corner
+    /// would be a rule nobody could satisfy on purpose or by accident.
+    private func recordParkedCorner() {
+        guard let visible = currentScreen?.visibleFrame, visible.width > 0 else { return }
+        let horizontal = badgeFrame.midX < visible.midX ? "left" : "right"
+        let vertical = badgeFrame.midY < visible.midY ? "bottom" : "top"
+        state.trophyState.record(TrophyFact.badgeCorner("\(vertical)-\(horizontal)"))
     }
 
     /// Re-frames the collapsed badge when the widget's own size changes — a
@@ -531,7 +554,7 @@ final class PanelController {
     /// frame made the drag lurch between rows rather than track the hand.
     private func previewResize(to windowHeight: CGFloat) {
         isDraggingHeight = true
-        let content = Layout.sizing(for: state.selectedTab).clamp(
+        let content = Layout.sizing(for: state.activeSurface).clamp(
             windowHeight - Layout.chromeHeight,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
@@ -549,14 +572,14 @@ final class PanelController {
         guard let draft = resizeDraft else { return }
         resizeDraft = nil
 
-        let snapped = Layout.sizing(for: state.selectedTab).snap(
+        let snapped = Layout.sizing(for: state.activeSurface).snap(
             draft,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
             limit: availableMaxHeight - Layout.chromeHeight
         )
         state.userContentHeight = snapped
-        Prefs.setDrawerContentHeight(snapped, for: state.selectedTab)
+        Prefs.setDrawerContentHeight(snapped, for: state.activeSurface)
         // The edge jumps to the nearest row on release; .alignment is the
         // system feedback for exactly that, and on a trackpad it makes the snap
         // felt rather than only seen.
@@ -652,6 +675,27 @@ final class PanelController {
     func selectTab(_ tab: DrawerTab) {
         guard state.selectedTab != tab else { return }
         state.selectedTab = tab
+        resettle()
+    }
+
+    /// Enters or leaves the trophy room.
+    ///
+    /// Leaving restores the tab underneath rather than picking a default:
+    /// `selectedTab` was never changed, so there is nothing to restore — the
+    /// surface simply stops being the shelf.
+    func toggleTrophyRoom() {
+        if state.showingTrophies {
+            state.showingTrophies = false
+        } else {
+            state.openTrophyRoom()
+        }
+        resettle()
+    }
+
+    /// Everything that has to happen when the drawer changes what it is
+    /// showing: a different set of measured rows, so a different height, and
+    /// a different zone map under whatever the pointer is already over.
+    private func resettle() {
         applyFrame(animated: true)
         hostingView.updateTrackingAreas()
         hostingView.refreshHoverZone()
