@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# After a commit that a fork might want to send back, offer to send it.
+#
+# post-commit rather than pre-push, because a coding CLI commits far more
+# often than it pushes and the moment the work exists is the moment somebody
+# still remembers what it was for. It cannot fail a commit — post-commit's
+# exit status is ignored — which is the right amount of authority for
+# something that runs after every single one.
+#
+# Enabled per clone, never automatically: `make hooks`, or
+# `git config core.hooksPath .githooks`. Git deliberately refuses to run
+# hooks straight out of a clone, and it is right to.
+#
+# Off again with: git config prradar.contribute false
+
+# Only when the commit is finished with — a rebase or an amend-in-progress
+# lands here too, and being asked mid-rebase would be maddening.
+[ -d "$(git rev-parse --git-path rebase-merge 2>/dev/null)" ] && exit 0
+[ -d "$(git rev-parse --git-path rebase-apply 2>/dev/null)" ] && exit 0
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+script="$root/Scripts/contribute.sh"
+[ -x "$script" ] || exit 0
+
+# Asked once per commit, not once per hook run. Two commits in a row are two
+# questions; `git commit --amend` three times is not three.
+seen="$(git rev-parse --git-path prradar-offered)"
+head=$(git rev-parse HEAD)
+[ "$(cat "$seen" 2>/dev/null)" != "$head" ] || exit 0
+
+if "$script" --check; then
+    printf '%s' "$head" > "$seen"
+    "$script" --offer || true
+fi
+
+exit 0

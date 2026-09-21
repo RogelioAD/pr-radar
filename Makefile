@@ -1,4 +1,4 @@
-.PHONY: build test run print bundle install uninstall clean release
+.PHONY: build test run print bundle install uninstall clean release hooks contribute
 
 build:
 	swift build
@@ -69,6 +69,20 @@ uninstall:
 clean:
 	swift package clean
 	rm -rf .build PRRadar.app
+
+# Turns on the post-commit offer described in CONTRIBUTING.md. Opt-in per
+# clone, because git refuses to run hooks straight out of one — and because
+# a repo that started running its own scripts the moment you cloned it would
+# deserve the suspicion that earns.
+hooks:
+	@git config core.hooksPath .githooks
+	@echo "==> hooks on. After a commit this fork might want to send back,"
+	@echo "    you will be asked once whether to propose it upstream."
+	@echo "    Off again: git config prradar.contribute false"
+
+# The same thing, on demand.
+contribute:
+	@./Scripts/contribute.sh
 
 # Prepended to every release's generated notes. The update chip in the drawer
 # links to the release page, so this is what someone reads the instant they act

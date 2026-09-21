@@ -246,6 +246,22 @@ PRRADAR_FAKE_TROPHIES=all # force the shelf to one of its two ends. `all` is
                           # so quitting puts the real shelf back
 ```
 
+### Sending changes back
+
+This is meant to be forked, so most changes to it happen on somebody else's
+machine. `make hooks` turns on a post-commit offer: commit something your
+fork's original might want and you are asked, once, whether to propose it —
+answering yes pushes a branch to your fork and opens a draft pull request
+upstream. `make contribute` does the same on demand.
+
+It asks rather than acts, and it takes your team's logins and your bundle
+identifier out of what it sends. [CONTRIBUTING.md](CONTRIBUTING.md) has the
+whole of it, including how to turn it off.
+
+A post-commit hook rather than anything cleverer because every coding CLI
+ends up calling `git commit`, so one hook covers all of them — and because
+git refuses to run hooks out of a clone, which makes the opt-in real.
+
 ### Working on this with Claude Code
 
 The useful thing to know is that **this project is verifiable without clicking
@@ -282,6 +298,10 @@ Sources/PRRadarCore/Trophies/
 Sources/PRRadar/       the app: panel, badge, tabs, drawer, notifications
 Sources/MakeIcon/      build-time icon generator; reads the same sprites the
                        app draws, so the notification banner cannot drift
+Scripts/contribute.sh  offers a fork's changes back to the original as a
+                       draft PR — see CONTRIBUTING.md
+.githooks/             the post-commit hook that offers it, off until
+                       `make hooks`
 Tests/                 338 tests
 Scripts/bundle.sh      assembles and ad-hoc signs PRRadar.app
 ```
