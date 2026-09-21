@@ -353,8 +353,7 @@ final class PanelController {
                             userContentHeight: state.userContentHeight,
                             maxHeight: availableMaxHeight,
                             snapping: !isDraggingHeight,
-                            surface: state.activeSurface,
-                            accountStrip: state.showsAccountStrip)
+                            surface: state.activeSurface)
     }
 
     /// The drawer grows up and to the left, keeping the badge's bottom-right
@@ -560,10 +559,8 @@ final class PanelController {
         // for them put the content height 64pt — one whole row of trophies —
         // below what the window was actually showing, and the edge fought
         // the pointer all the way up.
-        let chrome = Layout.chromeHeight(for: state.activeSurface,
-                                         accountStrip: state.showsAccountStrip)
-        let content = Layout.sizing(for: state.activeSurface,
-                                    accountStrip: state.showsAccountStrip).clamp(
+        let chrome = Layout.chromeHeight(for: state.activeSurface)
+        let content = Layout.sizing(for: state.activeSurface).clamp(
             windowHeight - chrome,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
@@ -581,13 +578,11 @@ final class PanelController {
         guard let draft = resizeDraft else { return }
         resizeDraft = nil
 
-        let snapped = Layout.sizing(for: state.activeSurface,
-                                    accountStrip: state.showsAccountStrip).snap(
+        let snapped = Layout.sizing(for: state.activeSurface).snap(
             draft,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
-            limit: availableMaxHeight - Layout.chromeHeight(
-                for: state.activeSurface, accountStrip: state.showsAccountStrip)
+            limit: availableMaxHeight - Layout.chromeHeight(for: state.activeSurface)
         )
         state.userContentHeight = snapped
         Prefs.setDrawerContentHeight(snapped, for: state.activeSurface)

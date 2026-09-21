@@ -7,46 +7,16 @@ struct MyPRFilterBar: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Menu {
-                ForEach(MyPRSortOrder.allCases, id: \.self) { order in
-                    Button {
-                        state.myPRSortOrder = order
-                    } label: {
-                        if state.myPRSortOrder == order {
-                            Label(order.label, systemImage: "checkmark")
-                        } else {
-                            Text(order.label)
-                        }
-                    }
-                }
-            } label: {
-                FilterPill(symbol: state.myPRSortOrder.symbol,
-                           text: state.myPRSortOrder.label, active: false)
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
+            // Scopes first, then the controls that sort and narrow inside
+            // them: which identity and which repository decide *what list this
+            // is*, and the rest only rearrange it.
+            if state.showsAccountPicker { AccountFilterMenu(state: state) }
 
-            Menu {
-                ForEach(MyPRFilter.allCases, id: \.self) { filter in
-                    Button {
-                        state.myPRFilter = filter
-                    } label: {
-                        if state.myPRFilter == filter {
-                            Label(label(for: filter), systemImage: "checkmark")
-                        } else {
-                            Text(label(for: filter))
-                        }
-                    }
-                }
-            } label: {
-                FilterPill(symbol: "line.3.horizontal.decrease",
-                           text: state.myPRFilter.label,
-                           active: state.isMyPRFiltered)
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
+            RepoFilterMenu(state: state)
+
+            sortMenu
+
+            filterMenu
 
             // Offered only when there is a stack to offer it for — and kept
             // while it is on, whatever happens to the data, so it can always be
@@ -56,8 +26,6 @@ struct MyPRFilterBar: View {
                     state.myPRStackedOnly.toggle()
                 }
             }
-
-            RepoFilterMenu(state: state)
 
             Spacer()
 
@@ -77,6 +45,51 @@ struct MyPRFilterBar: View {
         }
         .padding(.horizontal, 10)
         .frame(height: Layout.filterBarHeight)
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            ForEach(MyPRSortOrder.allCases, id: \.self) { order in
+                Button {
+                    state.myPRSortOrder = order
+                } label: {
+                    if state.myPRSortOrder == order {
+                        Label(order.label, systemImage: "checkmark")
+                    } else {
+                        Text(order.label)
+                    }
+                }
+            }
+        } label: {
+            FilterPill(symbol: state.myPRSortOrder.symbol,
+                       text: state.myPRSortOrder.label, active: false)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    private var filterMenu: some View {
+        Menu {
+            ForEach(MyPRFilter.allCases, id: \.self) { filter in
+                Button {
+                    state.myPRFilter = filter
+                } label: {
+                    if state.myPRFilter == filter {
+                        Label(label(for: filter), systemImage: "checkmark")
+                    } else {
+                        Text(label(for: filter))
+                    }
+                }
+            }
+        } label: {
+            FilterPill(symbol: "line.3.horizontal.decrease",
+                       text: state.myPRFilter.label,
+                       active: state.isMyPRFiltered)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     /// Counts in the menu make it obvious which filters are worth picking.

@@ -44,18 +44,12 @@ struct DrawerView: View {
             // The room replaces everything below the header. Not hidden but
             // *absent*: a tab strip and a filter bar with nothing to act on
             // are two controls asking to be pressed and one band of chrome
-            // the shelf then has to be shorter than. The account strip goes
-            // with them — it is a scope selector, and the shelf is the same
-            // thirty drawings whichever identity you are wearing.
+            // the shelf then has to be shorter than.
             if state.showingTrophies {
                 TrophyRoomView(state: state, onRowHeights: onRowHeights)
                 Divider().opacity(0.6)
                 trophyFooter
             } else {
-                if state.showsAccountStrip {
-                    AccountStripView(state: state)
-                    Divider().opacity(0.6)
-                }
                 TabStripView(state: state, onSelect: onSelectTab)
                 Divider().opacity(0.6)
                 filterBar
@@ -392,6 +386,12 @@ struct ReviewFilterBar: View {
 
     var body: some View {
         HStack(spacing: 6) {
+            // Same order as the My PRs bar: the two scopes, then sort, then
+            // the narrowing filter. One bar's habits should carry to the other.
+            if state.showsAccountPicker { AccountFilterMenu(state: state) }
+
+            RepoFilterMenu(state: state)
+
             Menu {
                 ForEach(ReviewSortOrder.allCases, id: \.self) { order in
                     Button {
@@ -434,15 +434,18 @@ struct ReviewFilterBar: View {
                     }
                 }
             } label: {
-                FilterPill(symbol: "person.crop.circle",
+                // A pencil, not a bust: the account picker at the head of this
+                // same bar is the profile glyph, and the two answer different
+                // questions — who *wrote* the pull request, against which of
+                // your identities fetched it. Two identical busts in one bar
+                // asked the reader to tell them apart by their words alone.
+                FilterPill(symbol: "pencil",
                            text: state.authorFilter ?? "All authors",
                            active: state.isFiltered)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-
-            RepoFilterMenu(state: state)
 
             Spacer()
 

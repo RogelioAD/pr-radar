@@ -250,32 +250,22 @@ enum Layout {
 
     static let estimatedRowHeight: CGFloat = estimatedRowHeight(for: .reviews)
 
-    /// The account strip's own row. Shorter than the tab strip: it carries no
-    /// icons, and it is a scope selector rather than the drawer's main control.
-    static let accountStripHeight: CGFloat = 26
-
     /// What the drawer carries above and below the scrolling part.
     ///
-    /// Two axes, because two separate things move it. The *surface* decides
-    /// whether the tab strip and filter bar are drawn at all — the trophy room
-    /// hides both. `accountStrip` decides whether a further row sits above
-    /// them, and it is only ever true on a machine with more than one account:
-    /// assuming it away would clip the last row by exactly its height on the
-    /// machines that have it, and assuming it present would leave a band of
-    /// empty material on the ones that do not.
+    /// Per surface, because the trophy room hides the tab strip and the filter
+    /// bar. Charging it for two controls it is not drawing would leave it 62pt
+    /// taller than its own contents — a band of empty material under the last
+    /// row of trophies.
     ///
-    /// A room ignores `accountStrip` rather than asking callers not to pass it.
-    /// The strip is a scope selector, and a room hides the scope controls for
-    /// the same reason it hides the tab strip: there is nothing below them for
-    /// them to act on.
-    static func chromeHeight(for surface: DrawerSurface,
-                             accountStrip: Bool = false) -> CGFloat {
+    /// One axis, and deliberately still one now that accounts exist: the
+    /// account picker is a pill inside the filter bar rather than a row of its
+    /// own, so a second account costs no chrome and there is nothing here to
+    /// keep in step with it.
+    static func chromeHeight(for surface: DrawerSurface) -> CGFloat {
         switch surface {
-        // header + tab strip + filter bar + footer, plus four dividers, and
-        // the account strip with its own divider when it is there.
+        // header + tab strip + filter bar + footer, plus four dividers.
         case .reviews, .mine:
             return headerHeight + tabStripHeight + filterBarHeight + footerHeight + 4
-                + (accountStrip ? accountStripHeight + 1 : 0)
         // header + progress footer, plus two dividers.
         case .trophies:
             return headerHeight + footerHeight + 2
@@ -289,12 +279,11 @@ enum Layout {
 
     static let sizing = sizing(for: .reviews)
 
-    static func sizing(for surface: DrawerSurface,
-                       accountStrip: Bool = false) -> DrawerSizing {
+    static func sizing(for surface: DrawerSurface) -> DrawerSizing {
         DrawerSizing(
             rowSpacing: surface == .trophies ? trophyGridSpacing : rowSpacing,
             listPadding: listPadding,
-            chromeHeight: chromeHeight(for: surface, accountStrip: accountStrip),
+            chromeHeight: chromeHeight(for: surface),
             maxHeight: fallbackMaxHeight,
             estimatedRowHeight: estimatedRowHeight(for: surface)
         )
@@ -305,9 +294,8 @@ enum Layout {
                              userContentHeight: CGFloat?,
                              maxHeight: CGFloat,
                              snapping: Bool = true,
-                             surface: DrawerSurface = .reviews,
-                             accountStrip: Bool = false) -> CGFloat {
-        sizing(for: surface, accountStrip: accountStrip)
+                             surface: DrawerSurface = .reviews) -> CGFloat {
+        sizing(for: surface)
             .windowHeight(rowHeights: rowHeights,
                           itemCount: itemCount,
                           userContentHeight: userContentHeight,

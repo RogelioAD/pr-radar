@@ -239,7 +239,7 @@ final class AppState: ObservableObject {
     /// only one account exists, the list is already scoped to one, or the row
     /// predates the tag.
     func accountLabel(for id: String) -> String? {
-        guard showsAccountStrip, accountFilter == nil else { return nil }
+        guard showsAccountPicker, accountFilter == nil else { return nil }
         guard let account = accounts.first(where: { $0.id == id }),
               !account.login.isEmpty
         else { return nil }
@@ -369,7 +369,7 @@ final class AppState: ObservableObject {
 
     /// Accounts to show in the strip. Hidden entirely below two, since a strip
     /// offering one choice is a control that cannot be used.
-    var showsAccountStrip: Bool { accounts.count > 1 }
+    var showsAccountPicker: Bool { accounts.count > 1 }
 
     // MARK: - Mascot
 
