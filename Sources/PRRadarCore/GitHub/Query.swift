@@ -40,6 +40,26 @@ public enum Query {
         """
     }
 
+    /// Users who can be mentioned in a repo, narrowed server-side by `text`.
+    /// Backs the lead picker; it is a suggestion list, not a gate.
+    public static func mentionableUsers(repo: String, matching text: String,
+                                        first: Int = 30) -> String? {
+        let parts = repo.split(separator: "/")
+        guard parts.count == 2 else { return nil }
+        let escaped = text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return """
+        query {
+          repository(owner: "\(parts[0])", name: "\(parts[1])") {
+            mentionableUsers(first: \(first), query: "\(escaped)") {
+              nodes { login name }
+            }
+          }
+        }
+        """
+    }
+
     /// The viewer's own open pull requests, with everything a My PRs row needs.
     ///
     /// Sent as its own request rather than another alias on the reviews

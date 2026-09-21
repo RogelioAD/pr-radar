@@ -86,6 +86,13 @@ public struct GitHubClient {
             .repository?.latestRelease
     }
 
+    /// Members of `repo` whose login or name matches `text`.
+    public func searchMembers(repo: String, matching text: String) async throws -> [Member] {
+        guard let query = Query.mentionableUsers(repo: repo, matching: text) else { return [] }
+        return try await run(query, as: MembersPayload.self)
+            .repository?.mentionableUsers.nodes ?? []
+    }
+
     /// Second phase: how far behind each head branch is. Returns an empty
     /// dictionary when there is nothing to compare, and is allowed to fail
     /// independently of the main fetch — callers keep `behindBy` nil rather

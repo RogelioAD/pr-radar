@@ -142,6 +142,9 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
     public let reviewDecision: ReviewDecision
     public var mergeBlocker: MergeBlocker
     public let approvals: [Approval]
+    /// Whether this repo has any leads configured. Without one, no lead
+    /// state is shown or counted.
+    public let hasLeadGate: Bool
     public let awaitingReviewers: [String]
     public let unresolvedThreadCount: Int
     public let totalThreadCount: Int
@@ -183,7 +186,7 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
         liveApprovals.first { $0.isLead }
     }
 
-    public var needsLead: Bool { approvingLead == nil }
+    public var needsLead: Bool { hasLeadGate && approvingLead == nil }
 
     public var isStacked: Bool { stackedOn != nil }
 
@@ -215,7 +218,7 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
             checks.health,
             mergeBlocker.health,
             reviewDecision.health,
-            needsLead ? .attention : .good,
+            hasLeadGate ? (needsLead ? .attention : .good) : .neutral,
             unresolvedThreadCount > 0 ? .attention : .neutral,
         ])
     }
@@ -233,6 +236,7 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
                 createdAt: Date, updatedAt: Date, headRefName: String,
                 baseRefName: String, reviewDecision: ReviewDecision,
                 mergeBlocker: MergeBlocker, approvals: [Approval],
+                hasLeadGate: Bool = false,
                 awaitingReviewers: [String], unresolvedThreadCount: Int,
                 totalThreadCount: Int, checks: ChecksSummary,
                 additions: Int, deletions: Int, changedFiles: Int,
@@ -250,6 +254,7 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
         self.reviewDecision = reviewDecision
         self.mergeBlocker = mergeBlocker
         self.approvals = approvals
+        self.hasLeadGate = hasLeadGate
         self.awaitingReviewers = awaitingReviewers
         self.unresolvedThreadCount = unresolvedThreadCount
         self.totalThreadCount = totalThreadCount

@@ -72,7 +72,7 @@ final class AppState: ObservableObject {
 
     var displayedMyPRs: [MyPullRequest] {
         let scoped = RepoScope.apply(repoFilter, to: myPRs, repoOf: \.repo)
-        return myPRSortOrder.apply(to: myPRFilter.apply(to: scoped))
+        return myPRSortOrder.apply(to: effectiveMyPRFilter.apply(to: scoped))
     }
 
     /// Authors available to filter by, within the current repo filter — so the
@@ -97,7 +97,20 @@ final class AppState: ObservableObject {
 
     var isRepoFiltered: Bool { repoFilter != nil }
     var isFiltered: Bool { authorFilter != nil }
-    var isMyPRFiltered: Bool { myPRFilter != .all }
+    var isMyPRFiltered: Bool { effectiveMyPRFilter != .all }
+
+    /// Whether any PR belongs to a repo with leads configured.
+    var hasLeadGate: Bool { myPRs.contains(where: \.hasLeadGate) }
+
+    /// "Needs lead" means nothing until a lead is configured, so it is
+    /// neither offered nor applied then.
+    var effectiveMyPRFilter: MyPRFilter {
+        myPRFilter == .needsLead && !hasLeadGate ? .all : myPRFilter
+    }
+
+    var availableMyPRFilters: [MyPRFilter] {
+        MyPRFilter.allCases.filter { $0 != .needsLead || hasLeadGate }
+    }
 
     // MARK: - Active-tab geometry
 

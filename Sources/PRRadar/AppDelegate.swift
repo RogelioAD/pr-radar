@@ -7,6 +7,7 @@ import PRRadarCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let state = AppState()
+    private var leadsWindow: NSWindow?
     private let notifier = Notifier()
     private var panel: PanelController!
     private var pollTask: Task<Void, Never>?
@@ -271,7 +272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func refreshMyPRs(client: GitHubClient) async {
         do {
             let result = try await client.fetchMyPullRequests()
-            var mine = MyPRInbox(leadLogins: Prefs.leadLogins).build(from: result)
+            var mine = MyPRInbox(leads: Prefs.leadsByRepo).build(from: result)
 
             // Second phase, independently fallible: if it fails, behindBy stays
             // nil and the row shows "behind ?" rather than claiming "behind 0".
@@ -351,6 +352,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(mascotMenuItem())
 
+        menu.addItem(withTitle: "Leads…",
+                     action: #selector(menuEditLeads), keyEquivalent: "").target = self
+
         let loginItem = NSMenuItem(title: "Start at login",
                                    action: #selector(menuToggleLoginItem), keyEquivalent: "")
         loginItem.target = self
@@ -401,6 +405,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The widget's footprint changes with the character — and vanishes
         // back to the old tile when it is switched off.
         panel.refreshBadgeSize()
+    }
+
+    @objc private func menuEditLeads() {
+        let view = LeadsEditorView(
+            repos: state.repos,
+            search: { repo, text in
+                try await GitHubClient(token: try Token.resolve())
+                    .searchMembers(repo: repo, matching: text)
+            },
+            onChange: { [weak self] in self?.refreshNow() })
+        // A fresh view each time, so the repo list and leads are current.
+        let window = leadsWindow ?? NSWindow()
+        window.contentViewController = NSHostingController(rootView: view)
+        window.title = "Leads"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        if leadsWindow == nil { window.center() }
+        leadsWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func menuRefresh() { refreshNow() }

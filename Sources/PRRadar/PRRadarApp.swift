@@ -75,7 +75,7 @@ enum Diagnostics {
 
     static func printMyPRs(client: GitHubClient) async throws {
         let result = try await client.fetchMyPullRequests()
-        let inbox = MyPRInbox(leadLogins: Prefs.leadLogins)
+        let inbox = MyPRInbox(leads: Prefs.leadsByRepo)
         var mine = inbox.build(from: result)
 
         // Second phase is allowed to fail on its own; behindBy stays unknown.
@@ -86,7 +86,7 @@ enum Diagnostics {
             print("\n(compare phase failed: \(error.localizedDescription))")
         }
 
-        print("\nmy open PRs: \(mine.count)   leads: \(Prefs.leadLogins.joined(separator: ", "))")
+        print("\nmy open PRs: \(mine.count)   leads: \(Prefs.leadsByRepo.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value.joined(separator: ","))" }.joined(separator: " "))")
         for pr in MyPRSortOrder.newestFirst.apply(to: mine) {
             let behind: String = {
                 switch pr.branchState {
@@ -104,7 +104,7 @@ enum Diagnostics {
             let dismissed = pr.dismissedApprovals.map { "\($0.shortName)\($0.isLead ? "*" : "")" }
             print("        approvals live=[\(live.joined(separator: ","))] "
                   + "dismissed=[\(dismissed.joined(separator: ","))] "
-                  + "lead=\(pr.approvingLead.map { $0.shortName } ?? "NEEDED")")
+                  + "lead=\(pr.hasLeadGate ? (pr.approvingLead.map { $0.shortName } ?? "NEEDED") : "n/a")")
             print("        checks pass=\(pr.checks.passing) fail=\(pr.checks.failing) "
                   + "run=\(pr.checks.running) skip=\(pr.checks.skipped) "
                   + "rollup=\(pr.checks.rollupState ?? "none")")
