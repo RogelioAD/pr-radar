@@ -1,0 +1,10 @@
+# Everything needs the owner's review.
+#
+# Paired with the "main: pull requests only" ruleset, which requires a code
+# owner's approval before a pull request can merge. Without a file naming an
+# owner that rule has nobody to ask and passes vacuously, so this is the half
+# that gives it teeth.
+#
+# Only read from the default branch, so editing it on a side branch changes
+# nothing until that branch lands.
+* @RogelioAD
