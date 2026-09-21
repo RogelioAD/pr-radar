@@ -48,6 +48,15 @@ struct MyPRFilterBar: View {
             .menuIndicator(.hidden)
             .fixedSize()
 
+            // Offered only when there is a stack to offer it for — and kept
+            // while it is on, whatever happens to the data, so it can always be
+            // switched off by the control that switched it on.
+            if state.hasStackedPRs || state.myPRStackedOnly {
+                StackToggle(active: state.myPRStackedOnly) {
+                    state.myPRStackedOnly.toggle()
+                }
+            }
+
             RepoFilterMenu(state: state)
 
             Spacer()
@@ -55,6 +64,7 @@ struct MyPRFilterBar: View {
             if state.isMyPRFiltered || state.isRepoFiltered {
                 Button {
                     state.myPRFilter = .all
+                    state.myPRStackedOnly = false
                     state.repoFilter = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -144,5 +154,43 @@ struct FilterPill: View {
             Capsule().fill(active ? Color.accentColor.opacity(0.14)
                                   : Color.primary.opacity(0.07))
         )
+    }
+}
+
+/// The pancake button: narrows the list to stacks.
+///
+/// A button rather than another entry in the filter menu, because "show me the
+/// stack I am juggling" is a different question from "show me what is broken" —
+/// and the useful case is asking both at once.
+///
+/// Art rather than a symbol: SF Symbols has no pancakes, and the stack it draws
+/// is the same one the rows wear, so pressing it is visibly the same idea. Drawn
+/// at 1x, the only scale that fits a capsule this size while still reading.
+struct StackToggle: View {
+    let active: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            SpriteCanvas(layout: .pancakeStack(of: 3),
+                         scale: Layout.pancakeChipScale)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule().fill(active ? Color.accentColor.opacity(0.14)
+                                          : Color.primary.opacity(0.07))
+                )
+                .overlay(
+                    Capsule().strokeBorder(active ? Color.accentColor.opacity(0.55)
+                                                  : .clear,
+                                           lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        // The only control in this bar with no words in it, so the tooltip is
+        // the whole of its label rather than a gloss on one.
+        .help(active ? "Showing only stacked PRs" : "Show only stacked PRs")
+        .accessibilityLabel("Stacked PRs only")
+        .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
     }
 }

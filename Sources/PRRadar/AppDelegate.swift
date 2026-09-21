@@ -9,6 +9,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let state = AppState()
     private let notifier = Notifier()
     private var panel: PanelController!
+    private let banner = AchievementBanner()
+    /// The review count at the last refresh, so a queue reaching zero can be
+    /// told from a queue that was already there. nil until the first refresh
+    /// lands: launching into an empty queue is not an achievement.
+    private var lastReviewCount: Int?
     private var pollTask: Task<Void, Never>?
     private var clockTask: Task<Void, Never>?
     private var updateTask: Task<Void, Never>?
@@ -241,6 +246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             state.clock = Date()
             state.lastUpdated = Date()
+            celebrateIfCleared(count: state.count)
 
             // The one edge worth a reaction: something new landed while you
             // were not looking.
@@ -266,6 +272,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Drops the banner when the review queue reaches zero.
+    ///
+    /// Only on the *transition*. Every refresh of an already-empty queue would
+    /// otherwise celebrate again, which turns the one moment worth marking into
+    /// wallpaper. And the first refresh of a session never fires, however empty
+    /// it finds things: arriving at zero is the achievement, not being there.
+    ///
+    /// The count is the repo-scoped one, which is deliberately the same number
+    /// the badge shows — so the banner arrives exactly when the badge's red
+    /// count goes out, rather than disagreeing with it about what "clear"
+    /// means while a repo filter is on.
+    private func celebrateIfCleared(count: Int) {
+        defer { lastReviewCount = count }
+        guard Prefs.celebrateCleared else { return }
+        if Log.fakeCleared, lastReviewCount == nil {
+            banner.show(on: panel.currentScreen)
+            return
+        }
+        guard let previous = lastReviewCount, previous > 0, count == 0 else { return }
+        Log.debug("reviews cleared: \(previous) -> 0")
+        banner.show(on: panel.currentScreen)
+    }
+
     /// The My PRs tab. Failures here must not blank the Reviews tab, so they
     /// are recorded and swallowed rather than thrown.
     private func refreshMyPRs(client: GitHubClient) async {
@@ -289,6 +318,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 mine = mine.map { var copy = $0; copy.mergeBlocker = .clean; return copy }
             }
 
+            if Log.fakeStacks { mine = Self.splittingTheLongestStack(mine) }
+
             let liveIDs = Set(mine.map(\.id))
             state.rowHeights = RowHeightKeys.pruned(state.rowHeights,
                                                     tab: .mine,
@@ -299,6 +330,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             Log.debug("my PRs fetch failed: \(error)")
             state.lastError = error.localizedDescription
+        }
+    }
+
+    /// Cuts the longest stack's middle link, turning one group into two.
+    ///
+    /// Debug only. See `Log.fakeStacks`.
+    private static func splittingTheLongestStack(_ items: [MyPullRequest]) -> [MyPullRequest] {
+        let stacks = MyPRGrouping.units(items, order: .newestFirst).compactMap { unit -> MyPRStack? in
+            guard case .stack(let stack) = unit else { return nil }
+            return stack
+        }
+        guard let longest = stacks.max(by: { $0.depth < $1.depth }),
+              longest.depth >= 4 else { return items }
+        let cut = longest.members[longest.depth / 2]
+        return items.map { item in
+            var copy = item
+            if copy.id == cut.id { copy.stackedOn = nil }
+            if copy.repo == cut.repo { copy.blocksRestackOf.removeAll { $0 == cut.number } }
+            return copy
         }
     }
 
@@ -351,6 +401,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(mascotMenuItem())
 
+        // The badge resizes by dragging a corner, which leaves no way back to
+        // the default — and a badge dragged down to its floor on a busy desktop
+        // is fiddly to grab again. Shown only once it is off the default, so
+        // the menu does not carry a permanently inert item.
+        if state.badgeTileSize != Layout.dockTileSize {
+            let reset = NSMenuItem(title: "Reset badge size",
+                                   action: #selector(menuResetBadgeSize),
+                                   keyEquivalent: "")
+            reset.target = self
+            menu.addItem(reset)
+        }
+
         let loginItem = NSMenuItem(title: "Start at login",
                                    action: #selector(menuToggleLoginItem), keyEquivalent: "")
         loginItem.target = self
@@ -401,6 +463,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The widget's footprint changes with the character — and vanishes
         // back to the old tile when it is switched off.
         panel.refreshBadgeSize()
+    }
+
+    @objc private func menuResetBadgeSize() {
+        panel.resetBadgeSize()
     }
 
     @objc private func menuRefresh() { refreshNow() }

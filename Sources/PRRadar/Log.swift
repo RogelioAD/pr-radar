@@ -44,6 +44,23 @@ enum Log {
         ProcessInfo.processInfo.environment["PRRADAR_FAKE_READY"] == "1"
     }
 
+    /// PRRADAR_FAKE_STACKS=1 cuts the longest stack in half, so the list shows
+    /// two groups instead of one. How several groups sit together — their
+    /// outlines, their spacing, the drawer's height across them — cannot be
+    /// looked at with a single stack in the data, and a second real one is not
+    /// something you can conjure on demand.
+    static var fakeStacks: Bool {
+        ProcessInfo.processInfo.environment["PRRADAR_FAKE_STACKS"] == "1"
+    }
+
+    /// PRRADAR_FAKE_CLEARED=1 drops the achievement banner on the first
+    /// refresh. It fires on a queue going from some to none, which is a moment
+    /// you cannot arrange on demand and — if the queue is already empty — one
+    /// that will not come at all.
+    static var fakeCleared: Bool {
+        ProcessInfo.processInfo.environment["PRRADAR_FAKE_CLEARED"] == "1"
+    }
+
     static func debug(_ message: @autoclosure () -> String) {
         let text = message()
         // Notice rather than debug: debug-level records live in memory and are

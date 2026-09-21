@@ -89,6 +89,13 @@ Set them at runtime, no rebuild needed:
 defaults write com.yourname.prradar leads.logins -array alice bob carol
 ```
 
+Two more live in defaults alone, with no UI:
+
+```sh
+defaults write com.yourname.prradar celebrate.cleared -bool false  # no banner
+defaults write com.yourname.prradar update.repo -string owner/name # update source
+```
+
 Or bake your team in as the default, in `Sources/PRRadarCore/MyPR/Leads.swift`:
 
 ```swift
@@ -118,9 +125,13 @@ whichever landed in front would hide the other's count badges.
 it stays hidden until the first fetch returns, so an empty screen for a few
 seconds is normal.
 
+**Drag any corner of the badge to resize it**, between 28 and 128 points. It
+stays square, and the size is remembered. With a character on it moves a pixel
+cell at a time so the sprite stays crisp — see [FEATURES.md](FEATURES.md#on-resizing).
+
 There is **no Dock icon and no menu bar item**. Right-click the badge for the
-menu: refresh, toggle start-at-login, and quit. That menu is the only way to
-quit it.
+menu: refresh, toggle start-at-login, reset the badge size, and quit. That menu
+is the only way to quit it.
 
 ## 5. Confirm it works
 
@@ -220,6 +231,10 @@ PRRADAR_APPEARANCE=light  # force Light or Dark, to check the other colour schem
 PRRADAR_FAKE_BEHIND=3     # make your PRs look N commits behind, to see the
                           # "needs rebase" chip
 PRRADAR_FAKE_READY=1      # make your PRs look mergeable, to see the green badge
+PRRADAR_FAKE_STACKS=1     # cut the longest stack in half, so the list shows two
+                          # groups — how several stacks lay out together
+PRRADAR_FAKE_CLEARED=1    # drop the "reviews cleared" banner on the first
+                          # refresh, which otherwise needs an emptying queue
 ```
 
 ### Working on this with Claude Code
@@ -230,8 +245,10 @@ anything**, which is what makes it pleasant to hand to an agent:
 - `make print` proves the whole data path — auth, fetch, parse, derived state —
   with no GUI involved.
 - `make test` covers every rule worth arguing about (see below).
-- `PRRADAR_DEBUG=1` prints a hit-test zone map of the real laid-out drawer, so
-  drag and click regions can be checked without a mouse.
+- `PRRADAR_DEBUG=1` prints a hit-test zone map of the real laid-out drawer, and
+  of the collapsed badge's four corner grips — including a probe of the panel
+  corner outside the art, which must read `move` — so drag, resize and click
+  regions can be checked without a mouse.
 - `screencapture -x -o -l <windowid>` grabs just this app's window. **But it
   excludes the backdrop**, so translucent materials render dark and can look
   fine when they are actually unreadable. Use `screencapture -RX,Y,W,H` (no
@@ -242,7 +259,8 @@ anything**, which is what makes it pleasant to hand to an agent:
 ```
 Sources/PRRadarCore/   fetching, parsing, and every rule worth testing:
                        the dismiss rule, the lead gate, branch state, drawer
-                       sizing, hit-test zones, click-vs-drag
+                       sizing, badge sizing, stack grouping, hit-test zones,
+                       click-vs-drag
 Sources/PRRadarCore/Mascots/
                        the pixel-art characters as data — sprite grids, the
                        mood derivation, counter chips, and the layout rules
@@ -267,8 +285,9 @@ unlike a plain `NSView`. Hit-testing written as `point.y >= bounds.height -
 inset` therefore selects the *bottom* of the view. That inverted every drag
 zone once: the footer became the drag handle, so clicking Refresh registered as
 a click on the header and collapsed the drawer, while the real header and
-resize edge did nothing. The rules now live in `DrawerZones`, keyed off a
-distance-from-top the view computes using its own `isFlipped`.
+resize edge did nothing. The rules now live in `DrawerZones` — and, for the
+badge's corner grips, `BadgeZones` — keyed off a distance-from-top the view
+computes using its own `isFlipped`.
 
 **`performDrag(with:)` returns immediately** rather than blocking until
 mouse-up, so comparing pointer positions around it reports every drag as a

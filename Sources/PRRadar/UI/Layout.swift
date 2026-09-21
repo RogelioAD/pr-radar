@@ -2,32 +2,56 @@ import AppKit
 import PRRadarCore
 
 enum Layout {
-    /// Matches the user's Dock icon size, so the badge sits alongside the Dock
-    /// as a peer rather than looking oversized. Read once at launch.
+    /// Matches the user's Dock icon size, so the badge starts out alongside the
+    /// Dock as a peer rather than looking oversized. Read once at launch.
+    ///
+    /// This is the *default* only. The badge can be resized from its corners,
+    /// and once it has been the size comes from `AppState.badgeTileSize`, which
+    /// is why every metric below is a function of a tile size rather than of
+    /// this.
     static let dockTileSize: CGFloat = {
         let raw = UserDefaults(suiteName: "com.apple.dock")?
             .object(forKey: "tilesize") as? Double
         return CGFloat(min(max(raw ?? 48, 28), 80))
     }()
 
-    /// The rounded-square tile the glyph sits in — a Dock-tile-sized peer.
-    static var badgeTileSize: CGFloat { dockTileSize }
+    /// How far the badge can be dragged. The bounds are the smallest and
+    /// largest real Dock tile sizes, so it stays a believable Dock peer at
+    /// either end — `dockTileSize` clamps tighter because it is following the
+    /// Dock, not the user's own hand.
+    static let badgeSizing = BadgeSizing(minimum: 28, maximum: 128)
+
+    /// Grip depth at each corner of the collapsed badge. Generous for the same
+    /// reason as `resizeEdge`: 6pt was missed more often than it was hit.
+    /// `BadgeZones` shrinks it on a small badge so the middle stays clickable.
+    static let badgeGrip: CGFloat = 12
+    static let badgeZones = BadgeZones(grip: badgeGrip)
+
     /// Corner radius in Dock proportions (a squircle is ~22% of the tile).
-    static var badgeCornerRadius: CGFloat { (dockTileSize * 0.24).rounded() }
+    static func badgeCornerRadius(tile: CGFloat) -> CGFloat { (tile * 0.24).rounded() }
     /// The glyph, deliberately smaller than the tile it sits in.
-    static var badgeGlyphSize: CGFloat { (dockTileSize * 0.50).rounded() }
+    static func badgeGlyphSize(tile: CGFloat) -> CGFloat { (tile * 0.50).rounded() }
     /// Dock badges run just under half the tile.
-    static var countBadgeSize: CGFloat { (dockTileSize * 0.46).rounded() }
+    static func countBadgeSize(tile: CGFloat) -> CGFloat { (tile * 0.46).rounded() }
     /// How far the count badge pokes out past the tile's corner. Less than its
     /// radius, so the badge's centre sits *inside* the corner and it overlaps
     /// the tile the way a Dock badge overlaps its app icon.
-    static var countBadgeOverhang: CGFloat { (countBadgeSize * 0.34).rounded() }
+    static func countBadgeOverhang(tile: CGFloat) -> CGFloat {
+        (countBadgeSize(tile: tile) * 0.34).rounded()
+    }
     /// Panel footprint with the mascot turned off: one overhang's worth on the
     /// right, and one at *each* of top and bottom, because two same-sized
     /// badges hang off the tile's corners — the review count above, the
     /// ready-to-merge count below.
-    static var tileBadgeWidth: CGFloat { badgeTileSize + countBadgeOverhang }
-    static var tileBadgeHeight: CGFloat { badgeTileSize + countBadgeOverhang * 2 }
+    static func tileBadgeWidth(tile: CGFloat) -> CGFloat {
+        tile + countBadgeOverhang(tile: tile)
+    }
+    static func tileBadgeHeight(tile: CGFloat) -> CGFloat {
+        tile + countBadgeOverhang(tile: tile) * 2
+    }
+    static func tileBadgeSize(tile: CGFloat) -> CGSize {
+        CGSize(width: tileBadgeWidth(tile: tile), height: tileBadgeHeight(tile: tile))
+    }
 
     /// One width for both tabs. It is set by the My PRs row, which carries the
     /// most — approvals, checks, threads, blockers, stack position — and the
@@ -61,6 +85,49 @@ enum Layout {
     /// Symbol, so this costs no layout at all.
     static let emptyStateMascotScale: CGFloat = 3
 
+    // MARK: - Achievement banner
+
+    /// The banner's scale on a given screen. Everything about it — type,
+    /// emblem, padding, the gaps — is a multiple of this one number, so the
+    /// whole thing sizes itself to whatever display it lands on. The rule is in
+    /// `Achievement` so it can be tested without a screen.
+    static func achievementScale(on screen: NSScreen?) -> CGFloat {
+        Achievement.scale(forScreenWidth: screen?.visibleFrame.width ?? 1440)
+    }
+
+    // MARK: - Pancakes
+
+    /// The stack marker on a My PRs row. 2x puts a five-deep stack at 26pt,
+    /// which fits a row that is already carrying four lines of chips; 3x does
+    /// not.
+    static let pancakeRowScale: CGFloat = 2
+    /// How much room a row keeps for its marker, whatever the depth: the sprite
+    /// is a fixed width and only grows downward.
+    static var pancakeMarkerWidth: CGFloat { CGFloat(Pancakes.width) * pancakeRowScale }
+    /// The filter bar's toggle, which has to sit inside a capsule barely 17pt
+    /// tall. 1x is the only scale that does, and the shape still reads.
+    static let pancakeChipScale: CGFloat = 1
+    /// Width a row actually gets in the list: the drawer less the 6pt the list
+    /// insets on each side.
+    ///
+    /// Definite rather than `maxWidth: .infinity`, because a `Chip` is
+    /// `.fixedSize()` — a row carrying five of them reports a wider ideal than
+    /// it was offered, and `maxWidth` sets a floor, not a ceiling. Nothing drew
+    /// attention to that while rows had no border of their own; a stack card
+    /// wrapped around one promptly grew 14pt past the drawer and had its
+    /// corners clipped off.
+    static var listContentWidth: CGFloat { drawerWidth - listPadding }
+
+    /// Breathing room inside a stack group's outline.
+    static let stackGroupPadding: CGFloat = 6
+    /// What a row gets inside a stack card, which is the above less the card's
+    /// own padding — so the card lands at exactly `listContentWidth`.
+    static var stackRowWidth: CGFloat { listContentWidth - stackGroupPadding * 2 }
+    /// Rounder than a row's 7, so the card reads as holding the rows rather
+    /// than as one more of them.
+    static let stackGroupRadius: CGFloat = 12
+
+
     /// The character plus its halo is 18 cells wide, and that is what should
     /// match the Dock tile — the counters hang off it rather than shrinking it.
     private static let badgeCharacterCells = 18
@@ -70,21 +137,66 @@ enum Layout {
     /// 1.5x a digit is seven and a half points tall.
     private static let badgeMinimumScale: CGFloat = 2
 
-    static func badgeScale(backingScale: CGFloat) -> CGFloat {
-        SpriteScale.snapped(targetPoints: dockTileSize,
+    static func badgeScale(tile: CGFloat, backingScale: CGFloat) -> CGFloat {
+        SpriteScale.snapped(targetPoints: tile,
                             spriteWidth: badgeCharacterCells,
                             backingScale: backingScale,
                             minimum: badgeMinimumScale)
     }
 
+    /// The tile size a snapped scale actually represents.
+    ///
+    /// A mascot badge can only be drawn at whole device pixels, so a dragged
+    /// size lands between two of them. Storing what was *drawn* rather than
+    /// what was asked for is what stops the badge drifting a few points every
+    /// time it is resized and reopened.
+    static func tileSize(forBadgeScale scale: CGFloat) -> CGFloat {
+        CGFloat(badgeCharacterCells) * scale
+    }
+
     /// Padding `SpriteCanvas` adds around a haloed, shadowed composition:
     /// one cell of halo on the leading edge, one of halo plus one of shadow on
     /// the trailing one.
-    private static let badgePadCells = 3
+    private static let badgeLeadPadCells = 1
+    private static let badgeTrailPadCells = 2
+    private static let badgePadCells = badgeLeadPadCells + badgeTrailPadCells
 
     static func badgeSize(for layout: SpriteLayout, scale: CGFloat) -> CGSize {
         CGSize(width: CGFloat(layout.width + badgePadCells) * scale,
                height: CGFloat(layout.height + badgePadCells) * scale)
+    }
+
+    /// Where the mascot badge is actually *drawn* inside its panel, measured
+    /// from the panel's visual top-left.
+    ///
+    /// The panel is deliberately bigger than this: a widget reserves the mark
+    /// gutter whether or not a mark is showing, and keeps bob room under the
+    /// character's feet, so with no counts the art fills barely two thirds of
+    /// the height. How much of its 16x16 cell each character fills differs too.
+    /// Anything that has to line up with what the eye sees — the corner grips —
+    /// needs this rather than the panel.
+    ///
+    /// The halo and the shadow are drawn and so are counted: `contentBounds` is
+    /// the tight box around the lit cells, and both extend exactly one cell
+    /// past it.
+    static func badgeArtRect(for layout: SpriteLayout, scale: CGFloat) -> CGRect? {
+        guard let content = layout.contentBounds else { return nil }
+        // Cell (x, y) lands at (x + lead) * scale; the halo starts one cell
+        // before that, which cancels the lead exactly.
+        return CGRect(x: CGFloat(content.origin.x) * scale,
+                      y: CGFloat(content.origin.y) * scale,
+                      width: CGFloat(content.width + 2) * scale,
+                      height: CGFloat(content.height + 2) * scale)
+    }
+
+    /// The same, for the plain tile.
+    ///
+    /// The tile's square body, not the count badges that overhang its corners:
+    /// the body is always drawn, so the grips keep still when a count appears
+    /// or goes away — and the badges sit centred on the very corners the grips
+    /// already cover.
+    static func tileArtRect(tile: CGFloat) -> CGRect {
+        CGRect(x: 0, y: countBadgeOverhang(tile: tile), width: tile, height: tile)
     }
 
     /// Used only before rows report their real size — which is exactly the

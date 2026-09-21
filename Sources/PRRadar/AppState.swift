@@ -31,6 +31,11 @@ final class AppState: ObservableObject {
     @Published var myPRFilter: MyPRFilter = Prefs.myPRFilter {
         didSet { Prefs.myPRFilter = myPRFilter }
     }
+    /// Narrows the list to stacks. A second axis rather than a `MyPRFilter`
+    /// case, so it combines with whatever the filter menu is set to.
+    @Published var myPRStackedOnly: Bool = Prefs.myPRStackedOnly {
+        didSet { Prefs.myPRStackedOnly = myPRStackedOnly }
+    }
     // MARK: - Shared
 
     @Published var selectedTab: DrawerTab = Prefs.selectedTab {
@@ -70,9 +75,33 @@ final class AppState: ObservableObject {
         return sortOrder.apply(to: filtered)
     }
 
-    var displayedMyPRs: [MyPullRequest] {
+    /// The My PRs list as the drawer actually lays it out: lone PRs and stack
+    /// groups, in display order.
+    ///
+    /// This is the choke point, not `displayedMyPRs` — the drawer sizes itself
+    /// by summing one measured height per *unit*, and a group is one unit
+    /// however many PRs are in it.
+    var displayedMyPRUnits: [MyPRUnit] {
         let scoped = RepoScope.apply(repoFilter, to: myPRs, repoOf: \.repo)
-        return myPRSortOrder.apply(to: myPRFilter.apply(to: scoped))
+        let filtered = myPRFilter.apply(to: scoped)
+        // Grouping is what the pancake button is *for*. Everywhere else the
+        // list stays a flat list of PRs, exactly as it was — a plate and a
+        // column of pancakes is a lot of furniture to impose on someone who
+        // asked to see their failing checks.
+        guard myPRStackedOnly else {
+            return myPRSortOrder.apply(to: filtered).map(MyPRUnit.single)
+        }
+        // Grouped *then* narrowed to groups, rather than filtering PRs on
+        // `isStacked`: that flag is computed against the whole inbox, so it
+        // would keep a PR whose partner the repo filter has already hidden —
+        // a stack of one, which is not a stack.
+        return MyPRGrouping.units(filtered, order: myPRSortOrder).filter(\.isStack)
+    }
+
+    /// The same list, flattened. Counts and empty states answer in pull
+    /// requests, because that is what the user is counting.
+    var displayedMyPRs: [MyPullRequest] {
+        displayedMyPRUnits.flatMap(\.pullRequests)
     }
 
     /// Authors available to filter by, within the current repo filter — so the
@@ -97,7 +126,17 @@ final class AppState: ObservableObject {
 
     var isRepoFiltered: Bool { repoFilter != nil }
     var isFiltered: Bool { authorFilter != nil }
-    var isMyPRFiltered: Bool { myPRFilter != .all }
+    var isMyPRFiltered: Bool { myPRFilter != .all || myPRStackedOnly }
+
+    /// Whether anything in scope is stacked.
+    ///
+    /// Scoped by repo but not by the filter menu: the repo filter is a scope —
+    /// "I'm in this repo today" — so a repo with no stacks should not offer a
+    /// stacked filter, while a bar whose controls came and went every time you
+    /// changed the *other* filter would be its own kind of annoying.
+    var hasStackedPRs: Bool {
+        MyPRGrouping.containsStack(RepoScope.apply(repoFilter, to: myPRs, repoOf: \.repo))
+    }
 
     // MARK: - Active-tab geometry
 
@@ -106,6 +145,11 @@ final class AppState: ObservableObject {
         RowHeightKeys.key(tab: tab, id: id)
     }
 
+    /// How many rows the drawer's height snaps to.
+    ///
+    /// Pull requests, not units: a stack is one card but several rows, and a
+    /// drawer that could only stop at whole cards could not be dragged at all
+    /// while the pancake filter is the only thing showing.
     func rowCount(for tab: DrawerTab) -> Int {
         switch tab {
         case .reviews: return displayedItems.count
@@ -119,7 +163,10 @@ final class AppState: ObservableObject {
         case .reviews:
             return displayedItems.compactMap { rowHeights[rowKey(.reviews, $0.id)] }
         case .mine:
-            return displayedMyPRs.compactMap { rowHeights[rowKey(.mine, $0.id)] }
+            return MyPRGrouping.stopHeights(
+                units: displayedMyPRUnits,
+                stackChrome: Layout.stackGroupPadding * 2,
+                height: { rowHeights[rowKey(.mine, $0.id)] })
         }
     }
 
@@ -179,6 +226,16 @@ final class AppState: ObservableObject {
     /// A transient reaction that outranks the derived mood while it lasts:
     /// being hovered, being dragged, or a review arriving.
     @Published var reaction: Reaction?
+
+    /// The badge's square size in points, as dragged from one of its corners.
+    ///
+    /// Every badge metric derives from this — tile, glyph, counter chips,
+    /// sprite scale — so resizing is one number changing and the rest
+    /// following. Defaults to the Dock's tile size, which is what the badge
+    /// was fixed to before it could be resized at all.
+    @Published var badgeTileSize: CGFloat = Prefs.badgeTileSize ?? Layout.dockTileSize {
+        didSet { Prefs.badgeTileSize = badgeTileSize }
+    }
 
     /// Backing scale of the screen the panel is actually on, published by
     /// `PanelController`.

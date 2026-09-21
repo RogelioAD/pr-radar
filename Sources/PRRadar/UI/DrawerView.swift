@@ -224,15 +224,23 @@ struct DrawerView: View {
             problem(title: "No open PRs", detail: "Nothing of yours is in flight.",
                     symbol: "tray")
         } else if items.isEmpty {
-            problem(title: "Nothing matches \(state.myPRFilter.label)",
+            problem(title: state.myPRStackedOnly && state.myPRFilter == .all
+                        ? "Nothing is stacked"
+                        : "Nothing matches \(state.myPRFilter.label)",
                     detail: "Clear the filter to see all \(state.myPRs.count).",
                     symbol: "line.3.horizontal.decrease.circle")
         } else {
             ScrollView {
                 VStack(spacing: Layout.rowSpacing) {
-                    ForEach(items) { item in
-                        MyPRRowView(item: item, now: state.clock,
-                                    onOpen: { onOpenMyPR(item) })
+                    ForEach(state.displayedMyPRUnits) { unit in
+                        switch unit {
+                        case .single(let item):
+                            MyPRRowView(item: item, now: state.clock,
+                                        onOpen: { onOpenMyPR(item) })
+                        case .stack(let stack):
+                            MyPRStackView(stack: stack, now: state.clock,
+                                          onOpen: { onOpenMyPR($0) })
+                        }
                     }
                 }
                 .padding(.horizontal, 6)

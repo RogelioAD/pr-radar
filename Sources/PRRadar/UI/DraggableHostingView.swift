@@ -5,6 +5,13 @@ import PRRadarCore
 /// Hosting view that moves and resizes the window from designated regions
 /// while leaving clicks everywhere else to SwiftUI.
 ///
+/// Two handles live here, and they are deliberately different shapes: the
+/// expanded drawer has one horizontal strip along its top edge that changes its
+/// height, and the collapsed badge has a grip at each of its four corners that
+/// changes its size as a square. Which one is in play is decided entirely by
+/// `zoneAt`, so this view never has to know whether the panel is a badge or a
+/// drawer.
+///
 /// Drag tracking is explicit rather than delegated to `performDrag(with:)`:
 /// that call returns immediately instead of blocking until mouse-up, so
 /// comparing the pointer position around it reports every drag as a click.
@@ -24,6 +31,18 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     /// Reports the window height the user is dragging towards.
     var onResize: (CGFloat) -> Void = { _ in }
     var onResizeFinished: () -> Void = {}
+    /// Reports a corner grip and the pointer's travel since the press, in
+    /// screen coordinates. Raw on purpose: what a given travel means for the
+    /// badge's size is the owner's rule, not this view's — the same division of
+    /// labour `onResize` already uses.
+    var onCornerDrag: (BadgeCorner, CGPoint) -> Void = { _, _ in }
+    var onCornerDragFinished: () -> Void = {}
+    /// The region whose corners are grips — the badge's *art*, which is a good
+    /// deal smaller than the panel carrying it — or nil when the panel has no
+    /// grips at all. Supplied by the owner for the same reason
+    /// `resizeEdgeThickness` is: the cursor region and the drag region must not
+    /// be able to drift apart.
+    var cornerGripRegion: () -> NSRect? = { nil }
     /// Given the press location, so the owner can decide whether this part of
     /// the drawer has a menu of its own.
     var contextMenuProvider: (NSPoint) -> NSMenu? = { _ in nil }
@@ -35,9 +54,15 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     /// Cursor state, tracked rather than pushed. `NSCursor.push()`/`pop()`
     /// leaves the pointer stuck as a fist system-wide if a release is ever
     /// missed; `set()` has no stack to unbalance.
-    private var hoveringResizeEdge = false
-    private var draggingResizeEdge = false
-    private var resizeTrackingArea: NSTrackingArea?
+    ///
+    /// A zone rather than a pair of booleans: there are two kinds of handle now
+    /// and a third would have meant a third flag to keep in step with the other
+    /// two.
+    private var hoverZone: Zone = .none
+    /// The handle a drag started on, or nil — including during a plain window
+    /// move, which has no cursor of its own.
+    private var draggingHandle: Zone?
+    private var cursorTrackingArea: NSTrackingArea?
 
     required init(rootView: Content) {
         super.init(rootView: rootView)
@@ -74,8 +99,8 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
         let dy = current.y - mouseDownLocation.y
         guard let zone = tracker.update(distance: hypot(dx, dy)) else { return }
 
-        if zone == .resize, !draggingResizeEdge {
-            draggingResizeEdge = true
+        if draggingHandle == nil, cursor(for: zone) != nil {
+            draggingHandle = zone
             applyCursor()
         }
 
@@ -88,13 +113,17 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
         case .resize:
             // The drawer's bottom edge is pinned, so dragging up grows it.
             onResize(initialWindowFrame.height + dy)
+        case .corner(let corner):
+            // Measured from the press for the same reason as a move: the badge
+            // is being re-framed under the pointer on every one of these.
+            onCornerDrag(corner, CGPoint(x: dx, y: dy))
         case .none:
             break
         }
     }
 
     override func mouseUp(with event: NSEvent) {
-        draggingResizeEdge = false
+        draggingHandle = nil
         applyCursor()
         switch tracker.end() {
         case .ignored:
@@ -105,6 +134,8 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
             onMoveFinished()
         case .resized:
             onResizeFinished()
+        case .sized:
+            onCornerDragFinished()
         }
     }
 
@@ -131,31 +162,54 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
         return .resizeUpDown
     }
 
+    /// The diagonal pair for a badge corner.
+    ///
+    /// There is no public diagonal cursor before macOS 15 — the ones the window
+    /// server uses for window corners are private — so below it the crosshair
+    /// stands in. It reads as "take hold of this point", which is the honest
+    /// approximation, and it is at least unmistakably not the arrow.
+    private func cornerCursor(_ corner: BadgeCorner) -> NSCursor {
+        if #available(macOS 15.0, *) {
+            let position: NSCursor.FrameResizePosition
+            switch corner {
+            case .topLeft: position = .topLeft
+            case .topRight: position = .topRight
+            case .bottomLeft: position = .bottomLeft
+            case .bottomRight: position = .bottomRight
+            }
+            return NSCursor.frameResize(position: position, directions: .all)
+        }
+        return .crosshair
+    }
+
+    /// nil for the zones this view has no opinion about, which is what leaves
+    /// SwiftUI free to pick its own cursor everywhere else.
+    private func cursor(for zone: Zone) -> NSCursor? {
+        switch zone {
+        case .resize: return resizeCursor
+        case .corner(let corner): return cornerCursor(corner)
+        case .move, .none: return nil
+        }
+    }
+
     /// Tracking area rather than `addCursorRect`: cursor rects only take effect
     /// while the window is active, and this is a non-activating floating panel,
     /// so they never fired. `.activeAlways` works regardless.
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let existing = resizeTrackingArea {
+        if let existing = cursorTrackingArea {
             removeTrackingArea(existing)
-            resizeTrackingArea = nil
+            cursorTrackingArea = nil
         }
         // The geometry just moved, possibly out from under a pointer that never
         // budged. Enter and exit cannot report that — no event is owed when the
         // window moves rather than the mouse — so settle the state from the
         // pointer itself instead of waiting to be told.
-        defer { refreshEdgeHover() }
+        defer { refreshHoverZone() }
 
-        let thickness = resizeEdgeThickness
-        let probe = NSPoint(x: bounds.midX,
-                           y: isFlipped ? bounds.minY + 2 : bounds.maxY - 2)
-        guard zoneAt(probe) == .resize else { return }
-
-        // The view is flipped, so the visual top is minY rather than maxY.
-        let topY = isFlipped ? bounds.minY : bounds.maxY - thickness
+        guard let rect = cursorTrackingRect() else { return }
         let area = NSTrackingArea(
-            rect: NSRect(x: bounds.minX, y: topY,
-                         width: bounds.width, height: thickness),
+            rect: rect,
             // .mouseMoved matters: .cursorUpdate alone only fires on entry, so
             // anything that reset the cursor while the pointer was still
             // inside won until it left and re-entered — which is why the
@@ -166,7 +220,30 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
             userInfo: nil
         )
         addTrackingArea(area)
-        resizeTrackingArea = area
+        cursorTrackingArea = area
+    }
+
+    /// The region whose cursor this view is responsible for, or nil when it
+    /// owns none of the surface.
+    ///
+    /// The badge's art is taken whole rather than as four corner rects: the
+    /// resolving is done from the pointer's position anyway (see
+    /// `refreshHoverZone`), so four areas would be four times the bookkeeping
+    /// and not one answer more correct.
+    private func cursorTrackingRect() -> NSRect? {
+        if let grips = cornerGripRegion() {
+            // Handed to us in visual coordinates; a flipped view already agrees.
+            return isFlipped
+                ? grips
+                : NSRect(x: grips.minX, y: bounds.height - grips.maxY,
+                         width: grips.width, height: grips.height)
+        }
+        // The view is flipped, so the visual top is minY rather than maxY.
+        let visualTopY = isFlipped ? bounds.minY + 2 : bounds.maxY - 2
+        guard zoneAt(NSPoint(x: bounds.midX, y: visualTopY)) == .resize else { return nil }
+        let thickness = resizeEdgeThickness
+        let topY = isFlipped ? bounds.minY : bounds.maxY - thickness
+        return NSRect(x: bounds.minX, y: topY, width: bounds.width, height: thickness)
     }
 
     /// Enter and exit say only that *a* tracking area was crossed, not which.
@@ -179,48 +256,49 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     /// So the pointer's actual position decides, and the event only prompts
     /// the question.
     override func mouseEntered(with event: NSEvent) {
-        updateEdgeHover(with: event)
+        updateHoverZone(with: event)
         // Handed on, always. SwiftUI drives .onHover from these very events, so
         // an override that keeps them to itself silently disables every hover
         // in the drawer — no row highlight, no underlined title — while the
-        // resize cursor this override exists for goes on working.
+        // resize cursor this override exists for goes on working. The badge's
+        // mascot wakes on hover through the same path.
         super.mouseEntered(with: event)
     }
 
     override func mouseExited(with event: NSEvent) {
-        updateEdgeHover(with: event)
+        updateHoverZone(with: event)
         super.mouseExited(with: event)
     }
 
-    /// Re-derives the edge hover from where the pointer actually is, for the
+    /// Re-derives the hovered zone from where the pointer actually is, for the
     /// cases no mouse event covers: switching tabs or changing a filter resizes
-    /// the drawer around a still pointer, and the answer can change without the
+    /// the drawer around a still pointer, and resizing the badge moves its own
+    /// corners out from under the hand — the answer can change without the
     /// mouse having moved at all.
-    func refreshEdgeHover() {
-        guard !draggingResizeEdge, let window else { return }
+    func refreshHoverZone() {
+        guard draggingHandle == nil, let window else { return }
         let local = convert(window.mouseLocationOutsideOfEventStream, from: nil)
-        let inside = bounds.contains(local) && zoneAt(local) == .resize
-        guard inside != hoveringResizeEdge else { return }
-        hoveringResizeEdge = inside
+        setHoverZone(bounds.contains(local) ? zoneAt(local) : .none)
+    }
+
+    private func updateHoverZone(with event: NSEvent) {
+        let local = convert(event.locationInWindow, from: nil)
+        setHoverZone(bounds.contains(local) ? zoneAt(local) : .none)
+    }
+
+    private func setHoverZone(_ zone: Zone) {
+        guard zone != hoverZone else { return }
+        hoverZone = zone
         applyCursor()
     }
 
-    private func updateEdgeHover(with event: NSEvent) {
-        let inside = zoneAt(convert(event.locationInWindow, from: nil)) == .resize
-        guard inside != hoveringResizeEdge else { return }
-        hoveringResizeEdge = inside
-        applyCursor()
-    }
-
-    /// Reasserts the cursor on every move inside the strip, so it cannot be
+    /// Reasserts the cursor on every move inside a handle, so it cannot be
     /// left as whatever something else set.
     override func mouseMoved(with event: NSEvent) {
         let local = convert(event.locationInWindow, from: nil)
-        let inside = zoneAt(local) == .resize
-        if inside != hoveringResizeEdge {
-            hoveringResizeEdge = inside
-        }
-        if inside { applyCursor() }
+        let zone = bounds.contains(local) ? zoneAt(local) : .none
+        setHoverZone(zone)
+        if cursor(for: zone) != nil { applyCursor() }
         super.mouseMoved(with: event)
     }
 
@@ -228,9 +306,9 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     /// supported hook for asserting a cursor, and it reasserts after anything
     /// else changes it.
     override func cursorUpdate(with event: NSEvent) {
-        // Only claim the cursor on the strip this view is responsible for;
+        // Only claim the cursor on the handles this view is responsible for;
         // anywhere else SwiftUI should be free to pick its own.
-        guard hoveringResizeEdge || draggingResizeEdge else {
+        guard draggingHandle != nil || cursor(for: hoverZone) != nil else {
             super.cursorUpdate(with: event)
             return
         }
@@ -238,10 +316,12 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     }
 
     private func applyCursor() {
-        if draggingResizeEdge {
+        if draggingHandle != nil {
+            // A closed fist for every handle, so hovering and grabbing never
+            // look the same — whichever of them was grabbed.
             NSCursor.closedHand.set()
-        } else if hoveringResizeEdge {
-            resizeCursor.set()
+        } else if let cursor = cursor(for: hoverZone) {
+            cursor.set()
         } else {
             NSCursor.arrow.set()
         }
@@ -251,8 +331,8 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     /// put the pointer back rather than leaving it a fist.
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         if newWindow == nil {
-            hoveringResizeEdge = false
-            draggingResizeEdge = false
+            hoverZone = .none
+            draggingHandle = nil
             NSCursor.arrow.set()
         }
         super.viewWillMove(toWindow: newWindow)

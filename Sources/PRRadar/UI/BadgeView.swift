@@ -39,7 +39,8 @@ struct BadgeView: View {
     }
 
     private func mascotWidget(_ mascot: Mascot, layout: SpriteLayout) -> some View {
-        let scale = Layout.badgeScale(backingScale: state.backingScale)
+        let scale = Layout.badgeScale(tile: state.badgeTileSize,
+                                     backingScale: state.backingScale)
         let size = Layout.badgeSize(for: layout, scale: scale)
         return MascotView(mascot: mascot,
                           style: state.spriteStyle,
@@ -62,7 +63,8 @@ struct BadgeView: View {
     // MARK: - Tile (mascot off)
 
     private var tileBadge: some View {
-        ZStack {
+        let size = Layout.tileBadgeSize(tile: state.badgeTileSize)
+        return ZStack {
             // Transparent bed at full panel size. The hosting view takes mouse
             // events across its whole bounds, so this stays draggable even
             // where nothing is drawn.
@@ -71,18 +73,18 @@ struct BadgeView: View {
             // Tile sits against the leading edge, vertically centred, leaving
             // equal overhang above and below for the two badges.
             tile
-                .frame(width: Layout.tileBadgeWidth, height: Layout.tileBadgeHeight,
+                .frame(width: size.width, height: size.height,
                        alignment: .leading)
 
             countBadge
-                .frame(width: Layout.tileBadgeWidth, height: Layout.tileBadgeHeight,
+                .frame(width: size.width, height: size.height,
                        alignment: .topTrailing)
 
             readyBadge
-                .frame(width: Layout.tileBadgeWidth, height: Layout.tileBadgeHeight,
+                .frame(width: size.width, height: size.height,
                        alignment: .bottomTrailing)
         }
-        .frame(width: Layout.tileBadgeWidth, height: Layout.tileBadgeHeight)
+        .frame(width: size.width, height: size.height)
     }
 
     // MARK: - Tile
@@ -91,7 +93,8 @@ struct BadgeView: View {
     /// appearance so the glyph always has a predictable ground to sit on,
     /// rather than inheriting whatever happens to be behind the panel.
     private var tile: some View {
-        let shape = RoundedRectangle(cornerRadius: Layout.badgeCornerRadius,
+        let tileSize = state.badgeTileSize
+        let shape = RoundedRectangle(cornerRadius: Layout.badgeCornerRadius(tile: tileSize),
                                      style: .continuous)
         return ZStack {
             shape.fill(isDark ? Color.black.opacity(0.92)
@@ -103,7 +106,7 @@ struct BadgeView: View {
                                lineWidth: 1.5)
             glyph
         }
-        .frame(width: Layout.badgeTileSize, height: Layout.badgeTileSize)
+        .frame(width: tileSize, height: tileSize)
     }
 
     // MARK: - Glyph
@@ -122,7 +125,8 @@ struct BadgeView: View {
 
     private var glyph: some View {
         Image(systemName: symbolName)
-            .font(.system(size: Layout.badgeGlyphSize, weight: .medium))
+            .font(.system(size: Layout.badgeGlyphSize(tile: state.badgeTileSize),
+                          weight: .medium))
             .foregroundStyle(fillColor)
     }
 
@@ -161,7 +165,7 @@ struct BadgeView: View {
     /// No drop shadow either: anything that overhangs the tile casts onto the
     /// page behind the panel, which is glaringly visible over white.
     private func dockBadge(text: String, base: Color) -> some View {
-        let diameter = Layout.countBadgeSize
+        let diameter = Layout.countBadgeSize(tile: state.badgeTileSize)
         let multiDigit = text.count > 1
         // One font size for every badge, whatever the digit count. Scaling it
         // down for longer numbers would make the two badges disagree, which is

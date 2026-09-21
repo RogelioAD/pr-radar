@@ -77,6 +77,27 @@ final class PressTrackerTests: XCTestCase {
         XCTAssertEqual(tracker.end(), .click)
     }
 
+    // MARK: - Badge corners
+
+    /// A corner press that never travels must still open the drawer. The
+    /// corners are grips laid over a surface whose whole job is to be clicked,
+    /// so they may only claim a press that actually turns into a drag.
+    func testStationaryCornerPressIsStillAClick() {
+        var tracker = PressTracker(threshold: 4)
+        tracker.begin(zone: .corner(.topLeft))
+        XCTAssertNil(tracker.update(distance: 2))
+        XCTAssertEqual(tracker.end(), .click)
+    }
+
+    /// Past the threshold it is a resize, and reported as its own outcome —
+    /// `.resized` belongs to the drawer's height and would be swallowed.
+    func testCornerDragReportsSized() {
+        var tracker = PressTracker(threshold: 4)
+        tracker.begin(zone: .corner(.bottomRight))
+        XCTAssertEqual(tracker.update(distance: 10), .corner(.bottomRight))
+        XCTAssertEqual(tracker.end(), .sized)
+    }
+
     func testIsTrackingReflectsState() {
         var tracker = PressTracker()
         XCTAssertFalse(tracker.isTracking)

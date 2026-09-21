@@ -24,10 +24,41 @@ final class PanelController {
     /// invisible click target sitting on the desktop.
     private var badgeSize: CGSize {
         guard let layout = state.badgeLayout else {
-            return CGSize(width: Layout.tileBadgeWidth, height: Layout.tileBadgeHeight)
+            return Layout.tileBadgeSize(tile: state.badgeTileSize)
         }
-        return Layout.badgeSize(for: layout,
-                                scale: Layout.badgeScale(backingScale: state.backingScale))
+        return Layout.badgeSize(for: layout, scale: badgeScale)
+    }
+
+    /// Where the badge's art sits inside the panel, from the visual top-left.
+    ///
+    /// Recomputed rather than cached on a timer: it changes whenever the
+    /// composition does — a count appearing, a mood changing the mood mark,
+    /// the character being switched. `applyFrame` is the one place that already
+    /// runs on every one of those, so it is where this is refreshed.
+    private var badgeArtRect: NSRect = .zero
+
+    private func currentBadgeArtRect() -> NSRect {
+        guard let layout = state.badgeLayout else {
+            return Layout.tileArtRect(tile: state.badgeTileSize)
+        }
+        return Layout.badgeArtRect(for: layout, scale: badgeScale)
+            ?? NSRect(origin: .zero, size: badgeSize)
+    }
+
+    /// The sprite scale the mascot badge is actually drawn at.
+    ///
+    /// Snapped to whole device pixels, so it advances in steps while the tile
+    /// size the user is dragging moves continuously. That is the price of pixel
+    /// art staying crisp, and it is the same bargain the drawer makes when it
+    /// settles onto a row boundary.
+    private var badgeScale: CGFloat {
+        Layout.badgeScale(tile: state.badgeTileSize, backingScale: state.backingScale)
+    }
+
+    /// The screen the panel is actually on, for anything that has to appear
+    /// beside it rather than wherever the keyboard happens to be.
+    var currentScreen: NSScreen? {
+        NSScreen.screens.first { $0.frame.intersects(panel.frame) } ?? NSScreen.main
     }
 
     /// Keeps the view's idea of the backing scale in step with the screen the
@@ -54,6 +85,18 @@ final class PanelController {
     /// set, heights are clamped but not snapped, so the edge follows the
     /// pointer instead of jumping row to row.
     private var isDraggingHeight = false
+
+    /// One-shot, so `PRRADAR_DEBUG=1` prints the badge's grip map on the first
+    /// frame that has been laid out. The drawer's equivalent is printed every
+    /// time it opens; the badge has no such moment, and refreshes come round
+    /// often enough that logging on each would bury everything else.
+    private var hasLoggedBadgeZones = false
+
+    /// Captured on the first movement of a corner drag, so the whole gesture is
+    /// measured against the press rather than accumulated frame to frame — the
+    /// badge is being re-framed under the pointer on every one of them, and
+    /// accumulating would let rounding walk it across the desktop.
+    private var cornerDragOrigin: (tile: CGFloat, frame: NSRect)?
 
     var onOpen: (ReviewItem) -> Void = { _ in }
     var onOpenMyPR: (MyPullRequest) -> Void = { _ in }
@@ -110,6 +153,16 @@ final class PanelController {
         hostingView.onMoveFinished = { [weak self] in self?.persistPosition() }
         hostingView.onResize = { [weak self] in self?.previewResize(to: $0) }
         hostingView.onResizeFinished = { [weak self] in self?.commitResize() }
+        hostingView.onCornerDrag = { [weak self] corner, delta in
+            self?.previewCornerResize(corner: corner, delta: delta)
+        }
+        hostingView.onCornerDragFinished = { [weak self] in self?.commitCornerResize() }
+        // Supplied rather than probed, so the region the cursor changes over and
+        // the region a press resizes from cannot drift apart.
+        hostingView.cornerGripRegion = { [weak self] in
+            guard let self, !self.state.expanded else { return nil }
+            return self.badgeArtRect
+        }
         hostingView.onClick = { [weak self] in
             guard let self else { return }
             // A press on the resize edge that never moved: clear the drag flag
@@ -183,6 +236,10 @@ final class PanelController {
         // them. Cheap: returns immediately unless the size actually changed.
         if !state.expanded { syncBadgeFrameSize() }
         applyFrame()
+        if !hasLoggedBadgeZones, !state.expanded, hostingView.bounds.width > 0 {
+            hasLoggedBadgeZones = true
+            logZoneMap()
+        }
     }
 
     func hide() {
@@ -222,6 +279,14 @@ final class PanelController {
             // inert one that looks identical.
             Log.debug("expanded: appActive=\(NSApp.isActive) key=\(self.panel.isKeyWindow)")
             self.logZoneMap()
+            // The rows measure themselves while this animation is still
+            // running, and `adoptRowHeights` deliberately refuses to retarget a
+            // frame in flight — so the first open of a session lands on the
+            // estimate and stays there until something else asks for a layout.
+            // A row and its estimate used to be within a few points of each
+            // other, which is why this never showed; a stack group is not, and
+            // the drawer opened a third of the height it needed.
+            self.applyFrame(animated: true)
         }
     }
 
@@ -243,6 +308,7 @@ final class PanelController {
             guard let self else { return }
             self.state.expanded = false
             self.applyFrame()
+            self.logZoneMap()
         }
     }
 
@@ -259,7 +325,7 @@ final class PanelController {
             self.isAnimatingFrame = false
             finish()
             self.hostingView.updateTrackingAreas()
-            self.hostingView.refreshEdgeHover()
+            self.hostingView.refreshHoverZone()
         })
     }
 
@@ -295,6 +361,7 @@ final class PanelController {
     }
 
     private func applyFrame(animated: Bool = false, duration: TimeInterval = 0.16) {
+        badgeArtRect = currentBadgeArtRect()
         let frame = targetFrame()
         guard animated, panel.isVisible else {
             panel.setFrame(frame, display: true)
@@ -310,21 +377,33 @@ final class PanelController {
         }, completionHandler: { [weak self] in
             // The drawer has finished travelling; whatever is under the pointer
             // now is the answer, whether or not the pointer moved to get there.
-            self?.hostingView.refreshEdgeHover()
+            self?.hostingView.refreshHoverZone()
         })
     }
 
     private static let zones = DrawerZones(headerHeight: Layout.headerHeight,
                                            resizeEdge: Layout.resizeEdge)
 
-    /// Classifies a point for the drag handler. Only the drawer's top edge
-    /// resizes and only its header moves; everywhere else belongs to SwiftUI
-    /// so rows, menus and the footer buttons stay clickable.
+    /// Classifies a point for the drag handler.
+    ///
+    /// Collapsed, the badge resizes from any of its four corners and moves from
+    /// everywhere else. Expanded, only the drawer's top edge resizes and only
+    /// its header moves; everywhere else belongs to SwiftUI so rows, menus and
+    /// the footer buttons stay clickable. The drawer deliberately grows no
+    /// corner grips — it has its own handle, and two would disagree.
     ///
     /// `NSHostingView` is flipped, so its y grows downward — the conversion to
     /// a distance-from-top is what keeps the zones the right way up.
     private func zone(at point: NSPoint) -> DraggableHostingView<RootView>.Zone {
-        guard state.expanded else { return .move }
+        guard state.expanded else {
+            if let corner = Layout.badgeZones.corner(at: point,
+                                                     art: badgeArtRect,
+                                                     viewHeight: hostingView.bounds.height,
+                                                     isFlipped: hostingView.isFlipped) {
+                return .corner(corner)
+            }
+            return .move
+        }
         let distance = DrawerZones.distanceFromTop(
             pointY: point.y,
             viewHeight: hostingView.bounds.height,
@@ -341,6 +420,10 @@ final class PanelController {
     /// Cheap insurance against the coordinate flip silently inverting again.
     private func logZoneMap() {
         guard Log.enabled else { return }
+        guard state.expanded else {
+            logBadgeZoneMap()
+            return
+        }
         let height = hostingView.bounds.height
         let probes: [(String, CGFloat)] = [
             ("grab edge (visual top)", 2),
@@ -368,6 +451,34 @@ final class PanelController {
             Log.debug("   control \(rect.integral): \(zone)")
         }
         if headerControls.isEmpty { Log.debug("   control rects: none reported") }
+    }
+
+    /// The same, for the collapsed badge: its four grips and its middle, probed
+    /// through the path a real press takes. The flip is the trap here — this is
+    /// what shows an inverted conversion without squinting at the screen.
+    private func logBadgeZoneMap() {
+        let size = hostingView.bounds.size
+        let art = badgeArtRect
+        guard art.width > 0, art.height > 0 else { return }
+        let inset = Layout.badgeGrip / 2
+        let probes: [(String, CGPoint)] = [
+            ("top-left", CGPoint(x: art.minX + inset, y: art.minY + inset)),
+            ("top-right", CGPoint(x: art.maxX - inset, y: art.minY + inset)),
+            ("bottom-left", CGPoint(x: art.minX + inset, y: art.maxY - inset)),
+            ("bottom-right", CGPoint(x: art.maxX - inset, y: art.maxY - inset)),
+            ("middle", CGPoint(x: art.midX, y: art.midY)),
+            // Must read `move`: the panel's own corner is transparent space a
+            // long way from the art, and grabbing there was the bug.
+            ("panel corner", CGPoint(x: size.width - 1, y: size.height - 1)),
+        ]
+        Log.debug("badge zone map (flipped=\(hostingView.isFlipped) "
+                  + "panel=\(size) art=\(art.integral) tile=\(state.badgeTileSize)):")
+        for (label, visual) in probes {
+            // Probes are expressed from the visual top-left; convert back into
+            // view space before asking the classifier.
+            let pointY = hostingView.isFlipped ? visual.y : size.height - visual.y
+            Log.debug("   \(label): \(zone(at: NSPoint(x: visual.x, y: pointY)))")
+        }
     }
 
     private func persistPosition() {
@@ -455,6 +566,71 @@ final class PanelController {
         applyFrame(animated: true, duration: 0.22)
     }
 
+    // MARK: - Badge resizing
+
+    /// Live feedback while dragging a badge corner.
+    ///
+    /// The corner opposite the one under the hand stays put, which is the whole
+    /// promise of a resize handle — everything *else* about the badge anchors
+    /// bottom-right, because that is the corner the drawer unfolds from.
+    private func previewCornerResize(corner: BadgeCorner, delta: CGPoint) {
+        // The drawer owns resizing while it is open, and the badge frame it
+        // folds back into must not move under it.
+        guard !state.expanded else { return }
+
+        let start = cornerDragOrigin ?? (tile: state.badgeTileSize, frame: badgeFrame)
+        cornerDragOrigin = start
+
+        state.badgeTileSize = Layout.badgeSizing.tileSize(from: start.tile,
+                                                          corner: corner,
+                                                          delta: delta)
+        let size = badgeSize
+        badgeFrame = clamp(NSRect(
+            origin: BadgeSizing.origin(dragging: corner, in: start.frame, newSize: size),
+            size: size
+        ))
+        applyFrame()
+    }
+
+    /// On release, keep the size that was actually *drawn*.
+    ///
+    /// A mascot badge can only be crisp at whole device pixels, so the sprite
+    /// scale snaps and the drawn size lands a little either side of what the
+    /// hand asked for. Storing the asked-for number instead would let the badge
+    /// drift a few points further every time it was resized and reopened. With
+    /// the mascot off the tile scales continuously and there is nothing to
+    /// reconcile.
+    private func commitCornerResize() {
+        cornerDragOrigin = nil
+        if state.badgeLayout != nil {
+            state.badgeTileSize =
+                Layout.badgeSizing.clamp(Layout.tileSize(forBadgeScale: badgeScale))
+        }
+        Prefs.badgeOrigin = badgeFrame.origin
+        // The same feedback the drawer gives when its edge settles onto a row:
+        // on a trackpad it makes the end of the gesture felt rather than only
+        // seen.
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        applyFrame()
+        // The grips just moved out from under a pointer that may not have, so
+        // the cursor has to be re-derived rather than waiting to be told.
+        hostingView.updateTrackingAreas()
+        logZoneMap()
+    }
+
+    /// Puts the badge back to the size it had before anyone dragged it: the
+    /// user's Dock tile size. Reachable from the context menu, because a badge
+    /// dragged down to its floor on a busy desktop is fiddly to grab again.
+    func resetBadgeSize() {
+        state.badgeTileSize = Layout.dockTileSize
+        // Cleared rather than written back as the Dock's current size: the
+        // default is "follow the Dock", and storing today's number would freeze
+        // the badge at it the next time the Dock's slider moved.
+        Prefs.badgeTileSize = nil
+        refreshBadgeSize()
+        hostingView.updateTrackingAreas()
+    }
+
     private func adoptRowHeights(_ heights: [String: CGFloat]) {
         guard !heights.isEmpty else { return }
         let changed = heights.contains { key, value in
@@ -478,7 +654,7 @@ final class PanelController {
         state.selectedTab = tab
         applyFrame(animated: true)
         hostingView.updateTrackingAreas()
-        hostingView.refreshEdgeHover()
+        hostingView.refreshHoverZone()
     }
 
     // MARK: - Screen fitting
@@ -500,9 +676,10 @@ final class PanelController {
     /// frame; the first refresh corrects it.
     private static func startingBadgeSize(state: AppState) -> CGSize {
         guard let layout = state.badgeLayout else {
-            return CGSize(width: Layout.tileBadgeWidth, height: Layout.tileBadgeHeight)
+            return Layout.tileBadgeSize(tile: state.badgeTileSize)
         }
-        let scale = Layout.badgeScale(backingScale: NSScreen.main?.backingScaleFactor ?? 2)
+        let scale = Layout.badgeScale(tile: state.badgeTileSize,
+                                      backingScale: NSScreen.main?.backingScaleFactor ?? 2)
         return Layout.badgeSize(for: layout, scale: scale)
     }
 

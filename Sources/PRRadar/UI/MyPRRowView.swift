@@ -8,14 +8,23 @@ struct MyPRRowView: View {
     let item: MyPullRequest
     let now: Date
     let onOpen: () -> Void
+    /// This PR's height in its stack, 1 at the base, or nil when it is not in
+    /// one. Supplied by the group rather than read off the PR, because what
+    /// counts as a stack depends on what is currently on screen.
+    var stackPosition: Int?
+    var stackDepth: Int?
+    /// The width this row is laid out at. A card gives its rows less than the
+    /// list does, and a row has to be told rather than infer it — see
+    /// `Layout.listContentWidth`.
+    var width: CGFloat = Layout.listContentWidth
 
     @State private var hovering = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 9) {
+        HStack(alignment: .top, spacing: Self.gap) {
             Rectangle()
                 .fill(item.health.tint)
-                .frame(width: 3)
+                .frame(width: Self.barWidth)
                 .clipShape(Capsule())
 
             VStack(alignment: .leading, spacing: 5) {
@@ -25,10 +34,22 @@ struct MyPRRowView: View {
                 stateChips
                 if showsStackRow { stackRow }
             }
+            // Definite, so the marker beside it is never squeezed out. The
+            // chips inside wrap to fit this rather than pushing past it.
+            .frame(width: contentWidth, alignment: .leading)
+
+            if let position = stackPosition {
+                pancakes(position: position)
+            }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, Self.padding)
         .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Definite, not `maxWidth: .infinity`: chips are `.fixedSize()`, so a
+        // crowded row reports a wider ideal than it was offered and pushes
+        // whatever contains it past the drawer's edge. The clip below then
+        // trims the overflowing chip instead, which is what a row without a
+        // border has always quietly done.
+        .frame(width: width, alignment: .leading)
         .background(hovering ? Color.primary.opacity(0.07) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: 7))
         .contentShape(Rectangle())
@@ -43,14 +64,59 @@ struct MyPRRowView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(item.title), pull request \(item.number) "
-                            + "in \(item.repoShortName), \(item.mergeBlocker.label)")
+                            + "in \(item.repoShortName), \(item.mergeBlocker.label)"
+                            + stackDescription)
         .accessibilityAddTraits(.isButton)
         .background(
             GeometryReader { geometry in
-                Color.clear.preference(key: RowHeightsKey.self,
-                                       value: ["mine:\(item.id)": geometry.size.height])
+                Color.clear.preference(
+                    key: RowHeightsKey.self,
+                    value: [RowHeightKeys.key(tab: .mine, id: item.id): geometry.size.height])
             }
         )
+    }
+
+    /// What the text column gets: the row, less its padding, the health bar,
+    /// the gaps, and the space kept for the stack marker.
+    ///
+    /// Kept rather than competed for. A crowded row used to hand the whole
+    /// width to the chips and leave the marker hanging off the end, where the
+    /// row's clip removed it — so the deeper a stack got, the more likely its
+    /// pancakes were to vanish.
+    private var contentWidth: CGFloat {
+        let marker = stackPosition == nil ? 0 : Layout.pancakeMarkerWidth + Self.gap
+        return width - Self.padding * 2 - Self.barWidth - Self.gap - marker
+    }
+
+    private static let padding: CGFloat = 10
+    private static let gap: CGFloat = 9
+    private static let barWidth: CGFloat = 3
+
+    // MARK: - Stack marker
+
+    /// A pancake per PR from the base up to this one, on its own plate.
+    ///
+    /// Bottom-aligned, so every plate in a group lines up however tall the rows
+    /// above them are — which is what makes the column of them read as one
+    /// stack growing rather than as five unrelated drawings.
+    private func pancakes(position: Int) -> some View {
+        SpriteCanvas(layout: .pancakeStack(of: position),
+                     scale: Layout.pancakeRowScale)
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .help(stackHelp(position: position))
+            .accessibilityHidden(true)
+    }
+
+    private func stackHelp(position: Int) -> String {
+        guard let depth = stackDepth else { return "#\(position) in this stack" }
+        let drawn = min(position, Pancakes.maxDrawn)
+        let capped = drawn < position ? " (showing \(drawn))" : ""
+        return "#\(position) of \(depth) in this stack\(capped)"
+    }
+
+    private var stackDescription: String {
+        guard let position = stackPosition, let depth = stackDepth else { return "" }
+        return ", number \(position) of \(depth) in a stack"
     }
 
     // MARK: - Lines
@@ -97,7 +163,7 @@ struct MyPRRowView: View {
 
     /// Approvals and the lead gate.
     private var reviewChips: some View {
-        HStack(spacing: 4) {
+        ChipFlow(spacing: 4) {
             if let lead = item.approvingLead {
                 Chip(text: "lead: \(lead.shortName)", symbol: "checkmark.seal.fill",
                      health: .good, filled: true)
@@ -126,13 +192,12 @@ struct MyPRRowView: View {
                      symbol: "xmark", health: .bad, filled: true)
                     .help("Changes requested")
             }
-            Spacer(minLength: 0)
         }
     }
 
     /// Checks, threads, merge blocker, behind-by.
     private var stateChips: some View {
-        HStack(spacing: 4) {
+        ChipFlow(spacing: 4) {
             if item.checks.hasAny {
                 checksChip
             }
@@ -152,7 +217,6 @@ struct MyPRRowView: View {
             }
 
             branchChip
-            Spacer(minLength: 0)
         }
     }
 
@@ -206,12 +270,15 @@ struct MyPRRowView: View {
     // MARK: - Actions
 
     private var showsStackRow: Bool {
-        item.isStacked || !item.blocksRestackOf.isEmpty
+        (item.isStacked && stackPosition == nil) || !item.blocksRestackOf.isEmpty
     }
 
     private var stackRow: some View {
-        HStack(spacing: 5) {
-            if let parent = item.stackedOn {
+        ChipFlow(spacing: 5) {
+            // Suppressed inside a group: the PR this one sits on is the row
+            // directly below it, and saying so twice is noise on a row that
+            // already carries four lines of chips.
+            if let parent = item.stackedOn, stackPosition == nil {
                 Chip(text: "stacked on #\(parent)", symbol: "square.stack.3d.up",
                      health: .neutral)
             }
@@ -221,7 +288,6 @@ struct MyPRRowView: View {
                      symbol: "exclamationmark.triangle", health: .attention)
                     .help("Rebasing this branch leaves those PRs needing a restack")
             }
-            Spacer(minLength: 0)
         }
     }
 

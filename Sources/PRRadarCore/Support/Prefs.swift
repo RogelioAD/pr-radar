@@ -8,12 +8,15 @@ public enum Prefs {
     private enum Key {
         static let badgeX = "badge.origin.x"
         static let badgeY = "badge.origin.y"
+        static let badgeTile = "badge.tileSize"
         static let seenPings = "seen.pings"
         static let sortOrder = "list.sortOrder"
         static let drawerContentHeight = "drawer.contentHeight"
         static let selectedTab = "drawer.selectedTab"
         static let myPRSortOrder = "mine.sortOrder"
         static let myPRFilter = "mine.filter"
+        static let myPRStackedOnly = "mine.stackedOnly"
+        static let celebrateCleared = "celebrate.cleared"
         static let leadLogins = "leads.logins"
         static let repoFilter = "list.repoFilter"
         static let updateRepo = "update.repo"
@@ -33,6 +36,25 @@ public enum Prefs {
             guard let point = newValue else { return }
             defaults.set(point.x, forKey: Key.badgeX)
             defaults.set(point.y, forKey: Key.badgeY)
+        }
+    }
+
+    /// The badge's square size in points, as dragged from one of its corners.
+    ///
+    /// nil means never resized, which is not the same as zero — the default is
+    /// the user's Dock tile size, and that is the app's to decide rather than
+    /// this store's.
+    public static var badgeTileSize: CGFloat? {
+        get {
+            guard defaults.object(forKey: Key.badgeTile) != nil else { return nil }
+            return CGFloat(defaults.double(forKey: Key.badgeTile))
+        }
+        set {
+            if let newValue {
+                defaults.set(Double(newValue), forKey: Key.badgeTile)
+            } else {
+                defaults.removeObject(forKey: Key.badgeTile)
+            }
         }
     }
 
@@ -99,6 +121,29 @@ public enum Prefs {
     }
 
     private static let mascotOffValue = "off"
+
+    /// Whether the My PRs list is narrowed to stacks.
+    ///
+    /// A second axis rather than another `MyPRFilter` case: "show me the stack I
+    /// am juggling" is a different question from "show me what is broken", and
+    /// answering both at once is the useful combination.
+    public static var myPRStackedOnly: Bool {
+        get { defaults.bool(forKey: Key.myPRStackedOnly) }
+        set { defaults.set(newValue, forKey: Key.myPRStackedOnly) }
+    }
+
+    /// Whether clearing the review queue drops the achievement banner.
+    ///
+    /// Defaults on, and has no UI: it fires rarely enough to be a pleasure
+    /// rather than an interruption. `defaults write ... celebrate.cleared
+    /// -bool false` for anyone who disagrees.
+    public static var celebrateCleared: Bool {
+        get {
+            guard defaults.object(forKey: Key.celebrateCleared) != nil else { return true }
+            return defaults.bool(forKey: Key.celebrateCleared)
+        }
+        set { defaults.set(newValue, forKey: Key.celebrateCleared) }
+    }
 
     public static var selectedTab: DrawerTab {
         get {

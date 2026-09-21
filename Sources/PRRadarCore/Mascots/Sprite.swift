@@ -9,6 +9,12 @@ public enum Slot: Character, CaseIterable, Sendable {
     case light   = "w"
     case glass   = "v"
     case blush   = "p"
+    /// Pancakes, and the only two slots with a hue of their own. The palette is
+    /// otherwise greyscale plus `blush`, and the one coloured slot — `accent` —
+    /// takes a live `Health` tint. Drawing batter in that would make the
+    /// pancakes change colour with the mood, which is not what a pancake does.
+    case batter  = "b"
+    case syrup   = "s"
     /// The only slot that takes a live colour. Everything else is fixed by the
     /// appearance; this one is `Health.tint`, which is what keeps a mascot and
     /// the count it sits next to from ever disagreeing.

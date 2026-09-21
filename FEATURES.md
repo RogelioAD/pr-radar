@@ -42,7 +42,14 @@ Other behaviour worth knowing:
 - **Drag it anywhere.** The position is remembered across restarts, and is
   clamped back on-screen if you change resolution or unplug a monitor.
 - **Sized to your Dock**, read from `com.apple.dock tilesize` at launch, so it
-  reads as a peer of your other icons rather than an oversized sticker.
+  reads as a peer of your other icons rather than an oversized sticker. That is
+  the starting point, not a fixture — see below.
+- **Drag a corner to resize it.** The pointer turns into a diagonal resize pair
+  over any of the four corners, and a closed fist while you drag, so hovering
+  and grabbing never look the same — the same rule the drawer's edge follows.
+  The corners are the *character's*, not the window's — see below. The middle
+  third stays move-and-click whatever the size, and a corner press that never
+  travels still opens the drawer.
 - **Adapts to appearance** — black tile with a white outline in Dark, inverted
   in Light. It follows the system setting rather than sampling the desktop
   behind it, because reading those pixels would need Screen Recording
@@ -51,6 +58,45 @@ Other behaviour worth knowing:
   reappears on the next request.
 - **A grey `!`** means the token broke. That state is deliberately distinct
   from a count of zero, so a broken setup never looks like an empty queue.
+
+### On resizing
+
+It scales as a **square**, from one number. Tile, glyph, counter chips and the
+character's sprite scale all derive from it, so there is nothing to get out of
+proportion and no aspect ratio to distort the pixel art. Free width and height
+were considered and dropped for exactly that reason.
+
+The range is **28 to 128 points** — the smallest and largest real Dock tile
+sizes. Below the floor the counter's 3×5 digits stop being a number; above the
+ceiling it stops reading as a Dock peer and starts reading as a window. Your
+size is remembered across restarts, like the position.
+
+With a **mascot on it moves in steps**, not smoothly. A sprite is only crisp
+when one source pixel covers a whole number of *device* pixels, so the scale
+snaps to the backing store and the badge advances a cell at a time — 18 points
+per step on a 1× display, 9 on a 2× one. It also stops shrinking at 2× however
+far you drag, which puts the real floor at 36 points with a character on; the
+plain tile goes all the way to 28 and scales continuously. On release the size
+that was *drawn* is what gets stored, so the badge cannot drift a few points
+further from your hand every time you resize it.
+
+The grips sit on the **character, not the panel behind it**. The window is
+deliberately larger than the art it carries: a widget reserves the mood-mark
+gutter whether or not a mark is showing, and keeps bob room under the
+character's feet, so with no counts up the art fills barely two thirds of the
+height. How much of its 16x16 cell each character fills differs too — Pip and
+Byte start a column further left than Widget and Nimbus do. Anchored to the
+window, the resize cursor appeared in a different place for every character and
+came up over empty desktop; anchored to the art, it is always on the edge you
+can see. The halo and drop shadow count as art, since they are drawn.
+
+The plain tile uses its **square body** rather than the count badges overhanging
+its corners, so the grips hold still when a count appears or goes away — and
+those badges sit centred on the very corners the grips already cover.
+
+**Reset badge size** appears in the right-click menu once you are off the
+default, because a badge dragged down to its floor on a busy desktop is fiddly
+to grab again.
 
 ---
 
@@ -162,16 +208,84 @@ terminal runs better. Naming the state turned out to be the useful half.
 - **Changes requested**, naming who.
 - **Stack position** — `stacked on #100` on a child, and `restacks #101` on its
   parent, because rebasing a parent leaves its children needing their own
-  restack.
+  restack. The first is dropped inside a stack group, where the PR it names is
+  the row directly below it.
 - **Diff size and age** — lines changed, files touched, how long it has been
   open.
+
+Chips **wrap onto a second line** rather than running off the edge. A row can
+carry five of them on a bad day, and the alternatives are both worse: squeezing
+them truncates the words that make them worth reading, and letting the line
+overflow pushed whatever sat to its right — the stack marker — out past the
+row's edge, where it was clipped away entirely.
+
+### Stacks
+
+Press the **pancake button** in the filter bar and the list narrows to PRs that
+sit on each other, drawn as groups: outlined together, one outline per stack.
+
+Everywhere else the list is a **flat list of rows, exactly as it always was**. A
+plate and a column of pancakes is a lot of furniture to impose on someone who
+asked to see their failing checks, so the whole treatment — groups, plates,
+pancakes — belongs to that one button and appears nowhere else. The `stacked on
+#100` chip is the normal list's way of saying it, and it comes back the moment
+the button is off.
+
+The button is a **second axis**, not another entry in the filter menu, so it
+combines with whatever that menu is set to: *failing checks, and only in a
+stack* is one question you can ask.
+
+It **only appears when something in scope is stacked** — a filter that could
+only ever return nothing is worse than no filter. Scoped by repository, since
+that is a scope rather than a view; not by the filter menu, or the bar's
+controls would come and go every time you changed the other one. Once it is on
+it stays on screen whatever happens to your PRs, so the control that switched
+it on is always there to switch it off.
+
+Inside a group it is base last: the PR everything else sits on is at the bottom,
+and each row wears a **stack of pancakes one taller than the row below it** — so
+the base has one, the PR on top of it two, and so on. The group reads bottom-up,
+which is the order it has to be merged in.
+
+**Syrup is a garnish, not a layer.** It is its own narrow disc poured over the
+top and it never counts, so a stack of one is one whole pancake with syrup on
+it. Counting it would leave the base of every stack drawn as the one member that
+is not a pancake. It also gives the marker a shoulder — without it, uniform
+bands draw a rectangle of stripes and stop reading as a stack of anything.
+
+Some details that had to be decided:
+
+- **Stacks are what is on screen.** Links are resolved only among the PRs
+  currently listed, so a repo or state filter that hides a chain's middle leaves
+  two ordinary PRs rather than a group claiming a relationship it is not
+  showing.
+- **A group takes the place of its strongest member**, whatever the sort. A
+  stack carrying one conflicted PR surfaces under needs-attention even when
+  everything else in it is clean. Inside the group, order never changes — that
+  order is a fact about the branches, not a preference.
+- **A stack is a tree, not always a line.** Two PRs can sit on the same parent;
+  both stay in one group, each branch's run kept together.
+- **The group is identified by its base**, not its top, because PRs are pushed
+  onto a stack far more often than slid underneath it. A group whose identity
+  changed on every push would lose its measured height and resize the drawer
+  each time.
+- **Six pancakes is the cap.** Past that the marker would be taller than the row
+  carrying it; the real depth is in the tooltip.
+- **The marker's space is kept, not competed for.** The text column is given a
+  width that already excludes it, so a crowded row wraps its chips instead of
+  crowding out the pancakes — which used to make a deep stack's marker the most
+  likely one to vanish.
+- **The drawer still resizes by whole rows**, and a card's rows count. Treating
+  a card as one indivisible row would leave a filtered list with a single legal
+  height and a top edge that could not be dragged at all.
 
 ### Sorting and filtering
 
 Sort by newest, oldest, recently updated, or needs-attention (worst health
 first, ties broken by oldest — an old broken PR outranks a fresh one). Filter
 to needs-lead, changes-requested, failing-checks, open-threads, or
-ready-to-merge, with a count beside each.
+ready-to-merge, with a count beside each — plus the pancake toggle above, which
+is a second axis rather than another entry in that menu.
 
 ---
 
@@ -301,6 +415,43 @@ Each row's left accent shows its **worst** signal, so one glance down the list
 ranks what is wrong.
 
 ---
+
+## Clearing the queue
+
+Empty the review queue and a pixel banner drops in from the top of the screen:
+a green star, `ACHIEVEMENT UNLOCKED`, and `REVIEWS CLEARED`. It holds for about
+three seconds and lifts back out.
+
+It is drawn on the same grid as everything else — a 5x7 pixel font, and the
+green is `Health.good`, the very colour the ready-to-merge count already wears,
+so the app has one idea of *nothing is in your way* rather than two.
+
+**It sizes itself to the screen it lands on.** Everything about it — type,
+star, padding, the gaps — is a multiple of one scale, and that scale is the
+largest whole number keeping the banner inside about a ninth of the screen's
+width. Whole, because a sprite is only crisp when one source pixel covers a
+whole number of pixels, so the banner steps between sizes across displays
+rather than sliding. A narrow screen gets the floor instead of an unreadable
+fraction of a scale — at 1x a capital is seven points tall. On a second display
+it arrives on the screen the badge is already on, not wherever the keyboard
+happens to be.
+
+The rules are all about not wearing out:
+
+- **Only on the transition.** Going from some to none is the achievement; being
+  at none is not. Every refresh of an already-empty queue would otherwise
+  celebrate again, which turns the one moment worth marking into wallpaper.
+- **Never on the first refresh of a session**, however empty it finds things.
+  Launching into an empty queue has not cleared anything.
+- **It takes no clicks, so it never needs one.** The window ignores the mouse
+  entirely — a banner that swallowed a click on whatever it flew over would be
+  worse than no banner — and it leaves on its own.
+- **Its own window**, not part of the drawer or the badge. The drawer is
+  usually shut at that moment, and the badge is about to hide itself because
+  nothing is waiting, which is the wrong place to celebrate having nothing.
+
+`defaults write com.yourname.prradar celebrate.cleared -bool false` turns it
+off, for anyone who would rather it did not.
 
 ## Notifications
 

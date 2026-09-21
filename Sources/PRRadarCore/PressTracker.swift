@@ -12,6 +12,8 @@ public struct PressTracker: Equatable {
         case none    // not ours — hand the event on
         case move
         case resize
+        /// A grip on the collapsed badge, which resizes it as a square.
+        case corner(BadgeCorner)
     }
 
     public enum Outcome: Equatable {
@@ -19,6 +21,10 @@ public struct PressTracker: Equatable {
         case click    // never travelled far enough to be a drag
         case moved
         case resized
+        /// A corner drag on the badge. Deliberately not `.resized`: that one is
+        /// wired to the drawer's height commit, which has nothing to commit
+        /// here and would silently swallow the release.
+        case sized
     }
 
     /// Slop allowed before a press counts as a drag rather than a click.
@@ -58,6 +64,7 @@ public struct PressTracker: Equatable {
         case (_, false): return .click
         case (.move, true): return .moved
         case (.resize, true): return .resized
+        case (.corner, true): return .sized
         }
     }
 }

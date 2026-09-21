@@ -35,6 +35,10 @@ public enum SpritePalette {
         case .light:   return dark ? RGB(0.969, 0.973, 0.980) : RGB(white: 1)
         case .glass:   return dark ? RGB(0.110, 0.122, 0.141) : RGB(0.165, 0.180, 0.208)
         case .blush:   return RGB(0.949, 0.635, 0.635)
+        // Warmed a touch in Dark so the stack does not go muddy against the
+        // drawer's material, which is far darker than a white plate expects.
+        case .batter:  return dark ? RGB(0.878, 0.675, 0.365) : RGB(0.839, 0.616, 0.290)
+        case .syrup:   return dark ? RGB(0.596, 0.353, 0.153) : RGB(0.545, 0.310, 0.118)
         // Never drawn from here: the accent is Health.tint, resolved per layer.
         case .accent:  return RGB(white: 0.5)
         }

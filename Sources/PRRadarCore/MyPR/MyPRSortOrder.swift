@@ -25,23 +25,30 @@ public enum MyPRSortOrder: String, CaseIterable, Sendable {
         }
     }
 
-    public func apply(to items: [MyPullRequest]) -> [MyPullRequest] {
+    /// The rule itself, as a comparator.
+    ///
+    /// Exposed because a stack has to be placed by its strongest member rather
+    /// than sorted as loose PRs: `MyPRUnit` needs to *compare* two candidates,
+    /// not sort a list of them. `apply(to:)` is this and nothing else.
+    public func isOrderedBefore(_ lhs: MyPullRequest, _ rhs: MyPullRequest) -> Bool {
         switch self {
         case .newestFirst:
-            return items.sorted { $0.createdAt > $1.createdAt }
+            return lhs.createdAt > rhs.createdAt
         case .oldestFirst:
-            return items.sorted { $0.createdAt < $1.createdAt }
+            return lhs.createdAt < rhs.createdAt
         case .recentlyUpdated:
-            return items.sorted { $0.updatedAt > $1.updatedAt }
+            return lhs.updatedAt > rhs.updatedAt
         case .needsAttention:
             // Worst health first; ties broken by oldest, since an old broken PR
             // is more urgent than a fresh one.
-            return items.sorted {
-                $0.health.severity == $1.health.severity
-                    ? $0.createdAt < $1.createdAt
-                    : $0.health.severity > $1.health.severity
-            }
+            return lhs.health.severity == rhs.health.severity
+                ? lhs.createdAt < rhs.createdAt
+                : lhs.health.severity > rhs.health.severity
         }
+    }
+
+    public func apply(to items: [MyPullRequest]) -> [MyPullRequest] {
+        items.sorted(by: isOrderedBefore)
     }
 }
 
