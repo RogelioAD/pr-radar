@@ -63,8 +63,8 @@ enum Layout {
     /// exactly what a 2x character with its bob room needs. Was 40 when the
     /// header carried only a 12pt SF Symbol.
     ///
-    /// Nothing else has to change for this: `chromeHeight` is derived from it
-    /// and `DrawerSizing` reads `chromeHeight`, so the drawer re-measures on
+    /// Nothing else has to change for this: `chromeHeight(for:)` is derived
+    /// from it and `DrawerSizing` reads that, so the drawer re-measures on
     /// its own.
     static let headerHeight: CGFloat = 48
     static let filterBarHeight: CGFloat = 32
@@ -266,8 +266,6 @@ enum Layout {
             return headerHeight + footerHeight + 2
         }
     }
-
-    static var chromeHeight: CGFloat { chromeHeight(for: .reviews) }
 
     /// Fallback ceiling, only used if no screen can be determined. The real
     /// limit is the screen height, passed in per call.

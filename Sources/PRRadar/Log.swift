@@ -53,22 +53,54 @@ enum Log {
         ProcessInfo.processInfo.environment["PRRADAR_FAKE_STACKS"] == "1"
     }
 
-    /// PRRADAR_FAKE_CLEARED=1 drops the achievement banner on the first
-    /// refresh. It fires on a queue going from some to none, which is a moment
-    /// you cannot arrange on demand and — if the queue is already empty — one
-    /// that will not come at all.
-    static var fakeCleared: Bool {
-        ProcessInfo.processInfo.environment["PRRADAR_FAKE_CLEARED"] == "1"
+    /// PRRADAR_FAKE_BANNER=<id>[,<id>…] drops those trophies' banners on the
+    /// first refresh.
+    ///
+    /// Earning one is the thing you cannot arrange: the banner is the payoff
+    /// for a queue emptying or a hundredth merge, and neither is available on
+    /// a Tuesday afternoon. Named rather than a bare flag because the banner
+    /// is now sized around whatever it is drawing — a one-word title beside a
+    /// 32-cell trophy is a different shape from a two-word one — so seeing
+    /// *a* banner is not the same as seeing the banner.
+    ///
+    /// `1` is the old spelling and still means the original: inbox zero.
+    /// `many` fires enough at once to trip the summary.
+    static var fakeBanner: [String] {
+        guard let raw = ProcessInfo.processInfo.environment["PRRADAR_FAKE_BANNER"],
+              !raw.isEmpty
+        else { return [] }
+        if raw == "1" { return ["inboxZero"] }
+        return raw.split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
     }
 
-    /// PRRADAR_FAKE_TROPHIES=1 unlocks the whole shelf in memory, so the room
-    /// can be looked at as a finished thing. Thirty drawings only work as a
-    /// set if they can be seen as one, and earning them honestly to find out
-    /// whether the greens fight each other is not a workflow.
+    /// PRRADAR_FAKE_TROPHIES=all|none forces the shelf to one of its two ends.
     ///
-    /// In memory only: it never writes, so quitting puts the real shelf back.
-    static var fakeTrophies: Bool {
-        ProcessInfo.processInfo.environment["PRRADAR_FAKE_TROPHIES"] == "1"
+    /// Both ends are hard to reach honestly and both are worth looking at.
+    /// `all` is the finished set — thirty drawings only work as a set if they
+    /// can be seen as one, and earning them to find out whether two of the
+    /// greens fight is not a workflow. `none` is what a stranger sees, which
+    /// is otherwise visible for about four seconds on one machine ever: the
+    /// silent backfill fills the shelf on the very first refresh.
+    ///
+    /// `none` also suppresses evaluation, or the backfill would undo it
+    /// between the window opening and anybody looking at it.
+    ///
+    /// In memory only: neither ever writes, so quitting puts the real shelf
+    /// back. `1` is the old spelling of `all`.
+    /// `empty` rather than `none`, which as a case on an enum used through
+    /// an `Optional` is the same spelling as "no value" and reads as either.
+    enum Shelf: String {
+        case all, empty
+    }
+
+    static var fakeShelf: Shelf? {
+        switch ProcessInfo.processInfo.environment["PRRADAR_FAKE_TROPHIES"] {
+        case "1", "all": return .all
+        case "none", "empty": return .empty
+        default: return nil
+        }
     }
 
     static func debug(_ message: @autoclosure () -> String) {

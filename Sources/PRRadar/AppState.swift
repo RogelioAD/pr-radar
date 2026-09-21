@@ -68,13 +68,18 @@ final class AppState: ObservableObject {
     }
 
     @Published var trophyState: TrophyState = AppState.loadTrophies() {
-        // Never written while the debug flag is on: looking at the room as a
-        // finished thing must not *make* it one.
-        didSet { if !Log.fakeTrophies { Prefs.trophyState = trophyState } }
+        // Never written while the shelf is a fiction: looking at the room as
+        // a finished thing must not *make* it one, and looking at it empty
+        // must not clear it.
+        didSet { if Log.fakeShelf == nil { Prefs.trophyState = trophyState } }
     }
 
     static func loadTrophies() -> TrophyState {
-        Log.fakeTrophies ? .everythingUnlocked(at: Date()) : Prefs.trophyState
+        switch Log.fakeShelf {
+        case .all: return .everythingUnlocked(at: Date())
+        case .empty: return TrophyState()
+        case nil: return Prefs.trophyState
+        }
     }
 
     /// Mascot cycles since the drawer was last opened.

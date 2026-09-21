@@ -47,6 +47,92 @@ final class TrophyArtTests: XCTestCase {
         XCTAssertEqual(art.width, TrophyArt.size)
     }
 
+    // MARK: - Centring
+    //
+    // Nothing here is visible in a single trophy — a motif a cell high is
+    // just a motif. It is visible in a *grid* of thirty, where one sitting
+    // high makes the whole row look loose, which is exactly the kind of
+    // thing that is easier to assert than to keep noticing.
+
+    /// A motif has to be centred in its own 12 cells, or it lands off-centre
+    /// on a base that placed it perfectly.
+    func testEveryMotifIsCentredInItsOwnBox() {
+        for (name, motif) in Self.everyMotif {
+            let lit = motif.enumerated().flatMap { y, row in
+                row.enumerated().compactMap { x, c in c == "." ? nil : (x, y) }
+            }
+            XCTAssertFalse(lit.isEmpty, "\(name) is blank")
+            let xs = lit.map(\.0), ys = lit.map(\.1)
+            let middle = Double(TrophyArt.motifSize - 1) / 2
+            let cx = Double(xs.min()! + xs.max()!) / 2
+            let cy = Double(ys.min()! + ys.max()!) / 2
+            // Half a cell is the best an odd-sized drawing can do in an
+            // even-sized box; a whole cell is a mistake.
+            XCTAssertLessThan(abs(cx - middle), 1, "\(name) sits left or right")
+            XCTAssertLessThan(abs(cy - middle), 1, "\(name) sits high or low")
+        }
+    }
+
+    /// And the box itself has to be centred in the frame around it.
+    ///
+    /// Every base is symmetric, so this is exact rather than approximate —
+    /// and it is the check the medal failed. It is the one base with no cream
+    /// field to line the motif up against, so its origin was placed by eye,
+    /// and a disc drawn about a whole cell is an odd number of cells across,
+    /// which nothing 12 wide can ever be centred on.
+    func testEveryBaseCentresTheMotifItCarries() {
+        for base in [TrophyArt.Base.cup, .shield, .medal, .plaque] {
+            let sprite = base.sprite
+            let lit = sprite.litPoints
+            let xs = lit.map(\.x)
+            let frameCentre = Double(xs.min()! + xs.max()!) / 2
+            let motifCentre = Double(base.motifOrigin.x)
+                + Double(TrophyArt.motifSize - 1) / 2
+            XCTAssertEqual(motifCentre, frameCentre, accuracy: 0.001, "\(base)")
+        }
+    }
+
+    /// The motif must land inside the frame's own drawing, not half off it.
+    func testTheMotifSitsWithinTheFrame() {
+        for base in [TrophyArt.Base.cup, .shield, .medal, .plaque] {
+            let origin = base.motifOrigin
+            XCTAssertGreaterThanOrEqual(origin.x, 0, "\(base)")
+            XCTAssertGreaterThanOrEqual(origin.y, 0, "\(base)")
+            XCTAssertLessThanOrEqual(origin.x + TrophyArt.motifSize,
+                                     TrophyArt.size, "\(base)")
+            XCTAssertLessThanOrEqual(origin.y + TrophyArt.motifSize,
+                                     TrophyArt.size, "\(base)")
+        }
+    }
+
+    /// Every motif the roster draws, by name, so a failure says which one.
+    private static let everyMotif: [(String, [String])] = [
+        ("inboxZero", TrophyMotif.inboxZero),
+        ("backToZero", TrophyMotif.backToZero),
+        ("cleanSweep", TrophyMotif.cleanSweep),
+        ("swamped", TrophyMotif.swamped),
+        ("inDemand", TrophyMotif.inDemand),
+        ("juggler", TrophyMotif.juggler),
+        ("greenLight", TrophyMotif.greenLight),
+        ("allClear", TrophyMotif.allClear),
+        ("shortStack", TrophyMotif.shortStack),
+        ("tallStack", TrophyMotif.tallStack),
+        ("branchingOut", TrophyMotif.branchingOut),
+        ("rubberStamp", TrophyMotif.rubberStamp),
+        ("nightWatch", TrophyMotif.nightWatch),
+        ("weekendWork", TrophyMotif.weekendWork),
+        ("meetTheCast", TrophyMotif.meetTheCast),
+        ("bigBadge", TrophyMotif.bigBadge),
+        ("tinyBadge", TrophyMotif.tinyBadge),
+        ("pancakePress", TrophyMotif.pancakePress),
+        ("regular", TrophyMotif.regular),
+        ("veteran", TrophyMotif.veteran),
+        ("upToDate", TrophyMotif.upToDate),
+        ("fiftyMerged", TrophyMotif.fiftyMerged),
+        ("century", TrophyMotif.century),
+        ("mystery", TrophyMotif.mystery),
+    ]
+
     // MARK: - Tiers
 
     /// A tier swap must change the metal and nothing else. If it changed the

@@ -168,6 +168,7 @@ struct AchievementBannerView: View {
 
     private var padding: CGFloat { Achievement.paddingCells * scale }
     private var radius: CGFloat { Achievement.paddingCells * scale * 0.8 }
+    private var halo: CGFloat { Achievement.haloCells * scale }
 
     private var emblemScale: CGFloat {
         guard let sprite = emblem.layers.first?.sprite else { return scale }
@@ -189,16 +190,25 @@ struct AchievementBannerView: View {
             }
         }
         .padding(padding)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(Color.black.opacity(0.88))
         )
         .overlay(
-            // Green, so the frame says the same thing the star does.
+            // Green, so the frame says the same thing the emblem does.
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .strokeBorder(Health.good.tint, lineWidth: scale)
         )
+        // The halo, outside both. Filled rather than stroked: a fill under a
+        // card inset by exactly the ring's width leaves a ring of even
+        // thickness round every corner, where a stroke has to guess at how
+        // two continuous curves of different radii line up.
+        .padding(halo)
+        .background(
+            RoundedRectangle(cornerRadius: radius + halo, style: .continuous)
+                .fill(Color(SpritePalette.halo))
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .shadow(color: .black.opacity(0.45), radius: 10 * scale, y: 4 * scale)
     }
 }

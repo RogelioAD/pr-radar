@@ -44,6 +44,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.debug("applicationDidFinishLaunching")
+        // The system's tooltip delay is tuned for hints you can do without.
+        // Here a tooltip is the *only* label a trophy has — the grid is
+        // deliberately captionless — so waiting out the default reads as the
+        // app having nothing to say rather than as it being discreet.
+        //
+        // Registered rather than set, so it lives in the registration domain:
+        // anyone who has chosen their own `NSInitialToolTipDelay` keeps it.
+        UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 250])
         guard !anotherCopyIsRunning() else {
             // Before any UI exists, so a duplicate never gets as far as
             // placing a panel.
@@ -296,11 +304,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// All the rules themselves live in `TrophyEvaluator`. This assembles
     /// what it is allowed to see and does what it says.
     private func evaluateTrophies() {
-        // The banner needs something to be earned, and most of what earns one
-        // is not arrangeable on demand. This drops a real one on the first
-        // refresh so the thing can be looked at. See `Log.fakeCleared`.
-        if Log.fakeCleared, lastReviewCount == nil {
-            banner.show([.inboxZero], on: panel.currentScreen)
+        // A forced shelf is a fiction, and evaluating against it would end
+        // it: the backfill would fill an empty one on the first refresh,
+        // which is the very state `none` exists to hold still.
+        guard Log.fakeShelf == nil else { return }
+
+        // The banner needs something to be earned, and most of what earns
+        // one is not arrangeable on demand. This drops real ones on the first
+        // refresh so they can be looked at. See `Log.fakeBanner`.
+        if lastReviewCount == nil, !Log.fakeBanner.isEmpty {
+            banner.show(Self.requestedBanners(Log.fakeBanner),
+                        on: panel.currentScreen)
         }
 
         var snapshot = TrophySnapshot()
@@ -332,6 +346,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard Prefs.celebrateCleared else { return }
         banner.show(unlocked, on: panel.currentScreen)
+    }
+
+    /// Resolves `PRRADAR_FAKE_BANNER` into trophies.
+    ///
+    /// Debug only. `many` expands past the banner's run limit so the summary
+    /// form is reachable — that path is otherwise only seen on a first
+    /// install, which is exactly once per machine.
+    private static func requestedBanners(_ names: [String]) -> [TrophyID] {
+        if names == ["many"] {
+            return Trophy.all.prefix(8).map(\.id)
+        }
+        return names.compactMap { name in
+            guard let id = TrophyID(rawValue: name) else {
+                Log.debug("no trophy called '\(name)'")
+                return nil
+            }
+            return id
+        }
     }
 
     /// How many pull requests the viewer has ever merged.

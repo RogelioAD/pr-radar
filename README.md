@@ -233,11 +233,17 @@ PRRADAR_FAKE_BEHIND=3     # make your PRs look N commits behind, to see the
 PRRADAR_FAKE_READY=1      # make your PRs look mergeable, to see the green badge
 PRRADAR_FAKE_STACKS=1     # cut the longest stack in half, so the list shows two
                           # groups — how several stacks lay out together
-PRRADAR_FAKE_CLEARED=1    # drop the "reviews cleared" banner on the first
-                          # refresh, which otherwise needs an emptying queue
-PRRADAR_FAKE_TROPHIES=1   # fill the trophy shelf, to look at all thirty
-                          # drawings as a set. In memory only — it never
-                          # writes, so quitting puts the real shelf back
+PRRADAR_FAKE_BANNER=century,carousel
+                          # drop those trophies' banners on the first refresh.
+                          # Earning one is the thing you cannot arrange, and
+                          # the banner is sized around whatever it draws, so
+                          # seeing *a* banner is not seeing the banner.
+                          # `1` means inbox zero; `many` trips the summary
+PRRADAR_FAKE_TROPHIES=all # force the shelf to one of its two ends. `all` is
+                          # the finished set; `none` is what a stranger sees,
+                          # which otherwise exists for about four seconds on
+                          # one machine ever. In memory only — neither writes,
+                          # so quitting puts the real shelf back
 ```
 
 ### Working on this with Claude Code

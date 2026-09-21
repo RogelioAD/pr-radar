@@ -50,6 +50,18 @@ extension Achievement {
     /// Everything about the banner is a multiple of the sprite scale, so it is
     /// one number that decides how big it is — and the screen decides that
     /// number.
+    /// The white ring around the whole banner.
+    ///
+    /// The same bargain the badge's sprite halo makes, for the same reason:
+    /// this arrives unannounced over a desktop the app is not allowed to look
+    /// at, and a near-black card on somebody's dark wallpaper has no edge at
+    /// all. Paired with the dark card inside it the outline carries both
+    /// poles of contrast, so one static treatment survives any backdrop.
+    ///
+    /// One cell, like the sprite halo — so it scales with everything else and
+    /// is never thinner than the green border it sits outside.
+    public static let haloCells: CGFloat = 1
+
     public static let paddingCells: CGFloat = 6
     public static let gapCells: CGFloat = 5
     public static let lineGapCells: CGFloat = 2
@@ -105,10 +117,13 @@ extension Achievement {
         let textWidth = max(CGFloat(BannerFont.width(of: title)) * scale,
                             CGFloat(BannerFont.width(of: headline)) * header)
 
+        // The halo is drawn, so it is counted — the window is exactly the
+        // drawing, and its corners are where the drawing's are.
+        let halo = haloCells * scale * 2
         return CGSize(
-            width: padding * 2 + emblemWidth + gap + textWidth,
-            height: padding * 2 + max(CGFloat(emblem.height) * art,
-                                      textHeight(scale: scale))
+            width: halo + padding * 2 + emblemWidth + gap + textWidth,
+            height: halo + padding * 2 + max(CGFloat(emblem.height) * art,
+                                             textHeight(scale: scale))
         )
     }
 

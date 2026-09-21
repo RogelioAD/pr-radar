@@ -554,11 +554,17 @@ final class PanelController {
     /// frame made the drag lurch between rows rather than track the hand.
     private func previewResize(to windowHeight: CGFloat) {
         isDraggingHeight = true
+        // The *active* surface's chrome, not the Reviews tab's. The trophy
+        // room hides the tab strip and the filter bar, so charging the drag
+        // for them put the content height 64pt — one whole row of trophies —
+        // below what the window was actually showing, and the edge fought
+        // the pointer all the way up.
+        let chrome = Layout.chromeHeight(for: state.activeSurface)
         let content = Layout.sizing(for: state.activeSurface).clamp(
-            windowHeight - Layout.chromeHeight,
+            windowHeight - chrome,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
-            limit: availableMaxHeight - Layout.chromeHeight
+            limit: availableMaxHeight - chrome
         )
         resizeDraft = content
         state.userContentHeight = content
@@ -576,7 +582,7 @@ final class PanelController {
             draft,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
-            limit: availableMaxHeight - Layout.chromeHeight
+            limit: availableMaxHeight - Layout.chromeHeight(for: state.activeSurface)
         )
         state.userContentHeight = snapped
         Prefs.setDrawerContentHeight(snapped, for: state.activeSurface)

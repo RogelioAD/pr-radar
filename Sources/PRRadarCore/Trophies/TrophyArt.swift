@@ -96,7 +96,7 @@ extension TrophyArt.Base {
         switch self {
         case .cup: return Point(10, 4)
         case .shield: return Point(10, 6)
-        case .medal: return Point(9, 14)
+        case .medal: return Point(10, 14)
         case .plaque: return Point(10, 6)
         }
     }
@@ -202,38 +202,38 @@ public enum TrophyBaseArt {
     /// round medal reads as a sticker stuck on it. The motif sits straight on
     /// the metal instead.
     public static let medal = Sprite([
-            "........kuuuk......kuuuk........",
-            "........kuuuk......kuuuk........",
-            "........kuuuk......kuuuk........",
-            ".........kuuuk....kuuuk.........",
-            ".........kuuuk....kuuuk.........",
-            ".........kuuuk....kuuuk.........",
-            "..........kuuuk..kuuuk..........",
-            "..........kuuuk..kuuuk..........",
-            "..........kuuuk..kuuuk..........",
-            "...........kukkkkkuuk...........",
-            "..........kknnnnnnnkk...........",
-            ".........knnnkkkkknnnk..........",
-            ".......kknnkkoooookknnkk........",
-            ".......knkkoooooooookknk........",
-            "......knkoooooooooooooknk.......",
-            ".....knnkoooooooooooooknnk......",
-            ".....knkoooooooooooooooknk......",
-            ".....nnkoooooooooooooooknn......",
-            "....knkoooooooooooooooooknk.....",
-            "....knkoooooooooooooooooknk.....",
-            "....knkoooooooooooooooooknk.....",
-            "....knkoooooooooooooooooknk.....",
-            "....knkoooooooooooooooooknk.....",
-            ".....nnkoooooooooooooooknn......",
-            ".....knkoooooooooooooooknk......",
-            ".....knnkoooooooooooooknnk......",
-            "......knkoooooooooooooknk.......",
-            ".......knkkoooooooookknk........",
-            ".......kknnkkoooookknnkk........",
-            ".........knnnkkkkknnnk..........",
-            "..........kknnnnnnnkk...........",
-            ".............kkkkk..............",
+        "........kuuuk......kuuuk........",
+        "........kuuuk......kuuuk........",
+        "........kuuuk......kuuuk........",
+        ".........kuuuk....kuuuk.........",
+        ".........kuuuk....kuuuk.........",
+        ".........kuuuk....kuuuk.........",
+        "..........kuuuk..kuuuk..........",
+        "..........kuuuk..kuuuk..........",
+        "..........kuuuk..kuuuk..........",
+        "...........kuuukkuuuk...........",
+        "...........kkkkkkkkkk...........",
+        "..........kknnkkkknnkk..........",
+        ".........knkkooooookknk.........",
+        "........knkooooooooooknk........",
+        ".......knkooooooooooooknk.......",
+        ".......kkooooooooooooookk.......",
+        "......knkooooooooooooooknk......",
+        "......knoooooooooooooooonk......",
+        "......kkooooooooooooooookk......",
+        "......kkooooooooooooooookk......",
+        "......kkooooooooooooooookk......",
+        "......kkooooooooooooooookk......",
+        "......knoooooooooooooooonk......",
+        "......knkooooooooooooooknk......",
+        ".......kkooooooooooooookk.......",
+        ".......knkooooooooooooknk.......",
+        "........knkooooooooooknk........",
+        ".........knkkooooookknk.........",
+        "..........kknnkkkknnkk..........",
+        "............kkkkkkkk............",
+        "................................",
+        "................................",
     ])
 
     /// An engraved plate on a stand. The reference-book base, for trophies
@@ -338,6 +338,7 @@ public enum TrophyMotif {
     /// Outlines rather than solids: the field behind it is already cream, and
     /// a cream sheet on a cream plate is a blank plate.
     public static let swamped = [
+            "............",
             "...tttttt...",
             "...t....t...",
             "..tttttttt..",
@@ -349,12 +350,12 @@ public enum TrophyMotif {
             "tttttttttttt",
             "............",
             "............",
-            "............",
     ]
 
     /// Several people, all looking your way.
     public static let inDemand = [
             "............",
+            "............",
             "..u...u...u.",
             ".uuu.uuu.uuu",
             "..u...u...u.",
@@ -362,7 +363,6 @@ public enum TrophyMotif {
             ".uuu.uuu.uuu",
             "uuuuuuuuuuuu",
             "uuuuuuuuuuuu",
-            "............",
             "............",
             "............",
             "............",
@@ -466,6 +466,7 @@ public enum TrophyMotif {
 
     /// A stamp coming down on a line.
     public static let rubberStamp = [
+            "............",
             "....tttt....",
             "....t..t....",
             "....t..t....",
@@ -476,7 +477,6 @@ public enum TrophyMotif {
             "............",
             "tttttttttttt",
             "tttttttttttt",
-            "............",
             "............",
     ]
 
@@ -631,8 +631,6 @@ public enum TrophyMotif {
     public static let fiftyMerged = [
             "............",
             "............",
-            "............",
-            "............",
             "..ttt.ttt...",
             "..t...t.t...",
             "..ttt.t.t...",
@@ -641,12 +639,12 @@ public enum TrophyMotif {
             "............",
             "....f..f....",
             "..ffffffff..",
+            "............",
+            "............",
     ]
 
     /// The same, one order of magnitude on.
     public static let century = [
-            "............",
-            "............",
             "............",
             "............",
             ".t..ttt.ttt.",
@@ -657,6 +655,8 @@ public enum TrophyMotif {
             "............",
             "....f..f....",
             "..ffffffff..",
+            "............",
+            "............",
     ]
 
     /// A question mark, for a trophy that will not say what it is.
