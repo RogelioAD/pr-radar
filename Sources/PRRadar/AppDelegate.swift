@@ -235,7 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // every token over the network to report its state. Synchronously on
         // the main thread that is a beachball on every poll, where the old code
         // made one fast local call.
-        let accounts = await Task.detached { Accounts.discover() }.value
+        let accounts = Self.padded(await Task.detached { Accounts.discover() }.value)
         state.accounts = accounts
         validateAccountFilter(against: accounts)
 
@@ -505,6 +505,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.debug("merged count failed: \(error)")
             return nil
         }
+    }
+
+    /// Repeats the discovered account up to `PRRADAR_FAKE_ACCOUNTS`.
+    ///
+    /// Debug only. See `Log.fakeAccounts`. The copies are marked active so that
+    /// `Accounts.token(for:)` falls back to the real token for them — without
+    /// that they would every one of them fail to resolve, and the fake would
+    /// only ever show the strip full of broken accounts rather than the working
+    /// state it exists to produce.
+    private static func padded(_ accounts: [Account]) -> [Account] {
+        guard let want = Log.fakeAccounts, let real = accounts.first,
+              accounts.count < want
+        else { return accounts }
+        let extra = (accounts.count..<want).map { index in
+            Account(login: "\(real.login)-alt\(index)",
+                    host: real.host,
+                    isActive: true,
+                    isHealthy: true,
+                    scopes: real.scopes)
+        }
+        Log.debug("faking \(extra.count) extra account(s)")
+        return accounts + extra
     }
 
     /// What this account contributed to the last round, kept when a fetch for

@@ -49,6 +49,26 @@ enum Log {
         ProcessInfo.processInfo.environment["PRRADAR_FAIL_ACCOUNT"]
     }
 
+    /// PRRADAR_FAKE_ACCOUNTS=n stands the drawer up as though `gh` were logged
+    /// in to n accounts, by repeating the real one under invented logins.
+    ///
+    /// The whole point of this feature is what happens above one account, and
+    /// that is the one thing a machine with a single login cannot show — the
+    /// strip does not appear, the merge never dedupes, and the scope has
+    /// nothing to scope to. `PRRADAR_FAIL_ACCOUNT` exists for the same reason
+    /// and covers the other half.
+    ///
+    /// The copies carry the real account's token, so every one of them returns
+    /// the *same* rows. That is not a limitation of the fake, it is the case
+    /// worth seeing: two identities that both belong to a reviewing team really
+    /// do surface one pull request twice, and `AccountMerge` giving it to the
+    /// first account is the behaviour the strip's counts have to reflect.
+    static var fakeAccounts: Int? {
+        ProcessInfo.processInfo.environment["PRRADAR_FAKE_ACCOUNTS"]
+            .flatMap(Int.init)
+            .map { min(max($0, 1), 6) }
+    }
+
     /// PRRADAR_FAKE_READY=1 forces every one of my PRs to look mergeable, so
     /// the badge's green dot can be inspected. Both real PRs are BLOCKED on
     /// reviews, so there is otherwise no way to see it.
