@@ -291,6 +291,32 @@ final class AppState: ObservableObject {
                         mine: accountScopedMyPRs.map(\.repo))
     }
 
+    /// Every repo seen, paired with the host it was seen on.
+    ///
+    /// Deliberately *not* account-scoped, unlike `repos`: this backs the leads
+    /// editor, and leads are a standing decision about a repository rather
+    /// than a view of today's list. Scoping it would hide a repo's leads
+    /// behind whichever identity happened to be selected, and editing them
+    /// would mean remembering to switch accounts first.
+    var leadRepos: [RepoRef] {
+        let seen = items.map { ($0.repo, $0.account) } + myPRs.map { ($0.repo, $0.account) }
+        var refs: Set<RepoRef> = []
+        for (repo, account) in seen {
+            refs.insert(RepoRef(repo: repo, host: Accounts.host(ofID: account)))
+        }
+        return RepoRef.sorted(Array(refs))
+    }
+
+    /// An account that can read `host`, for the member search.
+    ///
+    /// The active account's token is the wrong one to reach for now: the repo
+    /// being edited may belong to the other identity entirely, and searching
+    /// an Enterprise repo with a github.com token returns nothing rather than
+    /// failing — which reads as "this repo has no members".
+    func account(forHost host: String) -> Account? {
+        accounts.first { $0.host == host && $0.isHealthy } ?? accounts.first { $0.host == host }
+    }
+
     func repoCount(_ repo: String) -> (reviews: Int, mine: Int) {
         (RepoScope.apply(repo, to: accountScopedItems, repoOf: \.repo).count,
          RepoScope.apply(repo, to: accountScopedMyPRs, repoOf: \.repo).count)

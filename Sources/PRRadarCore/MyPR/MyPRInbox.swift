@@ -9,11 +9,20 @@ import Foundation
 /// approval would make the lead chip claim a PR is unblocked when GitHub
 /// considers it blocked.
 public struct MyPRInbox {
-    /// Leads per repo, keyed by `Leads.key(for:)`.
-    public let leads: [String: Set<String>]
+    /// Leads per repo, keyed by `Leads.key(host:repo:)`.
+    public let leads: [String: [String]]
 
-    public init(leads: [String: [String]] = [:]) {
-        self.leads = leads.mapValues(Set.init)
+    /// The host every repo in this payload belongs to.
+    ///
+    /// One per inbox rather than one per row, because a payload comes from a
+    /// single account and an account belongs to a single host. It is what
+    /// separates `acme/app` on github.com from `acme/app` on an Enterprise
+    /// host, which are two repositories and two sets of leads.
+    public let host: String
+
+    public init(leads: [String: [String]] = [:], host: String = Leads.defaultHost) {
+        self.leads = leads
+        self.host = host
     }
 
     public func build(from result: MyPRSearchResult) -> [MyPullRequest] {
@@ -32,7 +41,7 @@ public struct MyPRInbox {
               let base = node.baseRefName
         else { return nil }
 
-        let repoLeads = leads[Leads.key(for: repo)] ?? []
+        let repoLeads = Set(Leads.leads(for: repo, host: host, in: leads))
 
         let approvals = (node.latestReviews?.nodes ?? []).compactMap { review -> Approval? in
             guard let login = review.author?.login,

@@ -410,7 +410,7 @@ final class LeadsTests: XCTestCase {
     }
 
     func testConfiguredRepoGatesAndMatchesCaseInsensitively() throws {
-        let inbox = MyPRInbox(leads: [Leads.key(for: "Acme/Repo"): ["alice"]])
+        let inbox = MyPRInbox(leads: [Leads.key(host: Leads.defaultHost, repo: "Acme/Repo"): ["alice"]])
         let approved = inbox.build(from: try result(repo: "Acme/Repo", approver: "alice"))
         XCTAssertTrue(approved[0].hasLeadGate)
         XCTAssertFalse(approved[0].needsLead)
@@ -422,7 +422,8 @@ final class LeadsTests: XCTestCase {
         var all = Leads.add("@Alice ", to: "Acme/Repo", in: [:])
         all = Leads.add("alice", to: "acme/repo", in: all)
         all = Leads.add("  ", to: "acme/repo", in: all)
-        XCTAssertEqual(all, ["acme/repo": ["Alice"]])
+        // Host-qualified now — see LeadHostTests.
+        XCTAssertEqual(all, ["github.com/acme/repo": ["Alice"]])
     }
 
     func testRemovingLastLeadDropsTheRepoKey() {

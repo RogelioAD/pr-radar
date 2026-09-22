@@ -154,6 +154,17 @@ extension Accounts {
     /// whole a long login would win its argument with the repo name next to it
     /// and truncate *that* instead — and of the two, the repo is what the row
     /// is about. Capping the login is choosing which one loses.
+    /// The host half of an `Account.id`, which is all most callers need.
+    ///
+    /// Returns the default host for an empty id — the stand-in account used
+    /// when `gh` cannot be asked carries no id, and a repo seen through it is
+    /// a github.com repo until something says otherwise.
+    public static func host(ofID id: String) -> String {
+        guard let slash = id.firstIndex(of: "/") else { return Leads.defaultHost }
+        let host = String(id[id.startIndex..<slash])
+        return host.isEmpty ? Leads.defaultHost : host
+    }
+
     public static func shortLogin(_ login: String, limit: Int = 14) -> String {
         login.count <= limit ? login : login.prefix(limit - 1) + "…"
     }

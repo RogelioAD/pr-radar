@@ -4,29 +4,49 @@ import PRRadarCore
 /// Edits the leads for each repo. Suggestions come from the repo's members,
 /// but any typed login can be added.
 struct LeadsEditorView: View {
-    let repos: [String]
-    let search: (String, String) async throws -> [Member]
+    let repos: [RepoRef]
+    let search: (RepoRef, String) async throws -> [Member]
     let onChange: () -> Void
 
-    @State private var repo: String
+    @State private var repo: RepoRef?
     @State private var leads = Prefs.leadsByRepo
     @State private var text = ""
     @State private var suggestions: [Member] = []
     @State private var searchError: String?
 
-    init(repos: [String], search: @escaping (String, String) async throws -> [Member],
+    init(repos: [RepoRef], search: @escaping (RepoRef, String) async throws -> [Member],
          onChange: @escaping () -> Void) {
         // Repos that already have leads stay editable even if no PR is open.
-        let known = Set(repos.map(Leads.key(for:)))
-        let extra = Prefs.leadsByRepo.keys.filter { !known.contains($0) }
-        let all = (repos + extra).sorted { $0.lowercased() < $1.lowercased() }
-        self.repos = all
+        let known = Set(repos.map(\.id))
+        let extra = Prefs.leadsByRepo.keys
+            .filter { !known.contains($0) }
+            .compactMap(Self.parse(storedKey:))
+        self.repos = RepoRef.sorted(repos + extra)
         self.search = search
         self.onChange = onChange
-        _repo = State(initialValue: all.first ?? "")
+        _repo = State(initialValue: RepoRef.sorted(repos + extra).first)
     }
 
-    private var current: [String] { Leads.leads(for: repo, in: leads) }
+    /// Turns a stored key back into the repo it names.
+    ///
+    /// Three segments is `host/owner/repo`; two is the unqualified key this was
+    /// stored under before hosts were part of it, which is read as the default
+    /// host. Anything else is not a key this app wrote and is dropped rather
+    /// than guessed at — a malformed entry should not become a row offering to
+    /// edit a repository that does not exist.
+    private static func parse(storedKey key: String) -> RepoRef? {
+        let parts = key.split(separator: "/", omittingEmptySubsequences: false)
+        switch parts.count {
+        case 3: return RepoRef(repo: "\(parts[1])/\(parts[2])", host: String(parts[0]))
+        case 2: return RepoRef(repo: key)
+        default: return nil
+        }
+    }
+
+    private var current: [String] {
+        guard let repo else { return [] }
+        return Leads.leads(for: repo.repo, host: repo.host, in: leads)
+    }
 
     private var visibleSuggestions: [Member] {
         suggestions.filter { member in
@@ -41,7 +61,7 @@ struct LeadsEditorView: View {
                     .foregroundStyle(.secondary)
             } else {
                 Picker("Repo", selection: $repo) {
-                    ForEach(repos, id: \.self) { Text($0).tag($0) }
+                    ForEach(repos) { Text($0.label).tag(Optional($0)) }
                 }
 
                 if current.isEmpty {
@@ -80,11 +100,11 @@ struct LeadsEditorView: View {
         }
         .padding(16)
         .frame(width: 380)
-        .task(id: "\(repo)|\(text)") { await runSearch() }
+        .task(id: "\(repo?.id ?? "")|\(text)") { await runSearch() }
     }
 
     private func runSearch() async {
-        guard !repo.isEmpty else { return }
+        guard let repo else { return }
         // Debounce: a newer keystroke cancels this task during the sleep.
         try? await Task.sleep(nanoseconds: 250_000_000)
         guard !Task.isCancelled else { return }
@@ -101,13 +121,15 @@ struct LeadsEditorView: View {
     }
 
     private func add(_ login: String) {
-        leads = Leads.add(login, to: repo, in: leads)
+        guard let repo else { return }
+        leads = Leads.add(login, to: repo.repo, host: repo.host, in: leads)
         commit()
         text = ""
     }
 
     private func remove(_ login: String) {
-        leads = Leads.remove(login, from: repo, in: leads)
+        guard let repo else { return }
+        leads = Leads.remove(login, from: repo.repo, host: repo.host, in: leads)
         commit()
     }
 

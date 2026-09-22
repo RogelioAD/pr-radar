@@ -405,7 +405,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard Log.failAccount != "mine" else {
                     throw TokenError.notFound  // any error; the path is what matters
                 }
-                result.myPRs = tagged(try await fetchMyPRs(client: client), with: account)
+                result.myPRs = tagged(try await fetchMyPRs(client: client, host: account.host),
+                                      with: account)
             } catch {
                 // Left nil deliberately. The account stays reachable — its
                 // review requests arrived — but it is short, so it is marked,
@@ -545,9 +546,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// One account's own pull requests.
-    private func fetchMyPRs(client: GitHubClient) async throws -> [MyPullRequest] {
+    private func fetchMyPRs(client: GitHubClient,
+                            host: String) async throws -> [MyPullRequest] {
         let result = try await client.fetchMyPullRequests()
-        var mine = MyPRInbox(leads: Prefs.leadsByRepo).build(from: result)
+        var mine = MyPRInbox(leads: Prefs.leadsByRepo, host: host).build(from: result)
 
         // Second phase, independently fallible: if it fails, behindBy stays
         // nil and the row shows "behind ?" rather than claiming "behind 0".
@@ -667,10 +669,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func menuEditLeads() {
         let view = LeadsEditorView(
-            repos: state.repos,
-            search: { repo, text in
-                try await GitHubClient(token: try Token.resolve())
-                    .searchMembers(repo: repo, matching: text)
+            repos: state.leadRepos,
+            // The token of an account that can actually see this repo, rather
+            // than whichever one `gh` has active. With two identities logged
+            // in, the repo being edited may belong entirely to the other one —
+            // and searching a repo the token cannot see returns an empty list
+            // rather than an error, which reads as "this repo has no members".
+            search: { [weak self] ref, text in
+                guard let account = self?.state.account(forHost: ref.host),
+                      let token = Accounts.token(for: account)
+                else { throw TokenError.notFound }
+                return try await GitHubClient(token: token)
+                    .searchMembers(repo: ref.repo, matching: text)
             },
             onChange: { [weak self] in self?.refreshNow() })
         // A fresh view each time, so the repo list and leads are current.
