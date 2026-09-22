@@ -63,8 +63,18 @@ struct LeadsEditorView: View {
     /// the drawer is there to show.
     private static let suggestionLimit = 4
 
+    /// Whether the reader has actually asked for suggestions.
+    ///
+    /// The section used to search the moment the room opened, so every repo
+    /// arrived with four strangers listed under a field nobody had touched —
+    /// a network round trip, and a list that reads as a recommendation, both
+    /// spent on a question that had not been asked. Clicking the field is the
+    /// question.
+    private var isSearching: Bool { focus == .leadSearch }
+
     private var visibleSuggestions: [Member] {
-        suggestions.filter { member in
+        guard isSearching else { return [] }
+        return suggestions.filter { member in
             !current.contains { $0.caseInsensitiveCompare(member.login) == .orderedSame }
         }
     }
@@ -118,7 +128,9 @@ struct LeadsEditorView: View {
                 }
             }
         }
-        .task(id: "\(repo?.id ?? "")|\(text)") { await runSearch() }
+        // Focus is part of the key, so asking for the field is what starts the
+        // search and leaving it is what ends one.
+        .task(id: "\(repo?.id ?? "")|\(text)|\(isSearching)") { await runSearch() }
         // The room can be opened before the first fetch has named a repo, and
         // a picker left on nothing once the list arrives is a section that
         // looks broken until it is touched.
@@ -128,6 +140,14 @@ struct LeadsEditorView: View {
     }
 
     private func runSearch() async {
+        // Dropped rather than kept for next time: leaving the field and coming
+        // back should ask again, because the leads may have changed underneath
+        // and a stale list is worse than a short wait.
+        guard isSearching else {
+            suggestions = []
+            searchError = nil
+            return
+        }
         guard let repo else { return }
         // Debounce: a newer keystroke cancels this task during the sleep.
         try? await Task.sleep(nanoseconds: 250_000_000)
@@ -149,6 +169,10 @@ struct LeadsEditorView: View {
         leads = Leads.add(login, to: repo.repo, host: repo.host, in: leads)
         commit()
         text = ""
+        // Picking one from the list must not close the list: adding a second
+        // lead is the common case, and clicking the suggestion is what would
+        // otherwise have taken the focus away from the field that produced it.
+        focus = .leadSearch
     }
 
     private func remove(_ login: String) {
