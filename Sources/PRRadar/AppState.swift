@@ -331,6 +331,29 @@ final class AppState: ObservableObject {
     /// account with eighteen open pull requests, which reads as "nothing here"
     /// — a number whose meaning you have to already know is worse than no
     /// number, and this app's whole badge is built on the opposite rule.
+    /// Both tabs' counts for one account, the way the repo menu reports a repo.
+    ///
+    /// Two numbers rather than `accountCount`'s one, because that answers for
+    /// whichever tab is showing and the settings room has no tab — a single
+    /// number there would silently mean "reviews" or "mine" depending on where
+    /// the drawer happened to be before it was opened.
+    func accountCounts(_ id: String) -> (reviews: Int, mine: Int) {
+        (AccountScope.apply(id, to: items, accountOf: \.account).count,
+         AccountScope.apply(id, to: myPRs, accountOf: \.account).count)
+    }
+
+    /// What is wrong with an account, or nil when nothing is.
+    ///
+    /// Ordered by what the user can act on first: a token `gh` already knows is
+    /// bad is a login away from working, a round that failed may simply be the
+    /// network, and a missing scope is a standing choice they may have made.
+    func accountProblem(_ account: Account) -> String? {
+        if !account.isHealthy { return "Needs `gh auth login`" }
+        if failedAccounts.contains(account.id) { return "Could not be read this refresh" }
+        if account.canReadTeams == false { return "No read:org — team reviews will not appear" }
+        return nil
+    }
+
     func accountCount(_ id: String?) -> Int {
         switch selectedTab {
         case .reviews: return AccountScope.apply(id, to: items, accountOf: \.account).count

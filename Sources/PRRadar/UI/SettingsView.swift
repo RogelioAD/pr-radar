@@ -78,6 +78,7 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: Layout.settingsRowSpacing) {
                 switch section {
+                case .accounts: accounts
                 case .general: general
                 case .leads: leads
                 case .appearance: appearance
@@ -123,6 +124,73 @@ struct SettingsView: View {
         toggle("Celebrate a cleared queue",
                help: "Show the achievement banner when the last review is done",
                isOn: $state.celebrateCleared)
+    }
+
+    // MARK: - Accounts
+
+    /// Who the app is looking as, and whether each of them is actually working.
+    ///
+    /// Read-only on purpose. Accounts are `gh`'s to add and remove — this app
+    /// has always borrowed that login rather than owning one — so a control
+    /// here would either lie about what it can do or shell out to a CLI on the
+    /// user's behalf. What it can honestly offer is the thing `gh auth status`
+    /// makes you leave the app to find out: which identities are in play, what
+    /// each is contributing, and which one is the reason a count looks short.
+    ///
+    /// Shown at one account as well as many, unlike the filter bar's picker.
+    /// A picker offering a single choice is a control that cannot be used; a
+    /// *statement* of which account you are looking as is worth reading even
+    /// when there is only one, and it is where the `read:org` warning finally
+    /// has a home that is not a tooltip.
+    @ViewBuilder
+    private var accounts: some View {
+        if state.accounts.isEmpty {
+            Text("No account. PR Radar reads the login from `gh auth status`.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            ForEach(Array(state.accounts.enumerated()), id: \.element.id) { index, account in
+                if index > 0 { Divider() }
+                accountRow(account)
+            }
+        }
+    }
+
+    private func accountRow(_ account: Account) -> some View {
+        let counts = state.accountCounts(account.id)
+        let problem = state.accountProblem(account)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(account.login.isEmpty ? "account" : account.login)
+                if account.isActive {
+                    // `gh`'s active account is the one every other tool on this
+                    // machine will use, which is worth knowing when two of them
+                    // disagree about what you can see.
+                    Text("active")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.primary.opacity(0.10)))
+                }
+                Spacer(minLength: 8)
+                Text("\(counts.reviews) review, \(counts.mine) mine")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            HStack(spacing: 4) {
+                if account.host != Leads.defaultHost {
+                    Text(account.host).foregroundStyle(.tertiary)
+                }
+                if let problem {
+                    Label(problem, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(Health.bad.tint)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .font(.system(size: 10))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Leads

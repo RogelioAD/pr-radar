@@ -8,9 +8,10 @@ import Foundation
 /// half. Listing them in one enum is what keeps the count the view draws and
 /// the count the geometry believes from drifting apart.
 ///
-/// macOS order: the settings everyone changes first, then what the app is
-/// watching, then how it looks, then the machinery underneath.
+/// Order: who the app is looking as, then the settings everyone changes, then
+/// what it is watching, then how it looks, then the machinery underneath.
 public enum SettingsSection: String, CaseIterable, Sendable, Identifiable {
+    case accounts
     case general
     case leads
     case appearance
@@ -20,6 +21,7 @@ public enum SettingsSection: String, CaseIterable, Sendable, Identifiable {
 
     public var title: String {
         switch self {
+        case .accounts: return "Accounts"
         case .general: return "General"
         case .leads: return "Leads"
         case .appearance: return "Appearance"
@@ -30,6 +32,8 @@ public enum SettingsSection: String, CaseIterable, Sendable, Identifiable {
     /// Set beside the title, at the size a grouped form's header uses.
     public var symbol: String {
         switch self {
+        // The same profile glyph the account picker wears in the filter bar.
+        case .accounts: return "person.crop.circle"
         case .general: return "gearshape"
         // The same seal the lead chips wear on a row, so the setting and the
         // thing it governs are visibly one idea.
