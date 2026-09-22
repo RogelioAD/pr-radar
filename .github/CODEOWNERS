@@ -7,4 +7,10 @@
 #
 # Only read from the default branch, so editing it on a side branch changes
 # nothing until that branch lands.
+#
+# The repository-admin role bypasses the ruleset, which is deliberate: this
+# gates contributions, and the owner is the reviewer rather than the reviewed.
+# `make release` therefore pushes main directly and GitHub reports a bypassed
+# rule violation on every release. That line is the arrangement working, not
+# failing.
 * @RogelioAD

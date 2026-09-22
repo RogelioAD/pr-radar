@@ -101,6 +101,19 @@ export RELEASE_NOTES
 # the repo for releases gets an email from GitHub.
 #
 #   make release VERSION=1.1.0
+#
+# The push below reports `Bypassed rule violations for refs/heads/main`, and
+# that is the intended path rather than something going wrong. The "main: pull
+# requests only" ruleset exists to gate *contributions* — it requires a code
+# owner's approval, and `.github/CODEOWNERS` names the owner for every path.
+# The owner is the reviewer in that arrangement, not its subject, so the
+# repository-admin role bypasses it and releases go straight out. A maintainer
+# opening a pull request to themselves, approving it, and merging it in order
+# to publish a tag would be ceremony that protects nobody.
+#
+# It follows that the tests run below are the only gate on a release. There is
+# no CI: the sole workflow labels fork pull requests. If that changes, this is
+# the comment to revisit.
 release:
 	@test -n "$(VERSION)" || (echo "usage: make release VERSION=1.1.0" && exit 1)
 	@test -z "$$(git status --porcelain)" || (echo "working tree is dirty" && exit 1)
