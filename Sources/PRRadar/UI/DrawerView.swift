@@ -32,7 +32,8 @@ struct DrawerView: View {
     let onRefresh: () -> Void
     let onRowHeights: ([String: CGFloat]) -> Void
     let onSelectTab: (DrawerTab) -> Void
-    let onToggleTrophies: () -> Void
+    let onToggleRoom: (DrawerRoom) -> Void
+    let onResetBadgeSize: () -> Void
     let onHeaderControls: ([CGRect]) -> Void
 
     var body: some View {
@@ -41,15 +42,22 @@ struct DrawerView: View {
             grabber
             header
             Divider().opacity(0.6)
-            // The room replaces everything below the header. Not hidden but
+            // A room replaces everything below the header. Not hidden but
             // *absent*: a tab strip and a filter bar with nothing to act on
             // are two controls asking to be pressed and one band of chrome
-            // the shelf then has to be shorter than.
-            if state.showingTrophies {
+            // the room then has to be shorter than.
+            switch state.room {
+            case .trophies:
                 TrophyRoomView(state: state, onRowHeights: onRowHeights)
                 Divider().opacity(0.6)
                 trophyFooter
-            } else {
+            case .settings:
+                SettingsView(state: state,
+                             onRowHeights: onRowHeights,
+                             onResetBadgeSize: onResetBadgeSize)
+                Divider().opacity(0.6)
+                settingsFooter
+            case nil:
                 TabStripView(state: state, onSelect: onSelectTab)
                 Divider().opacity(0.6)
                 filterBar
@@ -89,11 +97,11 @@ struct DrawerView: View {
     /// character twice in one 440pt panel is one too many — so the big one
     /// wins and the header falls back to the identity glyph.
     ///
-    /// Never in the trophy room: there is no empty state down there to carry
-    /// a character, so surrendering the header's would leave the drawer with
-    /// no mascot at all and no way to reach the button that cycles it.
+    /// Never in a room: neither has an empty state down there to carry a
+    /// character, so surrendering the header's would leave the drawer with no
+    /// mascot at all and no way to reach the button that cycles it.
     private var contentShowsMascot: Bool {
-        guard !state.showingTrophies else { return false }
+        guard state.room == nil else { return false }
         return state.selectedMascot != nil && (state.authError != nil || isListEmpty)
     }
 
@@ -155,6 +163,7 @@ struct DrawerView: View {
             identity
             Text("PR Radar")
                 .font(.system(size: 12.5, weight: .semibold))
+            rooms
             if state.myPRsReadyToMerge > 0 {
                 Chip(text: "\(state.myPRsReadyToMerge) ready to merge",
                      symbol: "checkmark.seal", health: .good)
@@ -173,7 +182,6 @@ struct DrawerView: View {
                 .help("A newer PR Radar release is available")
                 .headerControl()
             }
-            trophyButton
             Button(action: onCollapse) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
@@ -188,22 +196,41 @@ struct DrawerView: View {
         .contentShape(Rectangle())
     }
 
-    /// The way into the shelf, and back out of it.
+    /// The two ways out of the drawer and back into it, beside the title.
     ///
-    /// A toggle rather than a one-way door: it is the only control that opens
-    /// the room, so it has to be the one that closes it — the X beside it
-    /// shuts the whole drawer, which is a different thing to want.
+    /// Next to the name rather than out by the close button, because that is
+    /// what they are: places in this app, not actions on the list below. Tighter
+    /// spacing than the header's, so they read as one pair of destinations
+    /// rather than as two unrelated glyphs that happen to be adjacent.
     ///
-    /// The dot is the entire announcement for a silent backfill. Nothing
-    /// banners on first run, so without it a shelf could fill up with nobody
-    /// ever learning there was a shelf.
-    private var trophyButton: some View {
-        Button(action: onToggleTrophies) {
-            Image(systemName: state.showingTrophies ? "trophy.fill" : "trophy")
+    /// Settings first. It is the one every app has and the one people go
+    /// looking for; the shelf is the surprise, and a surprise does not get the
+    /// position the habit wants.
+    private var rooms: some View {
+        HStack(spacing: 2) {
+            roomButton(.settings, symbol: "gearshape", filled: "gearshape.fill")
+            roomButton(.trophies, symbol: "trophy", filled: "trophy.fill")
+        }
+    }
+
+    /// A toggle rather than a one-way door: each button is the only control
+    /// that opens its room, so it has to be the one that closes it — the X
+    /// further along shuts the whole drawer, which is a different thing to
+    /// want.
+    ///
+    /// Clicking has to be published as a header control or the press is taken
+    /// as a window drag and never arrives — the same machinery the update chip
+    /// already uses.
+    private func roomButton(_ room: DrawerRoom,
+                            symbol: String,
+                            filled: String) -> some View {
+        let open = state.room == room
+        return Button { onToggleRoom(room) } label: {
+            Image(systemName: open ? filled : symbol)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(state.showingTrophies ? Color.accentColor : .secondary)
+                .foregroundStyle(open ? Color.accentColor : .secondary)
                 .overlay(alignment: .topTrailing) {
-                    if state.trophyState.hasUnseen && !state.showingTrophies {
+                    if unseenDot(for: room) {
                         Circle()
                             .fill(Health.good.tint)
                             .frame(width: 5, height: 5)
@@ -214,12 +241,33 @@ struct DrawerView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(trophyHelp)
+        .help(help(for: room))
+        // Read out as what it is — a place you are in or out of — rather than
+        // as a button whose label is the name of a drawing.
+        .accessibilityLabel(name(of: room))
+        .accessibilityAddTraits(open ? [.isSelected] : [])
         .headerControl()
     }
 
-    private var trophyHelp: String {
-        if state.showingTrophies { return "Back to your pull requests" }
+    /// The dot is the entire announcement for a silent backfill. Nothing
+    /// banners on first run, so without it a shelf could fill up with nobody
+    /// ever learning there was a shelf. Settings has no such backlog to
+    /// announce, and a permanent dot on a gear would only teach the dot to be
+    /// ignored on the trophy beside it.
+    private func unseenDot(for room: DrawerRoom) -> Bool {
+        room == .trophies && state.trophyState.hasUnseen && state.room != .trophies
+    }
+
+    private func name(of room: DrawerRoom) -> String {
+        switch room {
+        case .trophies: return "Trophy room"
+        case .settings: return "Settings"
+        }
+    }
+
+    private func help(for room: DrawerRoom) -> String {
+        if state.room == room { return "Back to your pull requests" }
+        guard room == .trophies else { return name(of: room) }
         let unseen = state.trophyState.unseenCount
         guard unseen > 0 else { return "Trophy room" }
         return unseen == 1 ? "Trophy room — 1 new" : "Trophy room — \(unseen) new"
@@ -235,6 +283,23 @@ struct DrawerView: View {
             Text(state.trophyProgress)
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .frame(height: Layout.footerHeight)
+    }
+
+    /// What the settings room has instead of a footer.
+    ///
+    /// The running version, and nothing else. It is the one fact a settings
+    /// panel is always asked for and the one this app had nowhere to put:
+    /// there is no Dock icon, no menu bar item and so no About window.
+    private var settingsFooter: some View {
+        HStack(spacing: 6) {
+            Text("PR Radar \(state.appVersion)")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
             Spacer()
         }
         .padding(.horizontal, 12)

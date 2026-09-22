@@ -645,25 +645,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Open review requests on GitHub",
                      action: #selector(menuOpenGitHub), keyEquivalent: "").target = self
 
-        menu.addItem(mascotMenuItem())
-
-        // The badge resizes by dragging a corner, which leaves no way back to
-        // the default — and a badge dragged down to its floor on a busy desktop
-        // is fiddly to grab again. Shown only once it is off the default, so
-        // the menu does not carry a permanently inert item.
-        if state.badgeTileSize != Layout.dockTileSize {
-            let reset = NSMenuItem(title: "Reset badge size",
-                                   action: #selector(menuResetBadgeSize),
-                                   keyEquivalent: "")
-            reset.target = self
-            menu.addItem(reset)
-        }
-
-        let loginItem = NSMenuItem(title: "Start at login",
-                                   action: #selector(menuToggleLoginItem), keyEquivalent: "")
-        loginItem.target = self
-        loginItem.state = LoginItem.isEnabled ? .on : .off
-        menu.addItem(loginItem)
+        // The mascot picker, "Start at login" and "Reset badge size" were all
+        // here until the drawer grew a settings room. One entry that opens it
+        // rather than a copy of each control: two places to change one setting
+        // is two places to keep agreeing with each other, and the menu was
+        // never a good home for a text field.
+        menu.addItem(withTitle: "Settings…",
+                     action: #selector(menuOpenSettings), keyEquivalent: ",").target = self
 
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit PR Radar",
@@ -671,67 +659,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return menu
     }
 
-    /// There is no preferences window, and this context menu is where
-    /// "Start at login" already lives — so it is this app's settings surface,
-    /// and the character picker belongs in it.
-    ///
-    /// Clicking the mascot in the drawer header cycles the cast; this is for
-    /// picking one directly, and for turning it off.
-    private func mascotMenuItem() -> NSMenuItem {
-        let parent = NSMenuItem(title: "Mascot", action: nil, keyEquivalent: "")
-        let submenu = NSMenu()
-
-        let off = NSMenuItem(title: "Off", action: #selector(menuPickMascot(_:)),
-                             keyEquivalent: "")
-        off.target = self
-        off.representedObject = ""
-        off.state = state.mascot == nil ? .on : .off
-        submenu.addItem(off)
-        submenu.addItem(.separator())
-
-        for mascot in Mascot.all {
-            let item = NSMenuItem(title: mascot.name, action: #selector(menuPickMascot(_:)),
-                                  keyEquivalent: "")
-            item.target = self
-            item.representedObject = mascot.id.rawValue
-            item.state = state.mascot == mascot.id ? .on : .off
-            item.toolTip = "Tell: \(mascot.tellName)"
-            submenu.addItem(item)
-        }
-
-        parent.submenu = submenu
-        return parent
-    }
-
-    @objc private func menuPickMascot(_ sender: NSMenuItem) {
-        let raw = sender.representedObject as? String ?? ""
-        state.mascot = raw.isEmpty ? nil : MascotID(rawValue: raw)
-        // The widget's footprint changes with the character — and vanishes
-        // back to the old tile when it is switched off.
-        panel.refreshBadgeSize()
-    }
-
-    @objc private func menuResetBadgeSize() {
-        panel.resetBadgeSize()
-    }
+    @objc private func menuOpenSettings() { panel.openRoom(.settings) }
 
     @objc private func menuRefresh() { refreshNow() }
 
     @objc private func menuOpenGitHub() {
         let url = URL(string: "https://github.com/pulls/review-requested")!
         NSWorkspace.shared.open(url)
-    }
-
-    @objc private func menuToggleLoginItem() {
-        do {
-            if LoginItem.isEnabled {
-                try LoginItem.disable()
-            } else {
-                try LoginItem.enable(appPath: Bundle.main.bundlePath)
-            }
-        } catch {
-            state.lastError = "Login item: \(error.localizedDescription)"
-        }
     }
 
     @objc private func menuOpenUpdate() {

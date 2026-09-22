@@ -24,7 +24,10 @@ public enum Prefs {
         static let notifiedUpdate = "update.notifiedVersion"
         static let mascot = "mascot.choice"
         static let trophies = "trophies.state"
-        static let showingTrophies = "drawer.showingTrophies"
+        static let drawerRoom = "drawer.room"
+        /// Superseded by `drawerRoom`. Still read once, to carry an upgrader
+        /// who left the drawer sitting in the trophy room.
+        static let legacyShowingTrophies = "drawer.showingTrophies"
     }
 
     public static var badgeOrigin: CGPoint? {
@@ -176,15 +179,31 @@ public enum Prefs {
         set { defaults.set(newValue.encoded(), forKey: Key.trophies) }
     }
 
-    /// Whether the drawer is showing the trophy room rather than a list.
+    /// Which room the drawer is sitting in, or nil for the ordinary tabs.
     ///
     /// Persisted, like the selected tab, so the drawer opens on whatever you
-    /// were last looking at. The tab underneath is kept as well, so leaving
-    /// the room puts you back where you were rather than on the default tab.
-    public static var showingTrophies: Bool {
-        get { defaults.bool(forKey: Key.showingTrophies) }
-        set { defaults.set(newValue, forKey: Key.showingTrophies) }
+    /// were last looking at. The tab underneath is kept as well, so leaving a
+    /// room puts you back where you were rather than on the default tab.
+    ///
+    /// Stored as a string with an explicit "none", the way the mascot is, so
+    /// that "no room" and "never asked" are different values in the store —
+    /// which is what lets the old boolean be read exactly once, on the first
+    /// launch after upgrading, and never consulted again.
+    ///
+    /// An unrecognised value reads as no room rather than as a fault: a build
+    /// that drops a room should put someone back in the drawer, not strand
+    /// them in a surface it can no longer draw.
+    public static var drawerRoom: DrawerRoom? {
+        get {
+            guard let raw = defaults.string(forKey: Key.drawerRoom) else {
+                return defaults.bool(forKey: Key.legacyShowingTrophies) ? .trophies : nil
+            }
+            return raw == noRoomValue ? nil : DrawerRoom(rawValue: raw)
+        }
+        set { defaults.set(newValue?.rawValue ?? noRoomValue, forKey: Key.drawerRoom) }
     }
+
+    private static let noRoomValue = "none"
 
     public static var selectedTab: DrawerTab {
         get {

@@ -245,6 +245,10 @@ enum Layout {
         // is a fixed sprite at a fixed scale. The trophy room is the one
         // surface that knows its row height before a row has measured itself.
         case .trophies: return trophyCell
+        // A section's height depends entirely on how many controls it holds,
+        // so this is a genuine estimate — near the middle of the three, used
+        // only for the single frame before the groups report themselves.
+        case .settings: return 130
         }
     }
 
@@ -266,12 +270,48 @@ enum Layout {
         // header + tab strip + filter bar + footer, plus four dividers.
         case .reviews, .mine:
             return headerHeight + tabStripHeight + filterBarHeight + footerHeight + 4
-        // header + progress footer, plus two dividers.
-        case .trophies:
+        // header + progress footer, plus two dividers. The settings room hides
+        // the same two controls and carries a footer of the same height, so it
+        // comes to exactly the same chrome.
+        case .trophies, .settings:
             return headerHeight + footerHeight + 2
         }
     }
 
+    /// The gap a room puts between its units, where a list would use
+    /// `rowSpacing`. nil for the tabs, which use the list's own 2pt.
+    ///
+    /// Both rooms need more air than a list does and for the same reason: list
+    /// rows are separated by their own borders, and neither a trophy grid nor a
+    /// stack of setting groups has any — the gap *is* the separation.
+    static func roomSpacing(for surface: DrawerSurface) -> CGFloat? {
+        switch surface {
+        case .trophies: return trophyGridSpacing
+        case .settings: return settingsSectionSpacing
+        case .reviews, .mine: return nil
+        }
+    }
+
+    // MARK: - Settings
+
+    /// Air between setting groups. One notch tighter than the trophy grid's:
+    /// the groups are already boxed, so the gap is reinforcing a separation
+    /// rather than carrying it alone.
+    static let settingsSectionSpacing: CGFloat = 10
+    /// Padding inside a group's box.
+    static let settingsSectionPadding: CGFloat = 10
+    /// Matches the stack card, so the two boxed things in the app agree.
+    static let settingsSectionRadius: CGFloat = 12
+    /// Vertical gap between the controls within one group.
+    static let settingsRowSpacing: CGFloat = 8
+    /// Side margin, so the groups sit inset from the drawer's edges the way the
+    /// trophy grid does rather than running into them.
+    static let settingsInset: CGFloat = 12
+    /// What a group's contents actually get: the drawer, less the margin at
+    /// each side and the box's own padding at each side.
+    static var settingsContentWidth: CGFloat {
+        drawerWidth - settingsInset * 2 - settingsSectionPadding * 2
+    }
 
     /// Fallback ceiling, only used if no screen can be determined. The real
     /// limit is the screen height, passed in per call.
@@ -281,7 +321,7 @@ enum Layout {
 
     static func sizing(for surface: DrawerSurface) -> DrawerSizing {
         DrawerSizing(
-            rowSpacing: surface == .trophies ? trophyGridSpacing : rowSpacing,
+            rowSpacing: roomSpacing(for: surface) ?? rowSpacing,
             listPadding: listPadding,
             chromeHeight: chromeHeight(for: surface),
             maxHeight: fallbackMaxHeight,

@@ -81,17 +81,24 @@ final class AppState: ObservableObject {
     /// Ticks so relative timestamps re-render without a network round trip.
     @Published var clock = Date()
 
-    // MARK: - Trophy room
+    // MARK: - Rooms
 
-    /// Whether the drawer is showing the shelf instead of a list.
+    /// The header-reached surface currently covering the drawer, or nil for the
+    /// ordinary tabs.
     ///
-    /// A mode rather than a third `DrawerTab`: the room replaces the tab
+    /// A mode rather than more `DrawerTab` cases: a room replaces the tab
     /// strip, so a tab that hides the control it lives in would be a strange
-    /// kind of tab. Keeping `selectedTab` underneath is what lets leaving the
+    /// kind of tab. Keeping `selectedTab` underneath is what lets leaving a
     /// room put you back where you were.
-    @Published var showingTrophies: Bool = Prefs.showingTrophies {
-        didSet { Prefs.showingTrophies = showingTrophies }
+    ///
+    /// One optional rather than a flag per room, so opening the second cannot
+    /// leave the first open behind it — there is no value here that means both.
+    @Published var room: DrawerRoom? = Prefs.drawerRoom {
+        didSet { Prefs.drawerRoom = room }
     }
+
+    var showingTrophies: Bool { room == .trophies }
+    var showingSettings: Bool { room == .settings }
 
     @Published var trophyState: TrophyState = AppState.loadTrophies() {
         // Never written while the shelf is a fiction: looking at the room as
@@ -108,6 +115,69 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Settings
+
+    /// Whether a LaunchAgent is registered to start the app at login.
+    ///
+    /// Mirrored here rather than read from `LoginItem` at each use: the truth is
+    /// a file on disk, and a SwiftUI body that stats the filesystem every time
+    /// it is evaluated is a poor way to draw a switch. Written only through
+    /// `setOpensAtLogin`, which is the one place that can fail.
+    @Published private(set) var opensAtLogin: Bool = LoginItem.isEnabled
+
+    /// Registers or unregisters the login item, reporting a failure the same
+    /// way a failed refresh is reported and leaving the switch where it was.
+    ///
+    /// The switch follows the filesystem rather than the click: a write that
+    /// threw must not leave a control claiming the opposite of what is true.
+    func setOpensAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try LoginItem.enable(appPath: Bundle.main.bundlePath)
+            } else {
+                try LoginItem.disable()
+            }
+        } catch {
+            lastError = "Login item: \(error.localizedDescription)"
+        }
+        opensAtLogin = LoginItem.isEnabled
+    }
+
+    /// Whether clearing the review queue drops the achievement banner.
+    @Published var celebrateCleared: Bool = Prefs.celebrateCleared {
+        didSet { Prefs.celebrateCleared = celebrateCleared }
+    }
+
+    /// Which repository the update check watches, as the settings field holds
+    /// it — which is not always something worth storing.
+    ///
+    /// Kept as the edit buffer so the field can be emptied and retyped, and
+    /// written through only once it names a repository. Persisting each
+    /// keystroke would leave the check pointed at `Rogelio` the moment someone
+    /// selected the old value and started typing a new one.
+    @Published var updateRepoDraft: String = Prefs.updateRepo
+
+    /// Accepts the draft if it names a repo, and otherwise puts back whatever
+    /// is actually stored — so leaving the field never silently breaks the
+    /// update check.
+    func commitUpdateRepo() {
+        if let repo = ReleaseSource.normalized(updateRepoDraft) {
+            Prefs.updateRepo = repo
+        }
+        updateRepoDraft = Prefs.updateRepo
+    }
+
+    /// Whether the badge has been dragged away from the size it follows by
+    /// default, which is the only time resetting it does anything.
+    var hasCustomBadgeSize: Bool { badgeTileSize != Layout.dockTileSize }
+
+    /// The running build, for the settings footer. There is no About window and
+    /// no menu bar item, so without this the version is not visible anywhere.
+    var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+            as? String ?? "dev"
+    }
+
     /// Mascot cycles since the drawer was last opened.
     ///
     /// Not persisted, and reset on every open: `Carousel` is for sitting
@@ -117,19 +187,37 @@ final class AppState: ObservableObject {
 
     /// What the drawer is actually showing below the header.
     var activeSurface: DrawerSurface {
-        showingTrophies ? .trophies : DrawerSurface(selectedTab)
+        room?.surface ?? DrawerSurface(selectedTab)
     }
 
     var trophyRows: [[Trophy]] { TrophyGrid.rows() }
+
+    var settingsSections: [SettingsSection] { SettingsSection.allCases }
 
     var trophyProgress: String {
         TrophyGrid.progress(unlocked: trophyState.unlockedIDs)
     }
 
-    /// Opening the room is what counts as having looked at the shelf.
-    func openTrophyRoom() {
-        showingTrophies = true
-        if trophyState.hasUnseen { trophyState.markAllSeen() }
+    /// Opening the shelf is what counts as having looked at it. Every other
+    /// room simply opens.
+    func open(_ room: DrawerRoom) {
+        self.room = room
+        if room == .trophies, trophyState.hasUnseen { trophyState.markAllSeen() }
+    }
+
+    /// Enters `room`, or leaves it if it is already the one open.
+    ///
+    /// A toggle because each room has exactly one way in, so that control has
+    /// to be the way out too — the X beside it shuts the whole drawer, which is
+    /// a different thing to want. Opening one room from inside another simply
+    /// replaces it, which is what makes the gear and the trophy reachable from
+    /// each other rather than only from the drawer.
+    func toggle(_ room: DrawerRoom) {
+        if self.room == room {
+            self.room = nil
+        } else {
+            open(room)
+        }
     }
 
     /// Measured height of each row, keyed by a surface-namespaced row id.
@@ -281,6 +369,10 @@ final class AppState: ObservableObject {
         // A grid row, not a trophy. The drawer snaps to what the eye reads as
         // a line, and nobody reads a shelf a trophy at a time.
         case .trophies: return trophyRows.count
+        // A group, not a control. Snapping to individual toggles would let the
+        // drawer settle between a section's header and the first thing under
+        // it, which reads as a heading for nothing.
+        case .settings: return SettingsSection.allCases.count
         }
     }
 
@@ -297,6 +389,10 @@ final class AppState: ObservableObject {
         case .trophies:
             return trophyRows.indices.compactMap {
                 rowHeights[rowKey(.trophies, TrophyGrid.rowID($0))]
+            }
+        case .settings:
+            return SettingsSection.allCases.compactMap {
+                rowHeights[rowKey(.settings, $0.id)]
             }
         }
     }

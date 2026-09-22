@@ -145,7 +145,8 @@ final class PanelController {
             onRefresh: { [weak self] in self?.onRefresh() },
             onRowHeights: { [weak self] in self?.adoptRowHeights($0) },
             onSelectTab: { [weak self] in self?.selectTab($0) },
-            onToggleTrophies: { [weak self] in self?.toggleTrophyRoom() },
+            onToggleRoom: { [weak self] in self?.toggleRoom($0) },
+            onResetBadgeSize: { [weak self] in self?.resetBadgeSize() },
             onHeaderControls: { [weak self] in self?.headerControls = $0 }
         )
         hostingView = DraggableHostingView(rootView: root)
@@ -272,7 +273,7 @@ final class PanelController {
         // starts again every time the drawer does.
         state.mascotCycles = 0
         // The room is persisted, so the drawer can open straight onto it
-        // without `openTrophyRoom` ever being called.
+        // without `open(_:)` ever being called.
         if state.showingTrophies, state.trophyState.hasUnseen {
             state.trophyState.markAllSeen()
         }
@@ -684,18 +685,29 @@ final class PanelController {
         resettle()
     }
 
-    /// Enters or leaves the trophy room.
+    /// Enters or leaves a room.
     ///
     /// Leaving restores the tab underneath rather than picking a default:
     /// `selectedTab` was never changed, so there is nothing to restore — the
-    /// surface simply stops being the shelf.
-    func toggleTrophyRoom() {
-        if state.showingTrophies {
-            state.showingTrophies = false
-        } else {
-            state.openTrophyRoom()
-        }
+    /// surface simply stops being the room.
+    func toggleRoom(_ room: DrawerRoom) {
+        state.toggle(room)
         resettle()
+    }
+
+    /// Opens the drawer straight into a room, for the context menu.
+    ///
+    /// The menu is reachable with the drawer shut, so this has to expand as
+    /// well as switch — and it sets the room *before* expanding so the panel is
+    /// framed for the room's chrome on the way out rather than growing to a
+    /// list's height and then correcting itself.
+    func openRoom(_ room: DrawerRoom) {
+        state.open(room)
+        if state.expanded {
+            resettle()
+        } else {
+            setExpanded(true)
+        }
     }
 
     /// Everything that has to happen when the drawer changes what it is
