@@ -217,7 +217,8 @@ struct DrawerView: View {
     /// already uses.
     private func roomButton(_ room: DrawerRoom,
                             symbol: String,
-                            filled: String) -> some View {
+                            filled: String,
+                            in placement: RoomButtonPlacement = .header) -> some View {
         let open = state.room == room
         return Button { onToggleRoom(room) } label: {
             Image(systemName: open ? filled : symbol)
@@ -231,7 +232,7 @@ struct DrawerView: View {
                             .offset(x: 3, y: -2)
                     }
                 }
-                .frame(width: 18, height: Layout.headerHeight - Layout.resizeEdge)
+                .frame(width: 18, height: placement.height)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -240,7 +241,27 @@ struct DrawerView: View {
         // as a button whose label is the name of a drawing.
         .accessibilityLabel(name(of: room))
         .accessibilityAddTraits(open ? [.isSelected] : [])
-        .headerControl()
+        .headerControl(placement == .header)
+    }
+
+    /// Where a room's button is drawn, which decides both how tall it is and
+    /// whether the panel has to be told it exists.
+    ///
+    /// The header doubles as the window's drag handle, so a control there has
+    /// to be published or its press is taken as a drag and never arrives. The
+    /// footer is not a drag handle — `DrawerZones` only consults the control
+    /// list once a point is already inside the header band — so a footer rect
+    /// in that list is a value nothing can ever read.
+    private enum RoomButtonPlacement {
+        case header
+        case footer
+
+        var height: CGFloat {
+            switch self {
+            case .header: return Layout.headerHeight - Layout.resizeEdge
+            case .footer: return Layout.footerHeight
+            }
+        }
     }
 
     /// The dot is the entire announcement for a silent backfill. Nothing
@@ -292,8 +313,7 @@ struct DrawerView: View {
     /// from. Leading edge, ahead of everything else, because that is the corner
     /// it is being looked for in.
     private var settingsButton: some View {
-        roomButton(.settings, symbol: "gearshape", filled: "gearshape.fill")
-            .frame(width: 18, height: Layout.footerHeight)
+        roomButton(.settings, symbol: "gearshape", filled: "gearshape.fill", in: .footer)
     }
 
     /// What the settings room has instead of a footer.
@@ -561,12 +581,21 @@ struct ReviewFilterBar: View {
 private extension View {
     /// Publishes this view's frame as a header control, so a press on it
     /// reaches SwiftUI instead of being taken as a window drag.
-    func headerControl() -> some View {
+    ///
+    /// Takes a flag rather than being left off at the call site so that one
+    /// control drawn in two places stays one piece of code. Off, it publishes
+    /// an empty list rather than a rect nothing will read: the zone rules only
+    /// consult these once a press is already inside the header band, so a
+    /// frame reported from anywhere else is at best inert and at worst a claim
+    /// about the layout that is not true.
+    func headerControl(_ active: Bool = true) -> some View {
         background(
             GeometryReader { geometry in
                 Color.clear.preference(
                     key: HeaderControlsKey.self,
-                    value: [geometry.frame(in: .named(DrawerView.coordinateSpace))]
+                    value: active
+                        ? [geometry.frame(in: .named(DrawerView.coordinateSpace))]
+                        : []
                 )
             }
         )
