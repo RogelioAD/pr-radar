@@ -164,7 +164,7 @@ struct DrawerView: View {
             identity
             Text("PR Radar")
                 .font(.system(size: 12.5, weight: .semibold))
-            rooms
+            roomButton(.trophies, symbol: "trophy", filled: "trophy.fill")
             if state.myPRsReadyToMerge > 0 {
                 Chip(text: "\(state.myPRsReadyToMerge) ready to merge",
                      symbol: "checkmark.seal", health: .good)
@@ -197,23 +197,16 @@ struct DrawerView: View {
         .contentShape(Rectangle())
     }
 
-    /// The two ways out of the drawer and back into it, beside the title.
+    /// The shelf's way in, beside the title.
     ///
     /// Next to the name rather than out by the close button, because that is
-    /// what they are: places in this app, not actions on the list below. Tighter
-    /// spacing than the header's, so they read as one pair of destinations
-    /// rather than as two unrelated glyphs that happen to be adjacent.
+    /// what it is: a place in this app, not an action on the list below.
     ///
-    /// Settings first. It is the one every app has and the one people go
-    /// looking for; the shelf is the surprise, and a surprise does not get the
-    /// position the habit wants.
-    private var rooms: some View {
-        HStack(spacing: 2) {
-            roomButton(.settings, symbol: "gearshape", filled: "gearshape.fill")
-            roomButton(.trophies, symbol: "trophy", filled: "trophy.fill")
-        }
-    }
-
+    /// The gear used to sit here too and now lives in the footer. Settings are
+    /// reached far less often than they are *looked for*, and the bottom-left
+    /// of a panel is where this platform has trained people to look — while the
+    /// shelf is a surprise, and a surprise is better off where the eye already
+    /// is.
     /// A toggle rather than a one-way door: each button is the only control
     /// that opens its room, so it has to be the one that closes it — the X
     /// further along shuts the whole drawer, which is a different thing to
@@ -281,6 +274,7 @@ struct DrawerView: View {
     /// drawings whatever GitHub says.
     private var trophyFooter: some View {
         HStack(spacing: 6) {
+            settingsButton
             Text(state.trophyProgress)
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
@@ -290,6 +284,18 @@ struct DrawerView: View {
         .frame(height: Layout.footerHeight)
     }
 
+    /// The gear, bottom-left, on whichever surface the drawer is showing.
+    ///
+    /// In all three footers rather than only the list's: it is the way *out* of
+    /// the settings room as well as the way in, so a surface that dropped it
+    /// would be one somebody could reach and then have to guess their way back
+    /// from. Leading edge, ahead of everything else, because that is the corner
+    /// it is being looked for in.
+    private var settingsButton: some View {
+        roomButton(.settings, symbol: "gearshape", filled: "gearshape.fill")
+            .frame(width: 18, height: Layout.footerHeight)
+    }
+
     /// What the settings room has instead of a footer.
     ///
     /// The running version, and nothing else. It is the one fact a settings
@@ -297,11 +303,29 @@ struct DrawerView: View {
     /// there is no Dock icon, no menu bar item and so no About window.
     private var settingsFooter: some View {
         HStack(spacing: 6) {
+            settingsButton
             Text("PR Radar \(state.appVersion)")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
                 .textSelection(.enabled)
+
             Spacer()
+
+            // Every switch and picker in the room applies the moment it is
+            // touched, which is this platform's convention and is not worth
+            // breaking. A typed field cannot do that — it has no moment — so it
+            // is the one thing here that can be sitting unsaved, and this says
+            // so rather than leaving the reader to wonder.
+            Button("Save changes") { state.saveSettings() }
+                .buttonStyle(.plain)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(state.hasPendingSettings
+                                 ? AnyShapeStyle(Color.accentColor)
+                                 : AnyShapeStyle(.tertiary))
+                .disabled(!state.hasPendingSettings)
+                .help(state.hasPendingSettings
+                      ? "Apply what you have typed"
+                      : "Nothing typed is waiting to be saved")
         }
         .padding(.horizontal, 12)
         .frame(height: Layout.footerHeight)
@@ -395,6 +419,7 @@ struct DrawerView: View {
 
     private var footer: some View {
         HStack(spacing: 6) {
+            settingsButton
             Button(action: onRefresh) {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.clockwise")

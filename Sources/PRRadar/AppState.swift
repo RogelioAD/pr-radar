@@ -157,6 +157,17 @@ final class AppState: ObservableObject {
     /// selected the old value and started typing a new one.
     @Published var updateRepoDraft: String = Prefs.updateRepo
 
+    /// Whether anything typed is waiting to be applied.
+    ///
+    /// Only the typed fields can be pending. Switches and pickers write through
+    /// the moment they are touched — that is this platform's convention and the
+    /// room keeps it — so they are never unsaved and never light this up.
+    var hasPendingSettings: Bool { updateRepoDraft != Prefs.updateRepo }
+
+    /// Applies every pending field. Same path the fields take on Return and on
+    /// losing focus, so the button can never mean something they do not.
+    func saveSettings() { commitUpdateRepo() }
+
     /// Accepts the draft if it names a repo, and otherwise puts back whatever
     /// is actually stored — so leaving the field never silently breaks the
     /// update check.
