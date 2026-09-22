@@ -54,7 +54,8 @@ struct DrawerView: View {
             case .settings:
                 SettingsView(state: state,
                              onRowHeights: onRowHeights,
-                             onResetBadgeSize: onResetBadgeSize)
+                             onResetBadgeSize: onResetBadgeSize,
+                             onRefresh: onRefresh)
                 Divider().opacity(0.6)
                 settingsFooter
             case nil:

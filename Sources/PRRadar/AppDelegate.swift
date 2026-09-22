@@ -7,7 +7,6 @@ import PRRadarCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let state = AppState()
-    private var leadsWindow: NSWindow?
     private let notifier = Notifier()
     private var panel: PanelController!
     private let banner = AchievementBanner()
@@ -656,9 +655,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Settings…",
                      action: #selector(menuOpenSettings), keyEquivalent: ",").target = self
 
-        menu.addItem(withTitle: "Leads…",
-                     action: #selector(menuEditLeads), keyEquivalent: "").target = self
-
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit PR Radar",
                      action: #selector(menuQuit), keyEquivalent: "q").target = self
@@ -666,34 +662,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func menuOpenSettings() { panel.openRoom(.settings) }
-
-    @objc private func menuEditLeads() {
-        let view = LeadsEditorView(
-            repos: state.leadRepos,
-            // The token of an account that can actually see this repo, rather
-            // than whichever one `gh` has active. With two identities logged
-            // in, the repo being edited may belong entirely to the other one —
-            // and searching a repo the token cannot see returns an empty list
-            // rather than an error, which reads as "this repo has no members".
-            search: { [weak self] ref, text in
-                guard let account = self?.state.account(forHost: ref.host),
-                      let token = Accounts.token(for: account)
-                else { throw TokenError.notFound }
-                return try await GitHubClient(token: token)
-                    .searchMembers(repo: ref.repo, matching: text)
-            },
-            onChange: { [weak self] in self?.refreshNow() })
-        // A fresh view each time, so the repo list and leads are current.
-        let window = leadsWindow ?? NSWindow()
-        window.contentViewController = NSHostingController(rootView: view)
-        window.title = "Leads"
-        window.styleMask = [.titled, .closable]
-        window.isReleasedWhenClosed = false
-        if leadsWindow == nil { window.center() }
-        leadsWindow = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
 
     @objc private func menuRefresh() { refreshNow() }
 

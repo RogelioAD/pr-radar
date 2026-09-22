@@ -3,6 +3,12 @@ import PRRadarCore
 
 /// Edits the leads for each repo. Suggestions come from the repo's members,
 /// but any typed login can be added.
+///
+/// Draws rows only — no padding, no width, no window. It is a section of the
+/// settings room now, and the box around it supplies all three. It had its own
+/// `NSWindow` first, which is the thing this app had otherwise stopped doing:
+/// a second window for one setting, reached from a menu item, while every
+/// other setting lived in the drawer.
 struct LeadsEditorView: View {
     let repos: [RepoRef]
     let search: (RepoRef, String) async throws -> [Member]
@@ -48,6 +54,10 @@ struct LeadsEditorView: View {
         return Leads.leads(for: repo.repo, host: repo.host, in: leads)
     }
 
+    /// Enough to pick from without the section growing taller than the list
+    /// the drawer is there to show.
+    private static let suggestionLimit = 4
+
     private var visibleSuggestions: [Member] {
         suggestions.filter { member in
             !current.contains { $0.caseInsensitiveCompare(member.login) == .orderedSame }
@@ -55,19 +65,21 @@ struct LeadsEditorView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Layout.settingsRowSpacing) {
             if repos.isEmpty {
-                Text("No repos yet. Open a PR and it will appear here.")
+                Text("No repos yet. Open a pull request and it will appear here.")
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 Picker("Repo", selection: $repo) {
                     ForEach(repos) { Text($0.label).tag(Optional($0)) }
                 }
+                .pickerStyle(.menu)
 
                 if current.isEmpty {
                     Text("No leads. PRs in this repo show no lead status.")
-                        .font(.callout)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     FlowChips(items: current) { remove($0) }
                 }
@@ -80,27 +92,33 @@ struct LeadsEditorView: View {
                     Text(searchError).font(.caption).foregroundStyle(.secondary)
                 }
 
-                if !visibleSuggestions.isEmpty {
-                    List(visibleSuggestions) { member in
-                        Button { add(member.login) } label: {
-                            HStack {
-                                Text(member.login)
-                                if let name = member.name, !name.isEmpty {
-                                    Text(name).foregroundStyle(.secondary)
-                                }
-                                Spacer()
+                // A short plain list, not a `List` with a fixed height: this
+                // sits inside the room's own scroller, and a nested one traps
+                // the wheel and reports a height the drawer cannot measure.
+                // Capped because a repo with four hundred mentionable users is
+                // not offering a choice, it is offering a scroll.
+                ForEach(visibleSuggestions.prefix(Self.suggestionLimit)) { member in
+                    Button { add(member.login) } label: {
+                        HStack(spacing: 4) {
+                            Text(member.login)
+                            if let name = member.name, !name.isEmpty {
+                                Text(name).foregroundStyle(.secondary).lineLimit(1)
                             }
-                            .contentShape(Rectangle())
+                            Spacer(minLength: 0)
                         }
-                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
                     }
-                    .frame(height: 150)
+                    .buttonStyle(.plain)
                 }
             }
         }
-        .padding(16)
-        .frame(width: 380)
         .task(id: "\(repo?.id ?? "")|\(text)") { await runSearch() }
+        // The room can be opened before the first fetch has named a repo, and
+        // a picker left on nothing once the list arrives is a section that
+        // looks broken until it is touched.
+        .onChange(of: repos) { _, list in
+            if repo == nil { repo = list.first }
+        }
     }
 
     private func runSearch() async {

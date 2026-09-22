@@ -29,6 +29,9 @@ struct SettingsView: View {
     @ObservedObject var state: AppState
     let onRowHeights: ([String: CGFloat]) -> Void
     let onResetBadgeSize: () -> Void
+    /// Changing a lead changes what every row's lead chip says, so the list has
+    /// to be rebuilt — the setting is not about the app, it is about the data.
+    let onRefresh: () -> Void
 
     @Environment(\.openURL) private var openURL
     @FocusState private var editingReleaseRepo: Bool
@@ -76,6 +79,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: Layout.settingsRowSpacing) {
                 switch section {
                 case .general: general
+                case .leads: leads
                 case .appearance: appearance
                 case .updates: updates
                 }
@@ -119,6 +123,28 @@ struct SettingsView: View {
         toggle("Celebrate a cleared queue",
                help: "Show the achievement banner when the last review is done",
                isOn: $state.celebrateCleared)
+    }
+
+    // MARK: - Leads
+
+    /// The whole of James Wall's editor, in a box instead of a window.
+    ///
+    /// The token comes from an account that can see this repo rather than from
+    /// whichever one `gh` has active: with two identities logged in the repo
+    /// may belong to the other, and a search a token cannot satisfy returns an
+    /// empty list rather than an error — which reads as "no members".
+    @ViewBuilder
+    private var leads: some View {
+        LeadsEditorView(
+            repos: state.leadRepos,
+            search: { ref, text in
+                guard let account = state.account(forHost: ref.host),
+                      let token = Accounts.token(for: account)
+                else { throw TokenError.notFound }
+                return try await GitHubClient(token: token)
+                    .searchMembers(repo: ref.repo, matching: text)
+            },
+            onChange: onRefresh)
     }
 
     // MARK: - Appearance
