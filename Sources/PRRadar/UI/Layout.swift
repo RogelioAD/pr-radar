@@ -181,6 +181,17 @@ enum Layout {
     /// size lands between two of them. Storing what was *drawn* rather than
     /// what was asked for is what stops the badge drifting a few points every
     /// time it is resized and reopened.
+    /// The smallest and largest size the badge can actually be dragged to,
+    /// which is what the "biggest"/"smallest" trophies have to be measured
+    /// against — see `BadgeSizing.reachableRange`.
+    static func reachableBadgeTileRange(hasMascot: Bool,
+                                        backingScale: CGFloat) -> (minimum: CGFloat,
+                                                                   maximum: CGFloat) {
+        badgeSizing.reachableRange(spriteWidth: hasMascot ? badgeCharacterCells : nil,
+                                   backingScale: backingScale,
+                                   minimumScale: badgeMinimumScale)
+    }
+
     static func tileSize(forBadgeScale scale: CGFloat) -> CGFloat {
         CGFloat(badgeCharacterCells) * scale
     }

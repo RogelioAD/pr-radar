@@ -451,8 +451,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         snapshot.previousScopedReviewCount = lastReviewCount
         snapshot.mergedLifetime = mergedLifetime
         snapshot.badgeTileSize = state.badgeTileSize
-        snapshot.badgeMinimum = Layout.badgeSizing.minimum
-        snapshot.badgeMaximum = Layout.badgeSizing.maximum
+        // The reachable extremes, not the bounds. With a character drawn the
+        // badge settles on whole device pixels and stops short of both — so
+        // measured against the bounds, a badge dragged as far as it goes has
+        // never once been at its largest or smallest.
+        let reach = Layout.reachableBadgeTileRange(hasMascot: state.selectedMascot != nil,
+                                                   backingScale: state.backingScale)
+        snapshot.badgeMinimum = reach.minimum
+        snapshot.badgeMaximum = reach.maximum
         snapshot.mascotCyclesThisSession = state.mascotCycles
         snapshot.now = Date()
         // From the same pref the update check watches, so a fork rewards
