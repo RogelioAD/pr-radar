@@ -13,6 +13,9 @@ struct LeadsEditorView: View {
     let repos: [RepoRef]
     let search: (RepoRef, String) async throws -> [Member]
     let onChange: () -> Void
+    /// Owned by the room, so clicking away from this field releases it — see
+    /// `SettingsView.focus`.
+    @FocusState.Binding var focus: SettingsField?
 
     @State private var repo: RepoRef?
     @State private var leads = Prefs.leadsByRepo
@@ -20,8 +23,10 @@ struct LeadsEditorView: View {
     @State private var suggestions: [Member] = []
     @State private var searchError: String?
 
-    init(repos: [RepoRef], search: @escaping (RepoRef, String) async throws -> [Member],
+    init(repos: [RepoRef], focus: FocusState<SettingsField?>.Binding,
+         search: @escaping (RepoRef, String) async throws -> [Member],
          onChange: @escaping () -> Void) {
+        _focus = focus
         // Repos that already have leads stay editable even if no PR is open.
         let known = Set(repos.map(\.id))
         let extra = Prefs.leadsByRepo.keys
@@ -86,6 +91,7 @@ struct LeadsEditorView: View {
 
                 TextField("Add a lead — type to search members", text: $text)
                     .textFieldStyle(.roundedBorder)
+                    .focused($focus, equals: .leadSearch)
                     .onSubmit { add(text) }
 
                 if let searchError {

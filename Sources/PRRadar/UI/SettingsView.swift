@@ -1,6 +1,13 @@
 import SwiftUI
 import PRRadarCore
 
+/// The room's text fields, so one owner can say which of them has the keyboard
+/// — and take it back when the reader clicks somewhere that is not a field.
+enum SettingsField: Hashable {
+    case releaseRepo
+    case leadSearch
+}
+
 /// Attaches a tooltip only when there is one.
 private struct OptionalHelp: ViewModifier {
     let text: String?
@@ -34,7 +41,17 @@ struct SettingsView: View {
     let onRefresh: () -> Void
 
     @Environment(\.openURL) private var openURL
-    @FocusState private var editingReleaseRepo: Bool
+
+    /// Which field holds the keyboard, for the whole room rather than per
+    /// field.
+    ///
+    /// Hoisted here because releasing focus is not something a text field can
+    /// do for itself: clicking a piece of the panel that is not a control
+    /// leaves an `NSTextField` first responder, so the ring stays lit and the
+    /// selection stays blue on a field the user has visibly walked away from.
+    /// One owner for both fields is what lets the background clear whichever
+    /// of them is holding it.
+    @FocusState private var focus: SettingsField?
 
     var body: some View {
         ScrollView {
@@ -53,6 +70,16 @@ struct SettingsView: View {
             }
             .padding(.horizontal, Layout.settingsInset)
             .padding(.vertical, Layout.listPadding / 2)
+            // Clicking the room itself puts the keyboard down.
+            //
+            // On the content, not behind it: a `ScrollView` consumes the press
+            // before anything layered underneath can see it, so a handler in
+            // its background never fires and the field keeps its ring while the
+            // caret goes — which looks like a bug rather than like focus.
+            // Here, a press on a real control is that control's and stops
+            // there; only the gaps and the labels fall through to this.
+            .contentShape(Rectangle())
+            .onTapGesture { focus = nil }
         }
         // Nothing to scroll when the drawer is tall enough to show every group,
         // and a panel that rubber-bands with no overflow reads as broken.
@@ -205,6 +232,7 @@ struct SettingsView: View {
     private var leads: some View {
         LeadsEditorView(
             repos: state.leadRepos,
+            focus: $focus,
             search: { ref, text in
                 guard let account = state.account(forHost: ref.host),
                       let token = Accounts.token(for: account)
@@ -281,7 +309,7 @@ struct SettingsView: View {
             row("Releases from") {
                 TextField("owner/repo", text: $state.updateRepoDraft)
                     .textFieldStyle(.roundedBorder)
-                    .focused($editingReleaseRepo)
+                    .focused($focus, equals: .releaseRepo)
                     .onSubmit { state.commitUpdateRepo() }
                     .accessibilityLabel("Repository to check for releases")
                     .frame(width: 190)
@@ -301,8 +329,8 @@ struct SettingsView: View {
               + "if you are running a fork")
         // Committing on blur as well as on Return is what makes the field
         // behave the way every other settings field on this platform does.
-        .onChange(of: editingReleaseRepo) { _, focused in
-            if !focused { state.commitUpdateRepo() }
+        .onChange(of: focus) { previous, _ in
+            if previous == .releaseRepo { state.commitUpdateRepo() }
         }
     }
 
