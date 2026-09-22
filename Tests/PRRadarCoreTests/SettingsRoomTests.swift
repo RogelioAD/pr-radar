@@ -47,6 +47,23 @@ final class SettingsRoomTests: XCTestCase {
         XCTAssertNil(DrawerRoom(rawValue: ""))
     }
 
+    // MARK: - Self-sizing
+
+    /// A form has a bottom; a list does not. Only the form sizes itself.
+    func testOnlySettingsFitsItsContent() {
+        XCTAssertTrue(DrawerSurface.settings.fitsContent)
+        for surface in [DrawerSurface.reviews, .mine, .trophies] {
+            XCTAssertFalse(surface.fitsContent, surface.rawValue)
+        }
+    }
+
+    /// The shelf stays draggable — it is a grid with more of itself to show,
+    /// so a height somebody dragged to is a real instruction there.
+    func testTheTrophyRoomIsStillResizable() {
+        XCTAssertFalse(DrawerRoom.trophies.surface.fitsContent)
+        XCTAssertTrue(DrawerRoom.settings.surface.fitsContent)
+    }
+
     // MARK: - Sections
 
     /// The drawer snaps its height to whole sections, counting them through

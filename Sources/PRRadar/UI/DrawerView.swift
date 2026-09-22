@@ -82,14 +82,26 @@ struct DrawerView: View {
 
     /// Always shown: with the drawer defaulting to every row, dragging it
     /// *shorter* is the useful direction, so the handle is never inert.
+    /// Drawn only where it does something. The strip's height is reserved
+    /// either way, because `chromeHeight` counts it and a surface that sizes
+    /// itself must still agree with the geometry about where its top is — but
+    /// a handle offering a drag that cannot move anything is worse than no
+    /// handle at all.
+    @ViewBuilder
     private var grabber: some View {
-        Capsule()
-            .fill(Color.secondary.opacity(0.35))
-            .frame(width: 36, height: 4)
-            .frame(height: Layout.resizeEdge)
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-            .help("Drag to resize — snaps to whole rows")
+        if state.activeSurface.fitsContent {
+            Color.clear
+                .frame(height: Layout.resizeEdge)
+                .frame(maxWidth: .infinity)
+        } else {
+            Capsule()
+                .fill(Color.secondary.opacity(0.35))
+                .frame(width: 36, height: 4)
+                .frame(height: Layout.resizeEdge)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .help("Drag to resize — snaps to whole rows")
+        }
     }
 
     /// True when the content area is showing its own, larger mascot.

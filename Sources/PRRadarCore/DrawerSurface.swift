@@ -21,6 +21,19 @@ public enum DrawerSurface: String, CaseIterable, Sendable {
     case trophies
     case settings
 
+    /// Whether this surface is always exactly as tall as what it holds.
+    ///
+    /// True only for settings, and because of what it *is*: a form, not a list.
+    /// A list has more of itself to show, so a height the user dragged to is a
+    /// real instruction — "show me four rows" — and worth remembering. A form
+    /// has a bottom. Every height other than its own either hides a setting or
+    /// leaves a band of empty material under the last one, and neither is
+    /// something anybody meant to ask for.
+    ///
+    /// The drag is disabled here rather than ignored, so the edge does not
+    /// fight a pointer that will not move it.
+    public var fitsContent: Bool { self == .settings }
+
     public init(_ tab: DrawerTab) {
         switch tab {
         case .reviews: self = .reviews

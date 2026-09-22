@@ -474,7 +474,10 @@ final class AppState: ObservableObject {
     var activeRowHeights: [CGFloat] { rowHeights(for: activeSurface) }
 
     var userContentHeight: CGFloat? {
-        get { userContentHeights[activeSurface] }
+        // A self-sizing surface has no dragged height, even if one was stored
+        // before it became self-sizing — an old value must not outlive the
+        // behaviour that produced it.
+        get { activeSurface.fitsContent ? nil : userContentHeights[activeSurface] }
         set {
             if let newValue {
                 userContentHeights[activeSurface] = newValue

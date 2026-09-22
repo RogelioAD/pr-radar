@@ -419,10 +419,11 @@ final class PanelController {
             viewHeight: hostingView.bounds.height,
             isFlipped: hostingView.isFlipped
         )
-        // Always resizable: the handle is shown unconditionally now.
+        // Resizable everywhere except a surface that sizes itself, where the
+        // strip would be an edge the pointer can pull and nothing can follow.
         return Self.zones.zone(distanceFromTop: distance,
                                distanceFromLeft: point.x,
-                               canResize: true,
+                               canResize: !state.activeSurface.fitsContent,
                                controls: headerControls)
     }
 
@@ -554,6 +555,7 @@ final class PanelController {
     /// Follows the pointer one-to-one, clamped but not snapped. Snapping every
     /// frame made the drag lurch between rows rather than track the hand.
     private func previewResize(to windowHeight: CGFloat) {
+        guard !state.activeSurface.fitsContent else { return }
         isDraggingHeight = true
         // The *active* surface's chrome, not the Reviews tab's. The trophy
         // room hides the tab strip and the filter bar, so charging the drag
@@ -575,6 +577,7 @@ final class PanelController {
     /// On release, settle onto the nearest row edge — animated, so it glides
     /// into place instead of popping.
     private func commitResize() {
+        guard !state.activeSurface.fitsContent else { return }
         isDraggingHeight = false
         guard let draft = resizeDraft else { return }
         resizeDraft = nil
