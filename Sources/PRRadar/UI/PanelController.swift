@@ -218,6 +218,14 @@ final class PanelController {
                               + "(key=\(self.panel.isKeyWindow))")
                 }
             },
+            // Posted for a monitor being plugged or unplugged, a resolution
+            // change, and the dock moving. The badge is parked in absolute
+            // screen coordinates, so all of them can leave it somewhere that
+            // no longer exists.
+            centre.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+                               object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.refitToScreens() }
+            },
         ]
     }
 
@@ -727,13 +735,41 @@ final class PanelController {
     /// Keeps the panel on a visible screen — a resolution change or an
     /// unplugged monitor must not strand it offscreen.
     private func clamp(_ rect: NSRect) -> NSRect {
-        let screen = NSScreen.screens.first { $0.frame.intersects(rect) } ?? NSScreen.main
-        guard let visible = screen?.visibleFrame else { return rect }
-        var result = rect
-        result.size.height = min(result.height, visible.height)
-        result.origin.x = min(max(rect.minX, visible.minX), visible.maxX - result.width)
-        result.origin.y = min(max(rect.minY, visible.minY), visible.maxY - result.height)
-        return result
+        ScreenFit.fit(rect, onto: Self.visibleFrames)
+    }
+
+    /// Every attached display's visible area, main screen first.
+    ///
+    /// The order is the fallback: a rect that overlaps no screen at all — what
+    /// unplugging a monitor leaves behind — is fitted onto the first frame in
+    /// the list, and the main screen is the one the user is certainly looking
+    /// at, being the one that still has the menu bar.
+    private static var visibleFrames: [CGRect] {
+        let screens = NSScreen.screens
+        guard let main = NSScreen.main else { return screens.map(\.visibleFrame) }
+        return [main.visibleFrame] + screens.filter { $0 !== main }.map(\.visibleFrame)
+    }
+
+    /// Re-fits the badge after the displays change.
+    ///
+    /// macOS does shuffle windows off a disconnected screen by itself, but that
+    /// move does not stick here: `badgeFrame` is the source of truth and every
+    /// refresh re-frames the panel from it, so the widget is put straight back
+    /// into coordinates no screen covers and vanishes again. Correcting the
+    /// stored rect is what makes it stay.
+    ///
+    /// The backing scale is resynced in the same breath — a Retina laptop and
+    /// an external panel rarely agree, and the badge's art is sized from it.
+    private func refitToScreens() {
+        syncBackingScale()
+        if !state.expanded { syncBadgeFrameSize() }
+        let fitted = clamp(badgeFrame)
+        if fitted != badgeFrame {
+            badgeFrame = fitted
+            Prefs.badgeOrigin = badgeFrame.origin
+            Log.debug("screens changed; badge refitted to \(badgeFrame.origin)")
+        }
+        applyFrame()
     }
 
     /// `badgeSize` needs a panel to pick a screen from, and there is not one
@@ -751,7 +787,12 @@ final class PanelController {
     private static func initialBadgeFrame(size: CGSize) -> NSRect {
         let width = size.width, height = size.height
         if let saved = Prefs.badgeOrigin {
-            return NSRect(x: saved.x, y: saved.y, width: width, height: height)
+            // Fitted, not trusted: the position was saved against whatever
+            // displays were attached at the time, and launching on the laptop
+            // alone after parking the badge on a monitor would otherwise
+            // restore it to a screen that is not there.
+            return ScreenFit.fit(NSRect(x: saved.x, y: saved.y, width: width, height: height),
+                                 onto: visibleFrames)
         }
         let visible = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         return NSRect(

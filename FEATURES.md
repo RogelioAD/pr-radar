@@ -40,7 +40,10 @@ tile; the tile is for "go press the button".
 Other behaviour worth knowing:
 
 - **Drag it anywhere.** The position is remembered across restarts, and is
-  clamped back on-screen if you change resolution or unplug a monitor.
+  clamped back on-screen if you change resolution or unplug a monitor — the
+  moment the displays change, and again on the next launch, so a badge parked
+  on a monitor you have since closed the lid on comes back rather than being
+  restored to a screen that is not there.
 - **Sized to your Dock**, read from `com.apple.dock tilesize` at launch, so it
   reads as a peer of your other icons rather than an oversized sticker. That is
   the starting point, not a fixture — see below.
