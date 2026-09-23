@@ -25,6 +25,9 @@ final class MyPRInboxTests: XCTestCase {
               requested: [String] = [],
               threads: [Bool] = [],          // isResolved per thread
               checkRuns: [(String, String)] = [],   // (name, conclusion|status)
+              // Checks that came from an Actions run, grouped by the run.
+              workflowRuns: [(workflow: String, id: Int, created: String,
+                              checks: [(String, String)])] = [],
               statuses: [(String, String)] = [],    // (context, state)
               additions: Int = 3080,
               deletions: Int = 98,
@@ -41,10 +44,19 @@ final class MyPRInboxTests: XCTestCase {
         let runNodes = checkRuns.map { name, verdict in
             #"{"__typename":"CheckRun","name":"\#(name)","conclusion":"\#(verdict)","status":"COMPLETED"}"#
         }
+        let workflowNodes = workflowRuns.flatMap { run in
+            run.checks.map { name, verdict in
+                #"""
+                {"__typename":"CheckRun","name":"\#(name)","conclusion":"\#(verdict)","status":"COMPLETED",
+                 "checkSuite":{"workflowRun":{"databaseId":\#(run.id),"createdAt":"\#(run.created)",
+                 "workflow":{"name":"\#(run.workflow)"}}}}
+                """#
+            }
+        }
         let statusNodes = statuses.map { context, state in
             #"{"__typename":"StatusContext","context":"\#(context)","state":"\#(state)"}"#
         }
-        let contexts = (runNodes + statusNodes).joined(separator: ",")
+        let contexts = (runNodes + workflowNodes + statusNodes).joined(separator: ",")
 
         return """
         {
@@ -64,7 +76,7 @@ final class MyPRInboxTests: XCTestCase {
             "oid": "abc",
             "statusCheckRollup": {
               "state": "PENDING",
-              "contexts": { "totalCount": \(runNodes.count + statusNodes.count),
+              "contexts": { "totalCount": \(runNodes.count + workflowNodes.count + statusNodes.count),
                             "nodes": [\(contexts)] }
             } } } ] }
         }
@@ -170,9 +182,83 @@ final class MyPRInboxTests: XCTestCase {
         XCTAssertEqual(items[0].checks.health, .good)
     }
 
-    func testCancelledAndTimedOutCountAsFailures() throws {
+    func testTimedOutCountsAsAFailureAndCancelledDoesNot() throws {
         let items = try build([node(checkRuns: [("a", "CANCELLED"), ("b", "TIMED_OUT")])])
-        XCTAssertEqual(items[0].checks.failing, 2)
+        XCTAssertEqual(items[0].checks.failing, 1)
+        XCTAssertEqual(items[0].checks.failingNames, ["b"])
+        XCTAssertEqual(items[0].checks.skipped, 1, "a cancelled run decided nothing")
+    }
+
+    /// The shape that put "11 failing" on a green PR: a CI run cancelled one
+    /// second after it started by the concurrency group of the run that
+    /// replaced it. Both runs sit on the same commit, so both are in the
+    /// rollup — but only the second one is running the build.
+    func testASupersededRunIsNotCounted() throws {
+        let items = try build([node(workflowRuns: [
+            ("CI", 1, "2026-09-23T14:51:45Z",
+             [("build", "CANCELLED"), ("test", "CANCELLED"),
+              ("CI Success", "FAILURE")]),
+            ("CI", 2, "2026-09-23T14:51:46Z",
+             [("build", "SUCCESS"), ("test", "SUCCESS"),
+              ("CI Success", "IN_PROGRESS")]),
+        ])])
+        let checks = items[0].checks
+        XCTAssertEqual(checks.failing, 0)
+        XCTAssertEqual(checks.passing, 2)
+        XCTAssertEqual(checks.running, 1)
+        XCTAssertEqual(checks.total, 3, "only the live run is counted")
+        XCTAssertEqual(checks.health, .running)
+    }
+
+    /// Runs are only superseded within their own workflow — a second workflow
+    /// that started earlier is still live.
+    func testRunsOfOtherWorkflowsSurvive() throws {
+        let items = try build([node(workflowRuns: [
+            ("CI", 1, "2026-09-23T14:51:45Z", [("build", "CANCELLED")]),
+            ("CI", 2, "2026-09-23T14:51:46Z", [("build", "SUCCESS")]),
+            ("PR Title", 3, "2026-09-23T14:51:40Z", [("Conventional Commit", "FAILURE")]),
+        ])])
+        XCTAssertEqual(items[0].checks.failing, 1)
+        XCTAssertEqual(items[0].checks.failingNames, ["Conventional Commit"])
+        XCTAssertEqual(items[0].checks.passing, 1)
+    }
+
+    /// A matrix job repeats one name inside a single run. Those are all live,
+    /// which is why superseding is decided per run and not per check name.
+    func testMatrixJobsInTheLiveRunAreAllKept() throws {
+        let items = try build([node(workflowRuns: [
+            ("CI", 2, "2026-09-23T14:51:46Z",
+             [("test", "SUCCESS"), ("test", "SUCCESS"), ("test", "FAILURE")]),
+        ])])
+        XCTAssertEqual(items[0].checks.passing, 2)
+        XCTAssertEqual(items[0].checks.failing, 1)
+    }
+
+    /// Checks with no run behind them — StatusContexts, and apps that do not
+    /// run on Actions — have nothing to compare, so they are always kept.
+    func testChecksWithoutAWorkflowRunAreKept() throws {
+        let items = try build([
+            node(checkRuns: [("EC Staging | iOS PR", "FAILURE")],
+                 workflowRuns: [("CI", 1, "2026-09-23T14:51:45Z",
+                                 [("build", "CANCELLED")]),
+                                ("CI", 2, "2026-09-23T14:51:46Z",
+                                 [("build", "SUCCESS")])],
+                 statuses: [("AWS CodeBuild us-east-1", "SUCCESS")]),
+        ])
+        let checks = items[0].checks
+        XCTAssertEqual(checks.failing, 1)
+        XCTAssertEqual(checks.failingNames, ["EC Staging | iOS PR"])
+        XCTAssertEqual(checks.passing, 2)
+    }
+
+    /// Two runs started in the same second — the id breaks the tie.
+    func testRunIdBreaksATieOnCreatedAt() throws {
+        let items = try build([node(workflowRuns: [
+            ("CI", 9, "2026-09-23T14:51:45Z", [("build", "SUCCESS")]),
+            ("CI", 4, "2026-09-23T14:51:45Z", [("build", "FAILURE")]),
+        ])])
+        XCTAssertEqual(items[0].checks.failing, 0)
+        XCTAssertEqual(items[0].checks.passing, 1)
     }
 
     func testNeutralAndStaleCountAsSkipped() throws {

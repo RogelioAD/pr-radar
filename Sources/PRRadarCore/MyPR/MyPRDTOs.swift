@@ -101,10 +101,13 @@ public struct ContextNode: Decodable {
     public let status: String?
     public let context: String?
     public let state: String?
+    /// Which workflow run produced this CheckRun. nil for a StatusContext, and
+    /// for a CheckRun posted by an app that does not run on Actions.
+    public let checkSuite: CheckSuiteNode?
 
     enum CodingKeys: String, CodingKey {
         case typename = "__typename"
-        case name, conclusion, status, context, state
+        case name, conclusion, status, context, state, checkSuite
     }
 
     /// The single verdict for this context, whichever kind it is.
@@ -114,6 +117,31 @@ public struct ContextNode: Decodable {
     }
 
     public var displayName: String { name ?? context ?? "check" }
+
+    /// The workflow this check belongs to, if it came from one.
+    public var workflow: String? { checkSuite?.workflowRun?.workflow?.name }
+
+    /// Orders two runs of the same workflow. `createdAt` decides it; the id is
+    /// only a tie-break, because two runs can start within the same second.
+    public var runOrder: (Date, Int)? {
+        guard let run = checkSuite?.workflowRun, let created = run.createdAt
+        else { return nil }
+        return (created, run.databaseId ?? 0)
+    }
+}
+
+public struct CheckSuiteNode: Decodable {
+    public let workflowRun: WorkflowRunNode?
+}
+
+public struct WorkflowRunNode: Decodable {
+    public let databaseId: Int?
+    public let createdAt: Date?
+    public let workflow: WorkflowDTO?
+}
+
+public struct WorkflowDTO: Decodable {
+    public let name: String?
 }
 
 // MARK: - Second-phase compare payload

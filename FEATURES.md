@@ -176,8 +176,15 @@ of the approval that used to be there.
 
 `12 passed`, `2 failing`, `4 running` — from GitHub's check rollup for the head
 commit, tallying both `CheckRun` and `StatusContext` entries, which report
-their verdict in different fields. Cancelled and timed-out count as failures;
-neutral and stale count as skipped. Hover for the failing check names.
+their verdict in different fields. Timed-out counts as a failure; neutral,
+stale and cancelled count as skipped. Hover for the failing check names.
+
+Only the **newest run of each workflow** is counted. The rollup lists every
+check run on the commit, including ones from runs a re-run or a concurrency
+group has already replaced — and since both sit on the same commit, nothing in
+a check itself says which is current. Counting them all is how a PR whose live
+run is green ends up showing eleven failures, every one of them a job that a
+newer run cancelled a second after it started.
 
 ### Branch state
 

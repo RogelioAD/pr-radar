@@ -90,22 +90,27 @@ public struct MyPRInbox {
 
     /// Tallies a check rollup. CheckRun and StatusContext report their verdict
     /// in different fields, which `ContextNode.verdict` already normalises.
+    ///
+    /// `CANCELLED` is *not* a failure. A cancelled run did not decide anything
+    /// — most of them are runs a concurrency group killed a second after they
+    /// started, and calling that a failure puts a red count on a PR whose live
+    /// run is green.
     static func checks(from rollup: RollupNode?) -> ChecksSummary {
         guard let rollup else { return .empty }
         var passing = 0, failing = 0, running = 0, skipped = 0
         var failingNames: [String] = []
 
-        for context in rollup.contexts?.nodes ?? [] {
+        for context in live(rollup.contexts?.nodes ?? []) {
             switch context.verdict {
             case "SUCCESS":
                 passing += 1
-            case "FAILURE", "ERROR", "TIMED_OUT", "CANCELLED",
+            case "FAILURE", "ERROR", "TIMED_OUT",
                  "ACTION_REQUIRED", "STARTUP_FAILURE":
                 failing += 1
                 failingNames.append(context.displayName)
             case "IN_PROGRESS", "QUEUED", "PENDING", "WAITING", "REQUESTED":
                 running += 1
-            case "SKIPPED", "NEUTRAL", "STALE":
+            case "SKIPPED", "NEUTRAL", "STALE", "CANCELLED":
                 skipped += 1
             default:
                 break
@@ -115,6 +120,35 @@ public struct MyPRInbox {
         return ChecksSummary(passing: passing, failing: failing, running: running,
                              skipped: skipped, failingNames: failingNames,
                              rollupState: rollup.state)
+    }
+
+    /// Drops checks belonging to a superseded run of a workflow.
+    ///
+    /// The rollup lists every check run on the head commit, including ones from
+    /// runs that a re-run or a concurrency group has already replaced. Both runs
+    /// are on the same commit, so nothing in a single check says which is
+    /// current — only the run it came from does. Keeping the newest run per
+    /// workflow is what makes a count match what the workflow is actually
+    /// doing now.
+    ///
+    /// Filtering by run rather than by check name is deliberate: a matrix job
+    /// legitimately repeats a name within one run, and those are all live.
+    /// Anything with no run to compare — a StatusContext, or a check posted by
+    /// an app that does not run on Actions — is always kept.
+    static func live(_ contexts: [ContextNode]) -> [ContextNode] {
+        var newest: [String: (Date, Int)] = [:]
+        for context in contexts {
+            guard let workflow = context.workflow, let order = context.runOrder
+            else { continue }
+            if let seen = newest[workflow], seen >= order { continue }
+            newest[workflow] = order
+        }
+
+        return contexts.filter { context in
+            guard let workflow = context.workflow, let order = context.runOrder
+            else { return true }
+            return newest[workflow].map { $0 == order } ?? true
+        }
     }
 
     /// Links PRs whose base is another of these PRs' head branches, in both

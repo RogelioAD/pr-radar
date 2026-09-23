@@ -114,7 +114,16 @@ public enum Query {
                           totalCount
                           nodes {
                             __typename
-                            ... on CheckRun { name conclusion status }
+                            ... on CheckRun {
+                              name conclusion status
+                              checkSuite {
+                                workflowRun {
+                                  databaseId
+                                  createdAt
+                                  workflow { name }
+                                }
+                              }
+                            }
                             ... on StatusContext { context state }
                           }
                         }
