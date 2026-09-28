@@ -109,7 +109,29 @@ enum Log {
                                      suggestion: nil),
                     anchor: ReviewThread(path: "Sources/Deep/Link.swift", line: 351,
                                          startLine: nil, body: "…"),
-                    isSelected: true),
+                    isSelected: true,
+                    // The other half of the same argument: the code under a
+                    // finding cannot be conjured either. It is sliced from the
+                    // worktree the review ran in, which is deleted when the run
+                    // ends, so every row that already exists has none — and a
+                    // view nobody can open is a view nobody can look at.
+                    excerpt: DiffExcerpt(
+                        path: "Sources/Deep/Link.swift",
+                        lines: [
+                            DiffLine(kind: .context, number: 349,
+                                     text: "    let mut parts = path.split('/')"),
+                            DiffLine(kind: .context, number: 350,
+                                     text: "    let seg = parts.next()?"),
+                            DiffLine(kind: .removed, number: nil,
+                                     text: "    if seg.isEmpty { return nil }"),
+                            DiffLine(kind: .added, number: 351,
+                                     text: "    if reservedWebSegments.contains(seg) { return nil }"),
+                            DiffLine(kind: .added, number: 352,
+                                     text: "    if seg.isEmpty { return nil }"),
+                            DiffLine(kind: .context, number: 353,
+                                     text: "    return Route(fromSlug: seg)"),
+                        ],
+                        focus: 351)),
                 PreparedFinding(
                     finding: Finding(tier: .mild, file: "docs/specs/home-view.md",
                                      line: 102, endLine: nil,

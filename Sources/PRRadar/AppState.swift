@@ -7,7 +7,79 @@ final class AppState: ObservableObject {
     // MARK: - Reviews tab
 
     /// Everything waiting on the viewer, unfiltered. The badge counts these.
-    @Published var items: [ReviewItem] = []
+    @Published var items: [ReviewItem] = [] {
+        didSet {
+            // A row that has gone cannot have its findings open. Left behind,
+            // its key would hold the drawer at double width over a list with
+            // nothing open in it.
+            let live = Set(items.map(\.pingKey))
+            if !openFindings.isSubset(of: live) { openFindings.formIntersection(live) }
+        }
+    }
+
+    /// Rows whose findings list is open, by ping key.
+    ///
+    /// Here rather than in the row, where it started, because the *panel* has
+    /// to read it: showing a diff doubles the drawer's width, and a row-local
+    /// `@State` is invisible to the frame calculation that would have to grow.
+    ///
+    /// A set rather than one key, because comparing two findings in the same
+    /// file is the commonest reason to open the code at all.
+    @Published var openFindings: Set<String> = []
+
+    /// How wide the drawer should be drawn, and framed, right now.
+    ///
+    /// Read in both places, from one rule: a panel and its contents that
+    /// disagree about the width clip.
+    var drawerWidth: CGFloat { drawerWidth(room: room, tab: selectedTab) }
+
+    /// The same, for a room and tab the drawer has not moved to yet.
+    ///
+    /// Asked *before* the move, because both halves of the drawer have to be
+    /// told to travel at once: the window eases, and the contents only ease
+    /// too if the change that resized them was made inside an animation. Which
+    /// means knowing it was a resize before making it.
+    func drawerWidth(room: DrawerRoom?, tab: DrawerTab,
+                     openKeys: Set<String>? = nil) -> CGFloat {
+        // Which tab is showing decides which set of keys the question is about;
+        // the question is the same one either way.
+        let open = openKeys ?? expanded(on: tab)
+        return DrawerWidth.isWide(room: room, openKeys: open,
+                                  expandable: expandable(on: tab))
+            ? Layout.wideDrawerWidth
+            : Layout.drawerWidth
+    }
+
+    /// The width a row is laid out at, which follows the drawer's.
+    ///
+    /// `Layout.listContentWidth` is the standard one and is still right most of
+    /// the time; a row told that while the drawer is at double width simply
+    /// leaves half of it empty.
+    var listContentWidth: CGFloat { drawerWidth - Layout.listPadding }
+
+    /// What is expanded on a tab, and what could be.
+    func expanded(on tab: DrawerTab) -> Set<String> {
+        switch tab {
+        case .reviews: return openFindings
+        case .mine: return openThreads
+        }
+    }
+
+    func expandable(on tab: DrawerTab) -> [String] {
+        switch tab {
+        case .reviews: return keysAwaitingSelection
+        case .mine: return idsWithUnresolvedThreads
+        }
+    }
+
+    /// Pull requests of yours with a thread there is something to show for.
+    ///
+    /// The count and the threads can disagree: `reviewThreads` is fetched a
+    /// hundred at a time and a thread GitHub gave no id to is dropped. A row
+    /// saying `3 open` with nothing behind it must not offer to open.
+    var idsWithUnresolvedThreads: [String] {
+        scopedMyPRs.filter { !$0.unresolvedThreads.isEmpty }.map(\.id)
+    }
     @Published var sortOrder: ReviewSortOrder = Prefs.sortOrder {
         didSet { Prefs.sortOrder = sortOrder }
     }
@@ -50,7 +122,14 @@ final class AppState: ObservableObject {
 
     // MARK: - My PRs tab
 
-    @Published var myPRs: [MyPullRequest] = []
+    @Published var myPRs: [MyPullRequest] = [] {
+        didSet {
+            // Same reason as `items`: a row that has gone cannot have anything
+            // open on it, and a key left behind would hold the drawer wide.
+            let live = Set(myPRs.map(\.id))
+            if !openThreads.isSubset(of: live) { openThreads.formIntersection(live) }
+        }
+    }
     @Published var myPRSortOrder: MyPRSortOrder = Prefs.myPRSortOrder {
         didSet { Prefs.myPRSortOrder = myPRSortOrder }
     }
@@ -218,7 +297,34 @@ final class AppState: ObservableObject {
 
     /// Every automatic review the app remembers.
     @Published var autoReviewLog: AutoReviewLog = Prefs.autoReviewLog {
-        didSet { Prefs.autoReviewLog = autoReviewLog }
+        didSet {
+            Prefs.autoReviewLog = autoReviewLog
+            // A row that can no longer draw a findings list is not a row with
+            // one open. Pressing a decision retires the findings with the
+            // record, and a key left behind would re-open the list by itself if
+            // the review were ever run again.
+            let openable = Set(keysAwaitingSelection)
+            if !openFindings.isSubset(of: openable) {
+                openFindings.formIntersection(openable)
+            }
+        }
+    }
+
+    /// Pull requests of yours whose unresolved threads are open, by row id.
+    ///
+    /// Its own set rather than sharing `openFindings`: the two tabs are keyed
+    /// differently — a ping key names one *request* to review, a row id names a
+    /// pull request — and one set would have them colliding the moment the two
+    /// namespaces overlapped.
+    @Published var openThreads: Set<String> = []
+
+    /// Rows showing a findings list to pick over, which is the only thing that
+    /// widens the drawer. Scoped, because a row filtered out of the list is not
+    /// on screen to be wide for.
+    var keysAwaitingSelection: [String] {
+        scopedItems
+            .filter { autoReviewLog[$0.pingKey]?.isAwaitingSelection == true }
+            .map(\.pingKey)
     }
 
     /// The pingKey of the review currently running, for the header's pulse.

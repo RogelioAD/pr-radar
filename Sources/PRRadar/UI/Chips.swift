@@ -47,6 +47,45 @@ struct Chip: View {
     }
 }
 
+/// The one hover treatment for anything pressable inside a list row.
+///
+/// Chips and buttons on a row had two hover languages between them and most had
+/// none at all: `RowButton` brightened its own capsule, the threads chip lifted
+/// and brightened, and the tier headers and file:line disclosures did nothing —
+/// so whether something could be clicked depended on which one you happened to
+/// hover first.
+///
+/// Brightness *and* a small lift, because neither carries it alone here. A row
+/// already lights its whole background on hover, so a child that only brightens
+/// is competing with its parent for the same signal; and 4% of a chip is a few
+/// points of movement, which the eye catches where a tint change on a coloured
+/// capsule does not.
+///
+/// `enabled` is passed rather than assumed: a disabled button that reacted to
+/// the pointer would be promising something it will not do.
+struct Pressable: ViewModifier {
+    var enabled = true
+
+    @State private var hovering = false
+
+    private var active: Bool { hovering && enabled }
+
+    func body(content: Content) -> some View {
+        content
+            .brightness(active ? 0.18 : 0)
+            .scaleEffect(active ? 1.04 : 1)
+            .animation(.easeOut(duration: 0.12), value: active)
+            .onHover { hovering = $0 }
+    }
+}
+
+extension View {
+    /// Marks a chip or button in a list row as pressable. See `Pressable`.
+    func pressable(_ enabled: Bool = true) -> some View {
+        modifier(Pressable(enabled: enabled))
+    }
+}
+
 /// A compact action button sized for a row.
 struct RowButton: View {
     let title: String
@@ -54,8 +93,6 @@ struct RowButton: View {
     var health: Health = .running
     var enabled = true
     let action: () -> Void
-
-    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
@@ -68,14 +105,12 @@ struct RowButton: View {
             .foregroundStyle(enabled ? health.tint : Color.secondary)
             .padding(.horizontal, 7)
             .frame(height: ChipMetrics.height)
-            .background(
-                Capsule().fill(health.tint.opacity(enabled ? (hovering ? 0.28 : 0.16) : 0.07))
-            )
+            .background(Capsule().fill(health.tint.opacity(enabled ? 0.16 : 0.07)))
             .overlay(Capsule().strokeBorder(health.tint.opacity(enabled ? 0.45 : 0.15),
                                             lineWidth: 0.8))
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
-        .onHover { hovering = $0 }
+        .pressable(enabled)
     }
 }

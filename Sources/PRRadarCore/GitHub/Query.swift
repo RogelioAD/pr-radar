@@ -102,7 +102,28 @@ public enum Query {
                 }
                 reviewThreads(first: 100) {
                   totalCount
-                  nodes { isResolved isOutdated }
+                  nodes {
+                    id isResolved isOutdated path line
+                    # Three, not all of them. This query runs on the sixty
+                    # second poll for every pull request of yours at once, and
+                    # a thread's worth of prose per row per minute is a real
+                    # cost for something most rows never open. Three is the
+                    # shape of a conversation — what was asked, and whether it
+                    # was answered — and `totalCount` says how much is left.
+                    comments(first: 3) {
+                      totalCount
+                      nodes { author { login } body }
+                    }
+                    # Aliased and asked for once. `diffHunk` is a property of
+                    # the comment in the schema but a property of the *thread*
+                    # in fact — every comment on a thread carries the same one —
+                    # so fetching it with the bodies above would pull three
+                    # copies of the same hunk per thread, per pull request,
+                    # every sixty seconds.
+                    hunk: comments(first: 1) {
+                      nodes { diffHunk }
+                    }
+                  }
                 }
                 commits(last: 1) {
                   nodes {

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import PRRadarCore
 
@@ -79,7 +80,25 @@ final class PanelController {
     /// Set while the window is travelling between the badge and the drawer.
     /// Layout requests arriving mid-flight would retarget it and fight the
     /// animation, and a second toggle would start a competing one.
+    private var cancellables: Set<AnyCancellable> = []
     private var isAnimatingFrame = false
+    /// True while `applyFrame(animated:)` is in flight.
+    ///
+    /// Separate from `isAnimatingFrame`, which also gates expand and collapse:
+    /// this one must not swallow a click on the close box for the length of a
+    /// resize. It exists for one job — stopping a measurement that lands
+    /// mid-flight from calling the *un*-animated `applyFrame`, which snaps the
+    /// panel to a new frame while an animation is still travelling to the old
+    /// one. Nothing is lost by waiting: the completion handler re-reads the
+    /// target, which is exactly what it is there for.
+    private var isResizingFrame = false
+
+    /// How long the drawer takes to double and to come back.
+    ///
+    /// Slower than the 0.16 a tab switch uses, because this is 440 points of
+    /// travel rather than a few dozen, and a jump that size at that speed reads
+    /// as a flicker rather than a movement.
+    private static let widthDuration: TimeInterval = 0.22
 
     /// True only between mouse-down and mouse-up on the resize edge. While
     /// set, heights are clamped but not snapped, so the edge follows the
@@ -145,6 +164,8 @@ final class PanelController {
             onRefresh: { [weak self] in self?.onRefresh() },
             onRowHeights: { [weak self] in self?.adoptRowHeights($0) },
             onSelectTab: { [weak self] in self?.selectTab($0) },
+            onToggleFindings: { [weak self] in self?.toggleFindings($0) },
+            onToggleThreads: { [weak self] in self?.toggleThreads($0) },
             onToggleRoom: { [weak self] in self?.toggleRoom($0) },
             onResetBadgeSize: { [weak self] in self?.resetBadgeSize() },
             onHeaderControls: { [weak self] in self?.headerControls = $0 }
@@ -187,7 +208,40 @@ final class PanelController {
         panel.contentView = hostingView
 
         observeActivation()
+        observeWidth()
         applyFrame()
+    }
+
+    /// Re-frames the drawer when something *other* than a deliberate move
+    /// changes how wide it should be.
+    ///
+    /// The deliberate ones go through `resettle(into:)` and move both halves
+    /// together. This is for the rest, and they are not rare: pressing a
+    /// decision on a row retires its findings with the record, and a refresh
+    /// that drops the row does the same. Neither is a thing anybody thought to
+    /// tell the panel about, so the drawer stayed at double width over a list
+    /// that had nothing open in it — a row reading `done` in a window twice the
+    /// size of anything left in it.
+    ///
+    /// Read a turn late, because `objectWillChange` fires before the change it
+    /// is announcing and the width is a function of the value afterwards.
+    ///
+    /// The contents have already re-laid themselves out by the time this runs,
+    /// so there is no second half to synchronise here: the window is catching
+    /// up, not leading. It is transparent outside the drawer's own rounded
+    /// rectangle, so what it is catching up across cannot be seen anyway.
+    private func observeWidth() {
+        state.objectWillChange
+            .sink { [weak self] _ in
+                Task { @MainActor in self?.syncWidth() }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func syncWidth() {
+        guard state.expanded, !isAnimatingFrame, !isResizingFrame else { return }
+        guard abs(state.drawerWidth - panel.frame.width) >= 1 else { return }
+        resettle()
     }
 
     /// Hover only works while the panel is key, and a panel is only key while
@@ -372,10 +426,11 @@ final class PanelController {
     /// corner visually pinned where the user parked it.
     private func targetFrame() -> NSRect {
         guard state.expanded else { return badgeFrame }
+        let width = state.drawerWidth
         let raw = NSRect(
-            x: badgeFrame.maxX - Layout.drawerWidth,
+            x: badgeFrame.maxX - width,
             y: badgeFrame.minY,
-            width: Layout.drawerWidth,
+            width: width,
             height: drawerHeight
         )
         return clamp(raw)
@@ -391,12 +446,14 @@ final class PanelController {
         // Smooths the jump when switching tabs, and the settle after a resize.
         // Never used mid-drag: animating towards a target the pointer is still
         // moving would lag behind the cursor.
+        isResizingFrame = true
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = duration
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(frame, display: true)
         }, completionHandler: { [weak self] in
             guard let self else { return }
+            self.isResizingFrame = false
             // The drawer has finished travelling; whatever is under the pointer
             // now is the answer, whether or not the pointer moved to get there.
             self.hostingView.refreshHoverZone()
@@ -417,7 +474,14 @@ final class PanelController {
             // since said they need, this is the last word.
             let settled = self.targetFrame()
             if abs(settled.height - self.panel.frame.height) >= 1 {
-                self.panel.setFrame(settled, display: true)
+                // Eased rather than set outright. The correction is usually a
+                // row or two, and arriving at a height by stepping to it is
+                // the jolt at the end of an otherwise smooth move.
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.1
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    self.panel.animator().setFrame(settled, display: true)
+                }
             }
         })
     }
@@ -480,7 +544,7 @@ final class PanelController {
             // Probes are expressed as distance from the visual top; convert
             // back into view space before asking the classifier.
             let pointY = hostingView.isFlipped ? visualY : height - visualY
-            let zone = zone(at: NSPoint(x: Layout.drawerWidth / 2, y: pointY))
+            let zone = zone(at: NSPoint(x: state.drawerWidth / 2, y: pointY))
             Log.debug("   \(label): \(zone)")
         }
         // Each header control probed through the same path a real press takes.
@@ -703,20 +767,53 @@ final class PanelController {
         }
         guard changed else { return }
         state.rowHeights.merge(heights) { _, new in new }
-        if state.expanded, !isAnimatingFrame { applyFrame() }
+        if state.expanded, !isAnimatingFrame, !isResizingFrame { applyFrame() }
     }
 
     /// Re-lays out an open drawer after the list changes.
     func refreshLayoutIfExpanded() {
-        if state.expanded, !isAnimatingFrame { applyFrame() }
+        if state.expanded, !isAnimatingFrame, !isResizingFrame { applyFrame() }
+    }
+
+    /// Opens or closes a row's findings list.
+    ///
+    /// Through the panel rather than straight into the state, unlike the ticks
+    /// beside it, because this is the one thing in the list that changes the
+    /// drawer's *width* — and a width nothing re-frames is a panel whose window
+    /// and whose contents disagree, which clips. The same `resettle` a tab
+    /// switch uses: a different set of rows to measure, a different frame, and
+    /// a different zone map under a pointer that has not moved.
+    func toggleFindings(_ key: String) {
+        var opened = state.openFindings
+        if opened.contains(key) { opened.remove(key) } else { opened.insert(key) }
+        resettle(into: state.drawerWidth(room: state.room, tab: state.selectedTab,
+                                         openKeys: opened)) {
+            state.openFindings = opened
+        }
+    }
+
+    /// The same, for the unresolved threads on one of your own pull requests.
+    ///
+    /// A separate method rather than one taking a tab, because the two sets are
+    /// keyed differently and conflating them is how a row on one tab would open
+    /// a row on the other.
+    func toggleThreads(_ id: String) {
+        var opened = state.openThreads
+        if opened.contains(id) { opened.remove(id) } else { opened.insert(id) }
+        resettle(into: state.drawerWidth(room: state.room, tab: state.selectedTab,
+                                         openKeys: opened)) {
+            state.openThreads = opened
+        }
     }
 
     /// Switching tabs changes which rows — and so which measured heights — are
-    /// in play, so the frame is recomputed even though the width is fixed.
+    /// in play, and may change the width too: findings are a `reviews` thing,
+    /// so leaving that tab gives the extra width back.
     func selectTab(_ tab: DrawerTab) {
         guard state.selectedTab != tab else { return }
-        state.selectedTab = tab
-        resettle()
+        resettle(into: state.drawerWidth(room: state.room, tab: tab)) {
+            state.selectedTab = tab
+        }
     }
 
     /// Enters or leaves a room.
@@ -725,8 +822,12 @@ final class PanelController {
     /// `selectedTab` was never changed, so there is nothing to restore — the
     /// surface simply stops being the room.
     func toggleRoom(_ room: DrawerRoom) {
-        state.toggle(room)
-        resettle()
+        // A room covers the list, so entering one is always a way back to the
+        // standard width — and leaving one can be a way back out to double it.
+        let after: DrawerRoom? = state.room == room ? nil : room
+        resettle(into: state.drawerWidth(room: after, tab: state.selectedTab)) {
+            state.toggle(room)
+        }
     }
 
     /// Opens the drawer straight into a room, for the context menu.
@@ -736,10 +837,12 @@ final class PanelController {
     /// framed for the room's chrome on the way out rather than growing to a
     /// list's height and then correcting itself.
     func openRoom(_ room: DrawerRoom) {
-        state.open(room)
         if state.expanded {
-            resettle()
+            resettle(into: state.drawerWidth(room: room, tab: state.selectedTab)) {
+                state.open(room)
+            }
         } else {
+            state.open(room)
             setExpanded(true)
         }
     }
@@ -749,6 +852,32 @@ final class PanelController {
     /// a different zone map under whatever the pointer is already over.
     private func resettle() {
         applyFrame(animated: true)
+        hostingView.updateTrackingAreas()
+        hostingView.refreshHoverZone()
+    }
+
+    /// The same, for a change that may also alter the drawer's *width*.
+    ///
+    /// Every route in and out of the wide drawer runs through here — opening or
+    /// closing a findings list, changing tab, walking into a room — because
+    /// they share one failure. The window's frame eases; the contents re-lay
+    /// out the instant the state changes. So for the length of the animation
+    /// the drawer was one width and the contents inside it were drawn for
+    /// another, and the mismatch reads as the content arriving before the
+    /// window rather than as a window moving badly.
+    ///
+    /// Making the change inside `withAnimation` is what puts the two on the
+    /// same clock. It is done *only* when the width actually changes: wrapping
+    /// an ordinary tab switch would animate the swap from one list to the
+    /// other, which is a different and unasked-for effect.
+    private func resettle(into width: CGFloat, _ change: () -> Void) {
+        guard width != state.drawerWidth else {
+            change()
+            resettle()
+            return
+        }
+        withAnimation(.easeOut(duration: Self.widthDuration), change)
+        applyFrame(animated: true, duration: Self.widthDuration)
         hostingView.updateTrackingAreas()
         hostingView.refreshHoverZone()
     }

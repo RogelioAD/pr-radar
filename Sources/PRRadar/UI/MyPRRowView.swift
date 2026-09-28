@@ -19,6 +19,12 @@ struct MyPRRowView: View {
     /// list does, and a row has to be told rather than infer it — see
     /// `Layout.listContentWidth`.
     var width: CGFloat = Layout.listContentWidth
+    /// Whether this row's unresolved threads are open.
+    ///
+    /// Held by `AppState` for the same reason a findings list is: opening one
+    /// widens the drawer, and the panel cannot see a row's `@State`.
+    var showingThreads = false
+    var onToggleThreads: (() -> Void)?
 
     @State private var hovering = false
 
@@ -34,6 +40,7 @@ struct MyPRRowView: View {
                 identityLine
                 reviewChips
                 stateChips
+                if showingThreads, !item.unresolvedThreads.isEmpty { threads }
                 if showsStackRow { stackRow }
             }
             // Definite, so the marker beside it is never squeezed out. The
@@ -203,6 +210,71 @@ struct MyPRRowView: View {
         }
     }
 
+    /// The unresolved threads themselves, under the count that opened them.
+    ///
+    /// The count was always the whole of it — `3 open` tells you post has
+    /// arrived and nothing about whether it matters. Reading them here is the
+    /// trip to GitHub this saves, and the answer is usually that two of the
+    /// three were nits.
+    private var threads: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(item.unresolvedThreads) { thread in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        if let location = thread.location {
+                            Text(location)
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                                .truncationMode(.head)
+                        }
+                        // GitHub folds these away and so does the eye: still
+                        // unresolved and still counted, but far likelier to be
+                        // stale than unanswered.
+                        if thread.isOutdated {
+                            Text("outdated")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(.tertiary)
+                                .help("The code this was written against has "
+                                      + "changed since")
+                        }
+                    }
+                    if let excerpt = thread.excerpt {
+                        DiffHunkView(excerpt: excerpt)
+                    }
+                    ForEach(Array(thread.comments.enumerated()), id: \.offset) { _, comment in
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(comment.author)
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                            Text(comment.body)
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.primary)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    // Said rather than dropped: a thread cut off mid-argument
+                    // reads as settled.
+                    if thread.moreComments > 0 {
+                        Text("+\(thread.moreComments) more")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.primary.opacity(0.05)))
+                .overlay(RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(Health.attention.tint.opacity(0.22), lineWidth: 0.8))
+            }
+        }
+        .padding(.trailing, 2)
+    }
+
     /// Checks, threads, merge blocker, behind-by.
     private var stateChips: some View {
         ChipFlow(spacing: 4) {
@@ -210,9 +282,34 @@ struct MyPRRowView: View {
                 checksChip
             }
             if item.unresolvedThreadCount > 0 {
-                Chip(text: "\(item.unresolvedThreadCount) open",
-                     symbol: "bubble.left.and.bubble.right", health: .attention)
-                    .help("\(item.unresolvedThreadCount) unresolved of \(item.totalThreadCount) threads")
+                // A button when there is something behind the count, and a
+                // plain chip when there is not. The two can differ: threads are
+                // fetched a hundred at a time and one without an id is dropped,
+                // and a count that offers to open onto nothing is worse than a
+                // count that says nothing.
+                if item.unresolvedThreads.isEmpty {
+                    Chip(text: "\(item.unresolvedThreadCount) open",
+                         symbol: "bubble.left.and.bubble.right", health: .attention)
+                        .help("\(item.unresolvedThreadCount) unresolved of "
+                              + "\(item.totalThreadCount) threads")
+                } else {
+                    Button { onToggleThreads?() } label: {
+                        Chip(text: "\(item.unresolvedThreadCount) open",
+                             symbol: showingThreads
+                                 ? "chevron.down"
+                                 : "bubble.left.and.bubble.right",
+                             health: .attention, filled: showingThreads)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    // Every other chip on this row is a label, so this one has
+                    // to say it is not.
+                    .pressable()
+                    .help(showingThreads
+                          ? "Hide the threads"
+                          : "\(item.unresolvedThreadCount) unresolved of "
+                            + "\(item.totalThreadCount) threads — click to read them")
+                }
             } else if item.totalThreadCount > 0 {
                 Chip(text: "\(item.totalThreadCount) resolved",
                      symbol: "bubble.left", health: .neutral)

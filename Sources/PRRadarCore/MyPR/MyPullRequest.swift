@@ -147,6 +147,13 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
     public let hasLeadGate: Bool
     public let awaitingReviewers: [String]
     public let unresolvedThreadCount: Int
+    /// The threads behind that count.
+    ///
+    /// Optional in effect — defaulted, like `account` beside it — so every
+    /// existing construction site and test goes on compiling. An empty list
+    /// where the count is not zero simply means the row can say how many there
+    /// are but not what they say.
+    public var unresolvedThreads: [UnresolvedThread] = []
     /// Which account surfaced this row. Empty until a fetch tags it, and set
     /// after the inbox builds rather than threaded through it — the same
     /// post-build shape `behindBy` already uses, and it keeps every existing
@@ -244,6 +251,7 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
                 mergeBlocker: MergeBlocker, approvals: [Approval],
                 hasLeadGate: Bool = false,
                 awaitingReviewers: [String], unresolvedThreadCount: Int,
+                unresolvedThreads: [UnresolvedThread] = [],
                 totalThreadCount: Int, checks: ChecksSummary,
                 additions: Int, deletions: Int, changedFiles: Int,
                 behindBy: Int? = nil, stackedOn: Int? = nil,
@@ -263,6 +271,7 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
         self.hasLeadGate = hasLeadGate
         self.awaitingReviewers = awaitingReviewers
         self.unresolvedThreadCount = unresolvedThreadCount
+        self.unresolvedThreads = unresolvedThreads
         self.totalThreadCount = totalThreadCount
         self.checks = checks
         self.additions = additions

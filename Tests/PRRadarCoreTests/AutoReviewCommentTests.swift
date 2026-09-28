@@ -453,6 +453,140 @@ extension AutoReviewCommentTests {
         record.body = "b"
         XCTAssertFalse(record.isAwaitingSelection)
     }
+
+    // MARK: Getting off the row
+
+    /// The bug: the Post button wants a tick, and it was the only control on a
+    /// `ready` row. Unticking the last finding left nothing pressable at all,
+    /// so the only route to "Mark approved" ran through a comment nobody
+    /// wanted to leave.
+    func testUntickingEverythingOffersTheDecisionsInstead() {
+        var items = prepared([finding(.priority, line: 11), finding(.mild, line: 12)])
+        for index in items.indices { items[index].isSelected = false }
+
+        var record = AutoReviewRecord(status: .ready)
+        record.body = "b"
+        record.prepared = items
+
+        XCTAssertEqual(record.selection.chosen, 0)
+        XCTAssertTrue(record.offersDecisions)
+        XCTAssertFalse(record.canPost)
+    }
+
+    /// One tick is still a review to send, so the row keeps the ordinary route:
+    /// post it, then decide what it meant.
+    func testOneTickKeepsThePostRouteAndWithholdsTheDecisions() {
+        var items = prepared([finding(.priority, line: 11), finding(.mild, line: 12)])
+        items[1].isSelected = false
+
+        var record = AutoReviewRecord(status: .ready)
+        record.body = "b"
+        record.prepared = items
+
+        XCTAssertEqual(record.selection.chosen, 1)
+        XCTAssertTrue(record.canPost)
+        XCTAssertFalse(record.offersDecisions)
+    }
+
+    /// A clean bill of health has nothing to tick and never could have, so it
+    /// was a dead end for exactly the same reason. Its one decision is drawn
+    /// beside the chip rather than on the band, so the band stays away.
+    func testAReviewThatFoundNothingCanStillBeGotOffTheRow() {
+        var record = AutoReviewRecord(status: .ready)
+        record.body = "No issues found."
+        XCTAssertEqual(record.selection.total, 0)
+        XCTAssertTrue(record.foundNothing)
+        XCTAssertFalse(record.offersDecisions)
+        XCTAssertFalse(record.canPost)
+    }
+
+    /// A row whose findings were all unticked is *not* a clean review. One is a
+    /// decision somebody made; the other is the review having nothing to say,
+    /// and a chip reading "no findings" over four findings would be a lie.
+    func testUntickingEverythingIsNotTheSameAsFindingNothing() {
+        var items = prepared([finding(.priority, line: 11), finding(.mild, line: 12)])
+        for index in items.indices { items[index].isSelected = false }
+
+        var record = AutoReviewRecord(status: .ready)
+        record.body = "b"
+        record.counts = ["priority": 1, "mild": 1]
+        record.prepared = items
+
+        XCTAssertFalse(record.foundNothing)
+        XCTAssertTrue(record.offersDecisions)
+    }
+
+    /// Nor is a record written before curated mode, which has no prepared
+    /// findings because they were never broken out — not because there were
+    /// none. The counts are what tell the two apart.
+    func testARecordFromBeforeCuratedModeIsNotACleanReview() {
+        var record = AutoReviewRecord(status: .ready)
+        record.body = "b"
+        record.counts = ["mild": 3]
+        XCTAssertTrue(record.prepared.isEmpty)
+        XCTAssertFalse(record.foundNothing)
+    }
+
+    /// Only while it is waiting to be sent. Once a review is on the pull
+    /// request the row has a different sentence to say and all four ways out.
+    func testACleanReviewThatWasPostedIsNoLongerTheCleanRow() {
+        var record = AutoReviewRecord(status: .posted)
+        record.body = "No issues found."
+        XCTAssertFalse(record.foundNothing)
+        XCTAssertTrue(record.offersDecisions)
+    }
+
+    /// Unchanged: a review on the pull request has always offered them.
+    func testAPostedReviewStillOffersTheDecisions() {
+        var record = AutoReviewRecord(status: .posted)
+        record.body = "b"
+        XCTAssertTrue(record.offersDecisions)
+    }
+
+    /// A row in flight, failed or already dealt with is not asking anything.
+    func testARowThatIsNotWaitingOnAnybodyOffersNothing() {
+        for status in [AutoReviewStatus.running, .queued, .failed,
+                       .skipped, .dismissed] {
+            var record = AutoReviewRecord(status: status)
+            record.body = "b"
+            XCTAssertFalse(record.offersDecisions, "\(status)")
+        }
+    }
+
+    /// A posted review is there to be acted on, so all four ways out apply.
+    func testAPostedReviewHasSomethingForEveryDecisionToActOn() {
+        var record = AutoReviewRecord(status: .posted)
+        record.body = "the findings"
+        XCTAssertTrue(record.offersDecisions)
+        XCTAssertTrue(record.hasPostedReview)
+    }
+
+    /// An unticked row has posted nothing, so only approving is left: the other
+    /// three act on a review that is not there, and request-changes could not
+    /// be sent at all — GitHub rejects it without a body, and the only body
+    /// here is the review whose findings were just declined.
+    func testAnUntickedRowIsLeftWithApprovingAlone() {
+        var items = prepared([finding(.priority, line: 11)])
+        items[0].isSelected = false
+
+        var record = AutoReviewRecord(status: .ready)
+        record.body = "the findings"
+        record.prepared = items
+
+        XCTAssertTrue(record.offersDecisions)
+        XCTAssertFalse(record.hasPostedReview)
+    }
+
+    /// A clean review is left with approving too, but reaches it by the other
+    /// route: the button is drawn beside its chip rather than on the band, so
+    /// the band is deliberately absent rather than present with one thing on it.
+    func testACleanReviewIsAlsoLeftWithApprovingAlone() {
+        var record = AutoReviewRecord(status: .ready)
+        record.body = "No issues found."
+        XCTAssertTrue(record.foundNothing)
+        XCTAssertFalse(record.offersDecisions)
+        XCTAssertFalse(record.hasPostedReview)
+    }
     // MARK: - Saying how many are actually inline
 
     private func mild(_ summary: String, file: String? = "a.swift",

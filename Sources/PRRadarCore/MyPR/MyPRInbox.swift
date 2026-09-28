@@ -60,7 +60,31 @@ public struct MyPRInbox {
         }
 
         let threads = node.reviewThreads?.nodes ?? []
-        let unresolved = threads.filter { $0.isResolved == false }.count
+        let openThreads = threads.filter { $0.isResolved == false }
+        let unresolved = openThreads.count
+        // Only the ones GitHub gave an id to. Without one a thread cannot keep
+        // its place across a refresh, and a row that reshuffles every sixty
+        // seconds is worse than one that lists one thread fewer.
+        let unresolvedThreads = openThreads.compactMap { thread -> UnresolvedThread? in
+            guard let id = thread.id else { return nil }
+            let comments = thread.comments?.nodes ?? []
+            return UnresolvedThread(
+                id: id,
+                path: thread.path,
+                line: thread.line,
+                isOutdated: thread.isOutdated ?? false,
+                comments: comments.map {
+                    UnresolvedThread.Comment(
+                        author: $0.author?.login ?? "someone",
+                        body: UnresolvedThread.trimmed($0.body ?? ""))
+                },
+                moreComments: max(0, (thread.comments?.totalCount ?? 0) - comments.count),
+                excerpt: thread.path.flatMap { path in
+                    thread.hunk?.nodes.first?.diffHunk.flatMap {
+                        DiffExcerpt.parse(diffHunk: $0, path: path, line: thread.line)
+                    }
+                })
+        }
 
         return MyPullRequest(
             repo: repo,
@@ -80,6 +104,7 @@ public struct MyPRInbox {
             hasLeadGate: !repoLeads.isEmpty,
             awaitingReviewers: awaiting,
             unresolvedThreadCount: unresolved,
+            unresolvedThreads: unresolvedThreads,
             totalThreadCount: node.reviewThreads?.totalCount ?? threads.count,
             checks: Self.checks(from: node.commits?.nodes.first?.commit?.statusCheckRollup),
             additions: node.additions ?? 0,

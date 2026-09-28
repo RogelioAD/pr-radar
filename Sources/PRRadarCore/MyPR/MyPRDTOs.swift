@@ -64,8 +64,31 @@ public struct ThreadConn: Decodable {
 }
 
 public struct ThreadNode: Decodable {
+    public let id: String?
     public let isResolved: Bool?
     public let isOutdated: Bool?
+    public let path: String?
+    public let line: Int?
+    public let comments: ThreadCommentConn?
+    public let hunk: ThreadHunkConn?
+}
+
+public struct ThreadHunkConn: Decodable {
+    public let nodes: [ThreadHunkNode]
+}
+
+public struct ThreadHunkNode: Decodable {
+    public let diffHunk: String?
+}
+
+public struct ThreadCommentConn: Decodable {
+    public let totalCount: Int
+    public let nodes: [ThreadCommentNode]
+}
+
+public struct ThreadCommentNode: Decodable {
+    public let author: ActorDTO?
+    public let body: String?
 }
 
 public struct CommitConn: Decodable {

@@ -45,11 +45,20 @@ public struct PreparedFinding: Codable, Equatable, Sendable, Identifiable {
     /// hang and the summary is its only home.
     public let anchor: ReviewThread?
     public var isSelected: Bool
+    /// The code this finding is about, kept from the diff it was anchored
+    /// against so the row can show it later.
+    ///
+    /// Optional and defaulted, which is what lets a record written before this
+    /// existed decode: those rows simply have no code to open, and the
+    /// disclosure is not offered on them.
+    public var excerpt: DiffExcerpt?
 
-    public init(finding: Finding, anchor: ReviewThread?, isSelected: Bool) {
+    public init(finding: Finding, anchor: ReviewThread?, isSelected: Bool,
+                excerpt: DiffExcerpt? = nil) {
         self.finding = finding
         self.anchor = anchor
         self.isSelected = isSelected
+        self.excerpt = excerpt
     }
 
     public var id: String { AutoReviewComment.identity(finding) }
@@ -95,6 +104,69 @@ extension AutoReviewRecord {
 
     /// Whether this review is waiting to be picked over rather than sent.
     public var isAwaitingSelection: Bool { status == .ready && !prepared.isEmpty }
+
+    /// Whether the review came back clean.
+    ///
+    /// Nothing to tick, and nothing that *could* have been ticked — which is a
+    /// different row from one whose findings were all unticked by hand, and has
+    /// to read differently: "0 of 4" is a decision somebody made, and this is
+    /// the review having nothing to say.
+    ///
+    /// The counts are consulted as well as `prepared`, because a record written
+    /// before curated mode has no prepared findings and is not thereby a clean
+    /// review — it is an old row whose findings were never broken out.
+    public var foundNothing: Bool {
+        status == .ready && prepared.isEmpty && !counts.values.contains { $0 > 0 }
+    }
+
+    /// Whether the four ways out belong on the row now.
+    ///
+    /// `posted` has always offered them: a review is on the pull request and
+    /// the row stays until somebody says what it means.
+    ///
+    /// `ready` with nothing ticked offers them too, and that is the fix. The
+    /// only way off a `ready` row was the Post button, and the Post button
+    /// wants at least one finding — so unticking the last one left a row with
+    /// no enabled control on it at all, and the feature had quietly decided
+    /// that the way to get to "Mark approved" was through a comment nobody
+    /// wanted to leave. Untick everything and you get the decisions instead,
+    /// which is what unticking everything *means*.
+    ///
+    /// It also lets a clean review off the row. A run that found nothing has
+    /// no findings to tick, so `chosen` is 0 and can never be anything else —
+    /// every review with a clean bill of health was a dead end.
+    public var offersDecisions: Bool {
+        switch status {
+        case .posted: return true
+        // A clean review is the exception: its one decision is drawn beside
+        // the chip instead, where there is room for it and where it reads as
+        // the answer to what the chip just said.
+        case .ready: return selection.chosen == 0 && !foundNothing
+        default: return false
+        }
+    }
+
+    /// Whether this row has a review it could send.
+    public var canPost: Bool { status == .ready && selection.chosen > 0 }
+
+    /// Whether there is a review on the pull request for a decision to act on.
+    ///
+    /// Three of the four ways out presuppose one. Letting it stand, requesting
+    /// changes on the strength of it, and replacing it are all things you do
+    /// *to* a review, and a row that reached the decisions by having nothing
+    /// ticked has not posted one. Request changes could not be sent at all —
+    /// GitHub rejects REQUEST_CHANGES without a body, and the only body here is
+    /// the review whose findings were just declined one by one.
+    ///
+    /// So that row offers approving, alone. It needs no review to act on, it is
+    /// the one verdict that may go out bare, and it is what "none of these are
+    /// worth sending" is usually on its way to saying. It also *works*: an
+    /// approval is a real review, so GitHub drops the request and the row
+    /// leaves by the ordinary route. Dismissing the record without sending
+    /// anything would not have — the pull request would still be waiting on
+    /// you, the search would keep returning it, and the row would sit there
+    /// with a tick on it claiming to be done.
+    public var hasPostedReview: Bool { status == .posted }
 }
 
 /// Turns findings into the review PR Radar posts.
@@ -158,9 +230,18 @@ public enum AutoReviewComment {
     public static func prepare(_ findings: AutoReviewFindings,
                                diff: DiffMap) -> [PreparedFinding] {
         findings.findings.map { finding in
-            PreparedFinding(finding: finding,
-                            anchor: thread(for: finding, in: diff),
-                            isSelected: finding.tier != .nit)
+            let anchor = thread(for: finding, in: diff)
+            // Taken from the same map the anchor came from, so the code shown
+            // is the code the line number means. Anchored findings only: an
+            // unanchored one is unanchored *because* its line is not in the
+            // diff, so there is nothing to show and no honest way to invent it.
+            let excerpt = anchor.flatMap {
+                diff.excerpt(path: $0.path, line: $0.line, startLine: $0.startLine)
+            }
+            return PreparedFinding(finding: finding,
+                                   anchor: anchor,
+                                   isSelected: finding.tier != .nit,
+                                   excerpt: excerpt)
         }
     }
 

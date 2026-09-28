@@ -18,6 +18,14 @@ struct RowView: View {
     /// mutation returns — so the row would otherwise go on offering the press
     /// that is already in the air.
     var sending = false
+    /// Whether the findings list is open.
+    ///
+    /// Owned by `AppState` rather than by this row, though it is still a way of
+    /// looking at the row and still not persisted. The panel has to know: a
+    /// findings list doubles the drawer's width, and the frame calculation
+    /// cannot see a row's `@State`.
+    var showingFindings = false
+    var onToggleFindings: (() -> Void)?
     var onAction: ((AutoReviewCoordinator.Action) -> Void)?
     var onSetFinding: ((String, Bool) -> Void)?
     var onSetTier: ((FindingTier, Bool) -> Void)?
@@ -27,9 +35,10 @@ struct RowView: View {
     /// Approving is irreversible and this panel can be clicked while it is
     /// being dragged, so that one button asks twice.
     @State private var confirmingApprove = false
-    /// Whether the findings list is open. Row-local and not persisted: it is a
-    /// way of looking at the row, not a fact about the review.
-    @State private var showingFindings = false
+    /// Which findings have their code open, by finding id. One at a time would
+    /// have been simpler, but comparing two findings in the same file is the
+    /// commonest reason to open the code at all.
+    @State private var openCode: Set<String> = []
 
     private var staleness: Staleness { Staleness.of(item.pingedAt, now: now) }
 
@@ -196,6 +205,18 @@ struct RowView: View {
                     RowButton(title: "Retry", symbol: "arrow.clockwise", health: .running) {
                         onAction?(.rerun)
                     }
+                case .ready where review.foundNothing:
+                    // Its own branch, and its own sentence. "review ready" over
+                    // an empty findings list is a row announcing work and then
+                    // not saying what the work found — the one thing anybody
+                    // wants from a review that turned nothing up.
+                    Chip(text: "no findings", symbol: "checkmark.circle", health: .good)
+                        .help("The review ran and found nothing worth commenting on")
+                    runTime(review)
+                    // Beside the chip rather than on the band below, because it
+                    // is the only decision this row has and the line it would
+                    // otherwise sit on would hold nothing else.
+                    approve
                 case .ready:
                     Chip(text: "review ready", symbol: "wand.and.sparkles", health: .running)
                     runTime(review)
@@ -204,20 +225,25 @@ struct RowView: View {
                         RowButton(title: showingFindings ? "Hide findings" : "Choose findings",
                                   symbol: showingFindings ? "chevron.up" : "chevron.down",
                                   health: .neutral) {
-                            showingFindings.toggle()
+                            onToggleFindings?()
                         }
                     }
-                    RowButton(title: sending ? "Sending…" : postTitle(review),
-                              symbol: sending ? "paperplane.fill" : "paperplane",
-                              health: .running,
-                              enabled: review.selection.chosen > 0 && !sending) {
-                        onAction?(.post)
+                    // Shown even with nothing ticked, and disabled there: it
+                    // is how the row says what it is holding. The way *off* a
+                    // row with nothing ticked is the decisions below, not this.
+                    if review.selection.total > 0 {
+                        RowButton(title: sending ? "Sending…" : postTitle(review),
+                                  symbol: sending ? "paperplane.fill" : "paperplane",
+                                  health: .running,
+                                  enabled: review.canPost && !sending) {
+                            onAction?(.post)
+                        }
+                        .help(sending
+                              ? "Already on its way to GitHub"
+                              : review.canPost
+                                ? "Post the ticked findings as one review"
+                                : "Nothing ticked — decide below instead")
                     }
-                    .help(sending
-                          ? "Already on its way to GitHub"
-                          : review.selection.chosen > 0
-                            ? "Post the ticked findings as one review"
-                            : "Tick at least one finding first")
                 case .posted:
                     Chip(text: "PR Radar left a review", symbol: "text.bubble", health: .running)
                         .help("Opened on the PR — decide below, and this row stays until you do")
@@ -229,9 +255,9 @@ struct RowView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if review.status == .posted {
+            if review.offersDecisions {
                 ChipFlow(spacing: 5, lineSpacing: 4) {
-                    decisions
+                    decisions(review)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -314,29 +340,59 @@ struct RowView: View {
             }
         }
         .buttonStyle(.plain)
+        .pressable()
         .help(allOn ? "Untick every \(tier.label)" : "Tick every \(tier.label)")
     }
 
+    @ViewBuilder
     private func findingRow(_ prepared: PreparedFinding) -> some View {
-        Button {
-            onSetFinding?(prepared.id, !prepared.isSelected)
-        } label: {
-            HStack(alignment: .top, spacing: 5) {
+        VStack(alignment: .leading, spacing: 3) {
+            findingTick(prepared)
+            if openCode.contains(prepared.id), let excerpt = prepared.excerpt {
+                DiffHunkView(excerpt: excerpt).padding(.leading, 15).padding(.trailing, 2)
+            }
+        }
+    }
+
+    /// The tick and what it is a tick *for*.
+    ///
+    /// Two buttons rather than one: the checkbox and summary toggle the tick,
+    /// and the file:line beneath opens the code. They were one button, and a
+    /// disclosure nested inside a button that toggles a tick is a click whose
+    /// meaning depends on which pixel it landed on.
+    private func findingTick(_ prepared: PreparedFinding) -> some View {
+        HStack(alignment: .top, spacing: 5) {
+            Button {
+                onSetFinding?(prepared.id, !prepared.isSelected)
+            } label: {
                 Image(systemName: prepared.isSelected ? "checkmark.square.fill" : "square")
                     .font(.system(size: 10))
                     .foregroundStyle(prepared.isSelected ? Color.accentColor : .secondary)
-                VStack(alignment: .leading, spacing: 1) {
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .pressable()
+            .help(prepared.isSelected ? "Do not post this one" : "Post this one too")
+
+            VStack(alignment: .leading, spacing: 1) {
+                Button {
+                    onSetFinding?(prepared.id, !prepared.isSelected)
+                } label: {
                     Text(prepared.finding.summary)
                         .font(.system(size: 10.5))
                         .foregroundStyle(prepared.isSelected ? .primary : .secondary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(prepared.finding.recommendation)
+
                     HStack(spacing: 4) {
                         if let location = prepared.location {
-                            Text(location)
-                                .font(.system(size: 9, design: .monospaced))
-                                .foregroundStyle(.tertiary)
+                            locationLabel(prepared, location: location)
                         }
                         // Said out loud, because "it will be posted, just not
                         // where you are looking" is not something to discover
@@ -361,13 +417,41 @@ struct RowView: View {
                                 .help("Carries a suggested fix")
                         }
                     }
-                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .help(prepared.finding.recommendation)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// `file:line`, and the way into the code when there is code to show.
+    ///
+    /// Plain text when there is not. A record written before excerpts were kept
+    /// has none, and neither has a finding that could not be anchored — in both
+    /// cases a chevron would promise something the row cannot deliver.
+    @ViewBuilder
+    private func locationLabel(_ prepared: PreparedFinding, location: String) -> some View {
+        if prepared.excerpt != nil {
+            let open = openCode.contains(prepared.id)
+            Button {
+                if open { openCode.remove(prepared.id) } else { openCode.insert(prepared.id) }
+            } label: {
+                HStack(spacing: 2) {
+                    Image(systemName: open ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 7, weight: .bold))
+                    Text(location)
+                        .font(.system(size: 9, design: .monospaced))
+                }
+                .foregroundStyle(open ? AnyShapeStyle(Color.accentColor)
+                                      : AnyShapeStyle(.tertiary))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .pressable()
+            .help(open ? "Hide the code" : "Show the code this is about")
+        } else {
+            Text(location)
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(.tertiary)
+        }
     }
 
     private func tiers(_ review: AutoReviewRecord) -> some View {
@@ -382,17 +466,51 @@ struct RowView: View {
     /// The four ways out. Until one of them is pressed the row stays put —
     /// which is the whole point of the feature: the comment is a prompt, not a
     /// dismissal.
+    ///
+    /// All four once a review has gone out. Exactly one — approving — when
+    /// none has, because the other three act on a review that is not there.
+    ///
+    /// Approving is also the only one that would still *work*: it submits a
+    /// real review, so GitHub drops the request and the row leaves the way it
+    /// always does. A button that merely dismissed the record would have left
+    /// the row sitting in the list with a tick on it, on a pull request still
+    /// waiting to be reviewed.
     @ViewBuilder
-    private var decisions: some View {
-        RowButton(title: "Comment only", symbol: "text.bubble", health: .neutral,
-                  enabled: !sending) {
-            onAction?(.commentOnly)
+    private func decisions(_ review: AutoReviewRecord) -> some View {
+        if review.hasPostedReview {
+            RowButton(title: "Comment only", symbol: "text.bubble", health: .neutral,
+                      enabled: !sending) {
+                onAction?(.commentOnly)
+            }
+            .help("Let the posted review stand. Nothing further is sent, and the row goes.")
         }
-        .help("Let the posted review stand. Nothing further is sent, and the row goes.")
 
-        // Two presses, because it satisfies branch protection and tells a
-        // colleague you read their code — and because this panel can be
-        // clicked while it is being dragged.
+        approve
+
+        if review.hasPostedReview {
+            RowButton(title: "Request changes", symbol: "exclamationmark.bubble",
+                      health: .bad, enabled: item.nodeID != nil && !sending) {
+                onAction?(.requestChanges)
+            }
+            .help("Submit a review requesting changes, using the priority findings")
+
+            RowButton(title: "Re-run", symbol: "arrow.clockwise", health: .running,
+                      enabled: !sending) {
+                onAction?(.rerun)
+            }
+            .help("Review again and replace the review already posted")
+        }
+    }
+
+    /// Two presses, because it satisfies branch protection and tells a
+    /// colleague you read their code — and because this panel can be clicked
+    /// while it is being dragged.
+    ///
+    /// One button, drawn in two places: on the decisions band with the rest,
+    /// and beside the chip on a review that found nothing, where it is the only
+    /// decision there is. Extracted rather than written twice so the
+    /// confirmation cannot be true in one of them and not the other.
+    private var approve: some View {
         RowButton(title: confirmingApprove ? "Approve?" : "Mark approved",
                   symbol: "checkmark.seal",
                   health: .good,
@@ -411,18 +529,6 @@ struct RowView: View {
         .help(item.nodeID == nil
               ? "This PR arrived without an id, so it cannot be acted on from here"
               : "Submit an approving review")
-
-        RowButton(title: "Request changes", symbol: "exclamationmark.bubble",
-                  health: .bad, enabled: item.nodeID != nil && !sending) {
-            onAction?(.requestChanges)
-        }
-        .help("Submit a review requesting changes, using the priority findings")
-
-        RowButton(title: "Re-run", symbol: "arrow.clockwise", health: .running,
-                  enabled: !sending) {
-            onAction?(.rerun)
-        }
-        .help("Review again and replace the review already posted")
     }
 
     private var avatar: some View {

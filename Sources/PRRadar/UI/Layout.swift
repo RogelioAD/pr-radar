@@ -67,6 +67,11 @@ enum Layout {
     /// Reviews tab simply uses the same, so switching tabs never resizes the
     /// drawer sideways.
     static let drawerWidth: CGFloat = 440
+
+    /// Twice that, for reading a diff. See `DrawerWidth` for when it applies —
+    /// which is only ever while a findings list is open, and never as a setting
+    /// anybody has to put back.
+    static let wideDrawerWidth: CGFloat = drawerWidth * 2
     static let tabStripHeight: CGFloat = 30
 
     /// The band the scope and narrowing controls sit in.

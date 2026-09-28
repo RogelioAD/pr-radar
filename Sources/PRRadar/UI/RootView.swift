@@ -11,6 +11,8 @@ struct RootView: View {
     let onRefresh: () -> Void
     let onRowHeights: ([String: CGFloat]) -> Void
     let onSelectTab: (DrawerTab) -> Void
+    let onToggleFindings: (String) -> Void
+    let onToggleThreads: (String) -> Void
     let onToggleRoom: (DrawerRoom) -> Void
     let onResetBadgeSize: () -> Void
     let onHeaderControls: ([CGRect]) -> Void
@@ -26,6 +28,8 @@ struct RootView: View {
                            onRefresh: onRefresh,
                            onRowHeights: onRowHeights,
                            onSelectTab: onSelectTab,
+                           onToggleFindings: onToggleFindings,
+                           onToggleThreads: onToggleThreads,
                            onToggleRoom: onToggleRoom,
                            onResetBadgeSize: onResetBadgeSize,
                            onHeaderControls: onHeaderControls)

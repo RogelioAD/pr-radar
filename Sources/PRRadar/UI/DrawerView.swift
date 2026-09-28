@@ -33,6 +33,11 @@ struct DrawerView: View {
     let onRefresh: () -> Void
     let onRowHeights: ([String: CGFloat]) -> Void
     let onSelectTab: (DrawerTab) -> Void
+    /// Opening a findings list resizes the drawer, so it goes through the panel
+    /// rather than straight into the state the way the ticks do.
+    let onToggleFindings: (String) -> Void
+    /// Likewise for a My PRs row's unresolved threads.
+    let onToggleThreads: (String) -> Void
     let onToggleRoom: (DrawerRoom) -> Void
     let onResetBadgeSize: () -> Void
     let onHeaderControls: ([CGRect]) -> Void
@@ -73,7 +78,7 @@ struct DrawerView: View {
                 footer
             }
         }
-        .frame(width: Layout.drawerWidth)
+        .frame(width: state.drawerWidth)
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
@@ -503,6 +508,8 @@ struct DrawerView: View {
                                 waiting: AutoReviewQueue.waiting(for: item.pingKey,
                                                                  in: state.reviewQueue),
                                 sending: state.rowActions.isActing(on: item.pingKey),
+                                showingFindings: state.openFindings.contains(item.pingKey),
+                                onToggleFindings: { onToggleFindings(item.pingKey) },
                                 onAction: { state.act($0, on: item) },
                                 onSetFinding: { state.setFinding($0, on: item, selected: $1) },
                                 onSetTier: { state.setTier($0, on: item, selected: $1) }) {
@@ -537,7 +544,10 @@ struct DrawerView: View {
                         case .single(let item):
                             MyPRRowView(item: item, now: state.clock,
                                         accountLabel: state.accountLabel(for: item.account),
-                                        onOpen: { onOpenMyPR(item) })
+                                        onOpen: { onOpenMyPR(item) },
+                                        width: state.listContentWidth,
+                                        showingThreads: state.openThreads.contains(item.id),
+                                        onToggleThreads: { onToggleThreads(item.id) })
                         case .stack(let stack):
                             MyPRStackView(stack: stack, now: state.clock,
                                           accountLabel: {
