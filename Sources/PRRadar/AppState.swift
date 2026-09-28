@@ -225,6 +225,16 @@ final class AppState: ObservableObject {
     /// Not persisted: a review does not survive a relaunch.
     @Published var reviewInFlight: String?
 
+    /// Ping keys waiting their turn, in the order they will be taken.
+    ///
+    /// Live rather than persisted, deliberately. Waiting is a fact about this
+    /// minute — the queue is recomputed every refresh and again between
+    /// reviews — and a `queued` record written to the log would outlive the
+    /// condition: `recordSkips` only ever clears records it owns, so one left
+    /// behind by a pull request that stopped being eligible would sit there
+    /// claiming to be next for good.
+    @Published var reviewQueue: [String] = []
+
     /// What the row shows for this PR.
     ///
     /// `PRRADAR_FAKE_REVIEW` stands a record up for every row, because the

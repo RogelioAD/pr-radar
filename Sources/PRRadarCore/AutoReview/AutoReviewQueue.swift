@@ -98,6 +98,42 @@ public enum AutoReviewQueue {
             .map { $0 }
     }
 
+    /// Where a pull request stands while it waits its turn.
+    ///
+    /// A review runs on its own — one worker, one session at a time — so a
+    /// second eligible pull request sits there until the first finishes. It had
+    /// nothing to say about that: `recordSkips` only writes a record when there
+    /// is a *reason* not to review something, and "eligible, just waiting" is
+    /// not one, so the row showed no chip at all and read as untouched.
+    public enum Waiting: Equatable, Sendable {
+        /// First in line — the one that starts when the current review ends.
+        case next
+        /// Behind at least one other.
+        case queued
+
+        /// What the chip says.
+        public var label: String {
+            switch self {
+            case .next: return "next for review"
+            case .queued: return "queued for review"
+            }
+        }
+    }
+
+    /// The pull requests waiting their turn, in the order they will be taken.
+    ///
+    /// The one in flight is excluded: it is not waiting, it has arrived, and
+    /// its own row already says "reviewing…" with a stopwatch running.
+    public static func waiting(pending: [ReviewItem], inFlight: String?) -> [String] {
+        pending.map(\.pingKey).filter { $0 != inFlight }
+    }
+
+    /// Where one row sits in that queue, or nil when it is not in it.
+    public static func waiting(for pingKey: String, in queue: [String]) -> Waiting? {
+        guard let index = queue.firstIndex(of: pingKey) else { return nil }
+        return index == 0 ? .next : .queued
+    }
+
     /// Why this one is not being reviewed, or nil if it should be.
     public static func skip(for item: ReviewItem,
                             log: AutoReviewLog,

@@ -148,6 +148,16 @@ enum Log {
         return .available(version: version, url: url)
     }
 
+    /// PRRADAR_FAKE_QUEUE=1 puts every review row in the waiting queue, so the
+    /// "next for review" and "queued for review" chips can be looked at.
+    ///
+    /// One review runs at a time, so seeing these honestly means two eligible
+    /// pull requests arriving at once and catching the ten minutes while the
+    /// first is still going — which is not something to sit and wait for.
+    static var fakeQueue: Bool {
+        ProcessInfo.processInfo.environment["PRRADAR_FAKE_QUEUE"] == "1"
+    }
+
     /// PRRADAR_FAKE_READY=1 forces every one of my PRs to look mergeable, so
     /// the badge's green dot can be inspected. Both real PRs are BLOCKED on
     /// reviews, so there is otherwise no way to see it.

@@ -149,6 +149,7 @@ final class AutoReviewCoordinator {
     func refreshLanded() {
         prune()
         recordSkips()
+        publishQueue()
         guard isOnline, worker == nil else { return }
         guard !pending().isEmpty else { return }
 
@@ -166,6 +167,17 @@ final class AutoReviewCoordinator {
                                 policy: policy(),
                                 startedInLastHour: startedInLastHour(),
                                 now: Date())
+    }
+
+    /// Tells the rows who is waiting, and in what order.
+    private func publishQueue() {
+        guard !Log.fakeQueue else {
+            state.reviewQueue = state.items.map(\.pingKey)
+            return
+        }
+        let queue = AutoReviewQueue.waiting(pending: pending(),
+                                            inFlight: state.reviewInFlight)
+        if queue != state.reviewQueue { state.reviewQueue = queue }
     }
 
     private func policy() -> AutoReviewPolicy {
@@ -232,6 +244,11 @@ final class AutoReviewCoordinator {
     private func drain() async {
         while !Task.isCancelled, isOnline, let item = pending().first {
             await review(item)
+            // Between reviews as well as on every refresh: a drain of three
+            // runs for half an hour without one landing, and the rows behind
+            // the current one would otherwise keep saying what was true when
+            // it started.
+            publishQueue()
             if consecutiveFailures >= Self.failureLimit {
                 state.autoReviewEnabled = false
                 state.lastError = "Automatic review turned itself off after "
@@ -253,6 +270,7 @@ final class AutoReviewCoordinator {
             record.attempts += 1
         }
         state.reviewInFlight = key
+        publishQueue()
         defer { if state.reviewInFlight == key { state.reviewInFlight = nil } }
 
         do {

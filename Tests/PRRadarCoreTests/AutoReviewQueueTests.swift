@@ -223,4 +223,63 @@ final class AutoReviewQueueTests: XCTestCase {
         XCTAssertTrue(AutoReviewSkip.repoNotAllowed.isWorthShowing)
         XCTAssertTrue(AutoReviewSkip.attemptsExhausted.isWorthShowing)
     }
+    // MARK: - Waiting a turn
+
+    /// The gap this closes: one review runs at a time, so a second eligible
+    /// pull request sits there — and said nothing, because `recordSkips` only
+    /// writes a record when there is a *reason* not to review something.
+    func testTheFirstInLineSaysItIsNext() {
+        let queue = AutoReviewQueue.waiting(
+            pending: [item(number: 1, pingedAt: -7_200),
+                      item(number: 2, pingedAt: -3_600)],
+            inFlight: nil)
+
+        XCTAssertEqual(AutoReviewQueue.waiting(for: queue[0], in: queue), .next)
+        XCTAssertEqual(AutoReviewQueue.waiting(for: queue[1], in: queue), .queued)
+    }
+
+    /// The one being reviewed is not waiting — its own row already says
+    /// "reviewing…" with a stopwatch on it, and saying both would be two
+    /// answers to one question.
+    func testTheReviewInFlightIsNotInTheQueue() {
+        let first = item(number: 1, pingedAt: -7_200)
+        let second = item(number: 2, pingedAt: -3_600)
+        let queue = AutoReviewQueue.waiting(pending: [first, second],
+                                            inFlight: first.pingKey)
+
+        XCTAssertEqual(queue, [second.pingKey])
+        XCTAssertNil(AutoReviewQueue.waiting(for: first.pingKey, in: queue))
+        // With the one in flight gone, the next one up is next.
+        XCTAssertEqual(AutoReviewQueue.waiting(for: second.pingKey, in: queue), .next)
+    }
+
+    func testAPullRequestNotPendingIsNotWaiting() {
+        let queue = AutoReviewQueue.waiting(pending: [item()], inFlight: nil)
+        XCTAssertNil(AutoReviewQueue.waiting(for: "acme/repo#99@whenever", in: queue))
+    }
+
+    func testAnEmptyQueueLeavesEveryRowSayingNothing() {
+        XCTAssertTrue(AutoReviewQueue.waiting(pending: [], inFlight: nil).isEmpty)
+        XCTAssertNil(AutoReviewQueue.waiting(for: item().pingKey, in: []))
+    }
+
+    /// The order is the order they will be taken, which `pending` already sorts
+    /// oldest ping first — so the row that says "next" is the most overdue one.
+    func testTheQueueKeepsTheOrderTheyWillBeTakenIn() {
+        let older = item(number: 1, pingedAt: -7_200)
+        let newer = item(number: 2, pingedAt: -600)
+        let pending = AutoReviewQueue.pending(
+            items: [newer, older], log: AutoReviewLog(), viewerLogins: [],
+            allowlist: ["acme/repo"], policy: policy(),
+            startedInLastHour: 0, now: now)
+
+        XCTAssertEqual(AutoReviewQueue.waiting(pending: pending, inFlight: nil),
+                       [older.pingKey, newer.pingKey])
+    }
+
+    func testTheLabelsSayWhichIsWhich() {
+        XCTAssertEqual(AutoReviewQueue.Waiting.next.label, "next for review")
+        XCTAssertEqual(AutoReviewQueue.Waiting.queued.label, "queued for review")
+    }
+
 }

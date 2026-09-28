@@ -9,6 +9,10 @@ struct RowView: View {
     /// Where the automatic review has got to, or nil when there has not been
     /// one — in which case this row is exactly what it always was.
     var review: AutoReviewRecord?
+    /// Where this row sits in the queue while it waits its turn, or nil when it
+    /// is not waiting. Not part of `review`: a row waiting to be reviewed has
+    /// no record yet, which is exactly why it used to say nothing.
+    var waiting: AutoReviewQueue.Waiting?
     var onAction: ((AutoReviewCoordinator.Action) -> Void)?
     var onSetFinding: ((String, Bool) -> Void)?
     var onSetTier: ((FindingTier, Bool) -> Void)?
@@ -30,6 +34,8 @@ struct RowView: View {
             if let review {
                 strip(review)
                 if showingFindings, review.isAwaitingSelection { findings(review) }
+            } else if let waiting {
+                queueStrip(waiting)
             }
         }
         .padding(.horizontal, 10)
@@ -140,6 +146,23 @@ struct RowView: View {
     }
 
     // MARK: - The automatic review
+
+    /// What a row says while it waits for the worker to reach it.
+    ///
+    /// Its own strip rather than a status on the record, because there is no
+    /// record: nothing has happened to this pull request yet. One review runs
+    /// at a time, so the second eligible one can sit for ten minutes looking
+    /// exactly like a pull request the feature had decided to ignore.
+    @ViewBuilder
+    private func queueStrip(_ waiting: AutoReviewQueue.Waiting) -> some View {
+        ChipFlow(spacing: 5, lineSpacing: 4) {
+            Chip(text: waiting.label, symbol: "clock", health: .neutral)
+                .help(waiting == .next
+                      ? "Starts as soon as the review in progress finishes"
+                      : "Waiting behind the reviews ahead of it")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
     /// What the review has done, and what is left for the reader to decide.
     ///
