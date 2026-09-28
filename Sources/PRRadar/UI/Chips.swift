@@ -1,6 +1,23 @@
 import SwiftUI
 import PRRadarCore
 
+/// The single height every pill on a row is drawn at.
+///
+/// Shared rather than arrived at. A chip and a button sit side by side in one
+/// `ChipFlow` line, and `ChipFlow` places each subview at its own ideal size —
+/// so the two points by which their vertical paddings happened to differ read
+/// as a misalignment rather than as a style, and "review failed" sat visibly
+/// shorter than the Retry button beside it.
+///
+/// A fixed height rather than matched padding, because matched padding is only
+/// equal by coincidence: the moment one of them changes a font, they drift
+/// apart again with nothing to say they should not have.
+enum ChipMetrics {
+    /// Sized to the taller of the two it replaces, so buttons keep the hit area
+    /// they had and the chips grow into it.
+    static let height: CGFloat = 18
+}
+
 /// One chip style for every signal on a row, so approvals, checks, threads and
 /// blockers all read as members of the same system.
 struct Chip: View {
@@ -19,12 +36,14 @@ struct Chip: View {
         }
         .foregroundStyle(filled ? .white : health.tint)
         .padding(.horizontal, 5)
-        .padding(.vertical, 2)
+        .frame(height: ChipMetrics.height)
         .background(
             Capsule().fill(filled ? AnyShapeStyle(health.tint)
                                   : AnyShapeStyle(health.tint.opacity(0.15)))
         )
-        .fixedSize()
+        // Width only: the ideal width is what `ChipFlow` wraps on, and the
+        // height is now the frame's business rather than the content's.
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
@@ -48,7 +67,7 @@ struct RowButton: View {
             }
             .foregroundStyle(enabled ? health.tint : Color.secondary)
             .padding(.horizontal, 7)
-            .padding(.vertical, 3)
+            .frame(height: ChipMetrics.height)
             .background(
                 Capsule().fill(health.tint.opacity(enabled ? (hovering ? 0.28 : 0.16) : 0.07))
             )

@@ -112,11 +112,10 @@ struct RowView: View {
                              health: .neutral)
                     }
                     if item.isDraft {
-                        Text("draft")
-                            .font(.system(size: 9, weight: .semibold))
-                            .padding(.horizontal, 4).padding(.vertical, 1)
-                            .background(Color.secondary.opacity(0.18), in: Capsule())
-                            .foregroundStyle(.secondary)
+                        // The same chip `MyPRRowView` has always used for this.
+                        // Hand-rolled here, it was a third pill height on a row
+                        // that should only ever have one.
+                        Chip(text: "draft", health: .neutral)
                     }
                 }
             }
