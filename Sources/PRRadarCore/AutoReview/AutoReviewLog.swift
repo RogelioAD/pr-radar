@@ -84,6 +84,24 @@ public struct AutoReviewRecord: Codable, Equatable, Sendable {
     /// trace and never a whole stderr dump — see `truncated(_:)`.
     public var failure: String?
 
+    /// The pull request this review is about, kept so its row can be drawn
+    /// after the search has stopped returning it.
+    ///
+    /// Submitting any review — COMMENT included — fulfils the request, and
+    /// GitHub then drops the viewer from `requested_reviewers` without so much
+    /// as a timeline event. `review-requested:@me` stops matching on the next
+    /// poll, so the row disappeared within a minute of PR Radar posting, taking
+    /// Approve and Request-changes with it and leaving a review on the PR that
+    /// nobody could follow up. The pin cannot help: it stops our own review
+    /// counting as *activity*, which only matters for a PR the search still
+    /// returns at all.
+    ///
+    /// Written at post time, because that is the moment the row becomes
+    /// unreachable and the last moment the live item is in hand. It also
+    /// carries the PR's node id, which every decision button needs as its
+    /// mutation subject.
+    public var subject: ReviewItem?
+
     public init(status: AutoReviewStatus = .queued) {
         self.status = status
     }
@@ -115,6 +133,10 @@ public struct AutoReviewRecord: Codable, Equatable, Sendable {
         reviewURLString = try container.decodeIfPresent(String.self, forKey: .reviewURLString)
         threadNodeIDs = try container.decodeIfPresent([String].self, forKey: .threadNodeIDs) ?? []
         failure = try container.decodeIfPresent(String.self, forKey: .failure)
+        // `try?` rather than `try`: a subject this build cannot read costs one
+        // row's worth of convenience, and must never cost the whole record —
+        // which is the failure mode every other field here is written to avoid.
+        subject = try? container.decodeIfPresent(ReviewItem.self, forKey: .subject)
     }
 
     public var reviewURL: URL? { reviewURLString.flatMap(URL.init(string:)) }
@@ -156,6 +178,39 @@ public struct AutoReviewLog: Codable, Equatable, Sendable {
         records.compactMapValues { record in
             record.status == .posted ? record.reviewNodeID : nil
         }
+    }
+
+    /// The rows a decision is still owed on, that the search will not return.
+    ///
+    /// Persist first, then verify. The subject is drawn from straight away so
+    /// the row survives however long the decision takes and whether or not
+    /// there is a network; `closed` is what a fresh look at those pull requests
+    /// said, and is empty when that look did not happen. So being offline keeps
+    /// the row rather than dropping it — the failure that loses work is the row
+    /// vanishing, never the row lingering.
+    ///
+    /// A PR the search *did* return is left alone: it is already in the list,
+    /// and the pin is what stops our own review hiding it there.
+    public func awaitingDecision(fetched: [ReviewItem],
+                                 closed: Set<String> = []) -> [ReviewItem] {
+        let present = Set(fetched.map(\.id))
+        return records.values
+            .compactMap { record -> ReviewItem? in
+                guard record.status == .posted, let subject = record.subject else { return nil }
+                guard !present.contains(subject.id) else { return nil }
+                // Merged or closed while you were deciding: there is nothing
+                // left to approve, so the row goes of its own accord.
+                if let node = subject.nodeID, closed.contains(node) { return nil }
+                return subject
+            }
+            .sorted { $0.pingedAt < $1.pingedAt }
+    }
+
+    /// Node ids worth asking about, so the caller can verify only what it must.
+    public var awaitingDecisionNodeIDs: [String] {
+        records.values
+            .filter { $0.status == .posted }
+            .compactMap { $0.subject?.nodeID }
     }
 
     /// Keeps anything still on screen, drops finished work that has aged out,

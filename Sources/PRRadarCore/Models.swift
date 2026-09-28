@@ -1,7 +1,12 @@
 import Foundation
 
 /// A pull request that is currently waiting on the viewer's review.
-public struct ReviewItem: Identifiable, Equatable, Sendable {
+/// Codable because a posted review has to be able to redraw its own row.
+/// GitHub drops the viewer from `requested_reviewers` the moment any review is
+/// submitted — a COMMENT one included — so the search stops returning the PR
+/// and the row would vanish with the decision still outstanding. The record
+/// keeps a copy to draw from. See `AutoReviewRecord.subject`.
+public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
     public let repo: String
     public let number: Int
     public let title: String

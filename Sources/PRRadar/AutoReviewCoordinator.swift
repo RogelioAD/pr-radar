@@ -441,6 +441,12 @@ final class AutoReviewCoordinator {
                 body: composed.body, threads: composed.threads)
             update(item.pingKey) { record in
                 record.status = .posted
+                // Kept now, because this is the moment the row stops being
+                // reachable: the review we have just submitted fulfils the
+                // request, GitHub drops us from the reviewers, and the next
+                // poll cannot find this pull request at all. The live item is
+                // in hand here and nowhere later.
+                record.subject = item
                 record.reviewNodeID = review.id
                 record.reviewURLString = review.url
                 record.threadNodeIDs = review.commentIDs

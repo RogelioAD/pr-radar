@@ -170,6 +170,31 @@ public enum Query {
         return "query {\(body)\n}"
     }
 
+    /// The pull requests a decision is still owed on, fetched by node id.
+    ///
+    /// Its own request rather than another alias on the reviews document, for
+    /// the reason `fetchMergedCount` gives: that document decodes as a
+    /// homogeneous dictionary of `SearchResult` and a differently-shaped alias
+    /// breaks it. A root `nodes` field is the one shape that does not — it
+    /// returns `{"nodes": [...]}`, which is exactly `SearchResult`.
+    ///
+    /// Needed at all because these PRs are unreachable by search: submitting a
+    /// review fulfils the request, so `review-requested:@me` stops matching
+    /// them. Asking by id is the only way left to find out whether the PR is
+    /// still open and so whether its row should still be standing.
+    public static func pinnedPullRequests(ids: [String], first: Int = 30) -> String? {
+        guard !ids.isEmpty else { return nil }
+        let quoted = ids.prefix(first).map { "\"\($0)\"" }.joined(separator: ", ")
+        return """
+        \(prCoreFragment)
+        query {
+          nodes(ids: [\(quoted)]) {
+            ... on PullRequest { ...PRCore }
+          }
+        }
+        """
+    }
+
     /// One document, one round trip: a shared fragment plus one aliased `search`
     /// per scope (direct request, then one per team).
     ///
@@ -192,12 +217,22 @@ public enum Query {
         }
 
         return """
+        \(prCoreFragment)
+        query {
+        \(searches)
+        }
+        """
+    }
+
+    /// The shape both review documents read a pull request in.
+    private static let prCoreFragment = """
         fragment PRCore on PullRequest {
           id
           number
           title
           url
           isDraft
+          state
           author { login avatarUrl }
           repository { nameWithOwner }
           requests: timelineItems(last: 100, itemTypes: [REVIEW_REQUESTED_EVENT]) {
@@ -219,9 +254,5 @@ public enum Query {
             nodes { ... on IssueComment { id createdAt author { login } } }
           }
         }
-        query {
-        \(searches)
-        }
         """
-    }
 }

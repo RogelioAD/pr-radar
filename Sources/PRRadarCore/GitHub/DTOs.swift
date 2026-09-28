@@ -18,6 +18,8 @@ public struct GraphQLError: Decodable, Error {
 
 public struct SearchResult: Decodable {
     public let nodes: [PRNode]
+
+    public init(nodes: [PRNode]) { self.nodes = nodes }
 }
 
 /// A search asked only for its total. Shares no shape with `SearchResult`
@@ -38,6 +40,9 @@ public struct PRNode: Decodable {
     public let title: String?
     public let url: String?
     public let isDraft: Bool?
+    /// OPEN, CLOSED or MERGED. Absent from the searches, which already filter
+    /// on `is:open`; asked for by the pinned lookup, which cannot.
+    public let state: String?
     public let author: ActorDTO?
     public let repository: RepoDTO?
     public let requests: TimelineConn?

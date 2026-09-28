@@ -90,6 +90,18 @@ public struct GitHubClient {
         try await run(Query.pullRequests(teams: teams), as: [String: SearchResult].self)
     }
 
+    /// The pull requests a decision is still owed on, looked up by node id.
+    ///
+    /// Returns an empty result for an empty list rather than issuing a request
+    /// that asks nothing. Decodes as `SearchResult` because the document's root
+    /// field is literally `nodes` — see `Query.pinnedPullRequests`.
+    public func fetchPinnedPullRequests(ids: [String]) async throws -> SearchResult {
+        guard let query = Query.pinnedPullRequests(ids: ids) else {
+            return SearchResult(nodes: [])
+        }
+        return try await run(query, as: SearchResult.self)
+    }
+
     /// The viewer's own open pull requests.
     public func fetchMyPullRequests() async throws -> MyPRSearchResult {
         try await run(Query.myPullRequests(), as: MyPRPayload.self).mine

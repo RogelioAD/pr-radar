@@ -278,7 +278,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Marked after the all-failed case above, which is not a short round.
         state.failedAccounts = Set(fetches.filter(\.isShort).map(\.account.id))
 
-        let items = AccountMerge.merge(reachable.map(\.items))
+        var items = AccountMerge.merge(reachable.map(\.items))
+
+        // Rows PR Radar has reviewed and is still owed an answer on. They are
+        // added back rather than found, because they cannot be found: posting
+        // the review fulfilled the request and GitHub stopped listing this
+        // viewer as a reviewer, so no search returns them. Without this the row
+        // disappeared on the next poll — within a minute of the review going up
+        // — taking Approve and Request-changes with it and leaving a public
+        // review on somebody's pull request that could not be followed through
+        // from here.
+        let closed = reachable.reduce(into: Set<String>()) { $0.formUnion($1.closedPins) }
+        let awaiting = state.autoReviewLog.awaitingDecision(fetched: items, closed: closed)
+        if !awaiting.isEmpty {
+            items = (items + awaiting).sorted { $0.pingedAt < $1.pingedAt }
+            Log.debug("kept \(awaiting.count) row(s) awaiting a decision")
+        }
         // An account whose pull requests could not be read keeps the ones it
         // contributed last round. Replacing them with nothing would turn a
         // transient failure into "you have no open PRs", which is what this
@@ -366,6 +381,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// Lifetime merged count, which the trophy rules read. nil when this
         /// account did not answer — distinct from zero, which is a real count.
         var merged: Int?
+        /// Node ids of pinned pull requests this account found closed or
+        /// merged, so their rows can stand down. Empty also means "did not
+        /// ask", which is deliberately the same as "nothing to drop" — a row
+        /// outliving its PR is a far smaller harm than one vanishing early.
+        var closedPins: Set<String> = []
         var error: String?
 
         /// Whether this account's contribution is short, for any reason. An
@@ -413,6 +433,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                     pins: state.autoReviewLog.pins)
             var result = AccountFetch(account: account,
                                       items: tagged(inbox.build(from: searches), with: account))
+
+            // Then ask after the ones the search can no longer see. Only their
+            // state is wanted: a pull request merged or closed while the
+            // decision sat there has nothing left to decide. Failure is
+            // swallowed on purpose — not knowing keeps the row, and the row is
+            // the thing worth protecting.
+            let pinnedIDs = state.autoReviewLog.records.values
+                .filter { $0.status == .posted && $0.subject?.account == account.id }
+                .compactMap { $0.subject?.nodeID }
+            if !pinnedIDs.isEmpty,
+               let seen = try? await client.fetchPinnedPullRequests(ids: pinnedIDs) {
+                result.closedPins = Set(seen.nodes.compactMap { node in
+                    guard let id = node.id, let state = node.state, state != "OPEN"
+                    else { return nil }
+                    return id
+                })
+            }
 
             // The My PRs half is independently fallible: losing it must not cost
             // the review requests this account already returned.

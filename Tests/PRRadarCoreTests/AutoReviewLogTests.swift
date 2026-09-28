@@ -263,4 +263,114 @@ extension AutoReviewLogTests {
         XCTAssertEqual(log, afterFirst)
     }
 
+    // MARK: - Keeping a row alive for its decision
+
+    private func subject(_ number: Int, node: String? = "PR_1",
+                         account: String = "a") -> ReviewItem {
+        ReviewItem(repo: "acme/repo", number: number, title: "t",
+                   url: URL(string: "https://example.com")!, isDraft: false,
+                   authorLogin: "someone", authorAvatarURL: nil, pingedAt: epoch,
+                   account: account, nodeID: node)
+    }
+
+    private func posted(_ item: ReviewItem) -> AutoReviewRecord {
+        var record = AutoReviewRecord(status: .posted)
+        record.reviewNodeID = "REV_1"
+        record.subject = item
+        return record
+    }
+
+    /// The bug: GitHub drops the viewer from the reviewers the moment any
+    /// review is submitted, so the search stops returning the PR and the row
+    /// vanished with Approve and Request-changes still unclicked.
+    func testAReviewedRowIsKeptWhenTheSearchNoLongerReturnsIt() {
+        var log = AutoReviewLog()
+        log["k"] = posted(subject(812))
+
+        let kept = log.awaitingDecision(fetched: [])
+
+        XCTAssertEqual(kept.map(\.number), [812])
+        XCTAssertEqual(kept.first?.nodeID, "PR_1", "the buttons need a subject to act on")
+    }
+
+    /// Not added twice. A re-request puts the PR back in the search, and it is
+    /// already in the list on its own merits.
+    func testAPullRequestTheSearchStillReturnsIsNotAddedAgain() {
+        var log = AutoReviewLog()
+        log["k"] = posted(subject(812))
+
+        XCTAssertTrue(log.awaitingDecision(fetched: [subject(812)]).isEmpty)
+    }
+
+    /// Merged or closed while you were deciding: nothing left to approve.
+    func testARowStandsDownOnceItsPullRequestIsClosed() {
+        var log = AutoReviewLog()
+        log["k"] = posted(subject(812, node: "PR_9"))
+
+        XCTAssertTrue(log.awaitingDecision(fetched: [], closed: ["PR_9"]).isEmpty)
+    }
+
+    /// Persist first, verify second. No verification — offline, or the lookup
+    /// failed — must keep the row, because losing it is the harm.
+    func testNotKnowingWhetherThePullRequestIsOpenKeepsTheRow() {
+        var log = AutoReviewLog()
+        log["k"] = posted(subject(812, node: "PR_9"))
+
+        XCTAssertEqual(log.awaitingDecision(fetched: [], closed: []).count, 1)
+    }
+
+    /// Only `posted` is owed a decision. A dismissed row has had one, and a
+    /// ready one has not been posted so the search still returns it.
+    func testOnlyAPostedReviewKeepsARowAlive() {
+        var log = AutoReviewLog()
+        for status in AutoReviewStatus.allCases where status != .posted {
+            var record = AutoReviewRecord(status: status)
+            record.subject = subject(1)
+            log[status.rawValue] = record
+        }
+
+        XCTAssertTrue(log.awaitingDecision(fetched: []).isEmpty)
+    }
+
+    /// Records written before the subject existed cannot draw a row, and must
+    /// not crash trying.
+    func testAPostedRecordWithNoSubjectIsSkipped() {
+        var log = AutoReviewLog()
+        log["k"] = AutoReviewRecord(status: .posted)
+
+        XCTAssertTrue(log.awaitingDecision(fetched: []).isEmpty)
+        XCTAssertTrue(log.awaitingDecisionNodeIDs.isEmpty)
+    }
+
+    func testTheNodeIDsToVerifyAreTheOnesAwaitingADecision() {
+        var log = AutoReviewLog()
+        log["a"] = posted(subject(1, node: "PR_1"))
+        log["b"] = posted(subject(2, node: "PR_2"))
+        log["c"] = record(.dismissed, finishedAt: epoch)
+
+        XCTAssertEqual(log.awaitingDecisionNodeIDs.sorted(), ["PR_1", "PR_2"])
+    }
+
+    /// The subject rides along in the stored blob, node id included — without
+    /// it the decision buttons have no mutation subject after a relaunch.
+    func testTheSubjectSurvivesARoundTrip() {
+        var log = AutoReviewLog()
+        log["k"] = posted(subject(812, node: "PR_7"))
+
+        let restored = AutoReviewLog.decoded(from: log.encoded())["k"]
+
+        XCTAssertEqual(restored?.subject?.number, 812)
+        XCTAssertEqual(restored?.subject?.nodeID, "PR_7")
+        XCTAssertEqual(restored?.subject?.repo, "acme/repo")
+    }
+
+    /// A subject this build cannot read costs one row, never the record.
+    func testAnUnreadableSubjectDoesNotFailTheWholeRecord() {
+        let json = #"{"records":{"k":{"status":"posted","attempts":1,"counts":{},"threadNodeIDs":[],"subject":"nonsense"}}}"#
+        let log = AutoReviewLog.decoded(from: Data(json.utf8))
+
+        XCTAssertEqual(log["k"]?.status, .posted)
+        XCTAssertNil(log["k"]?.subject)
+    }
+
 }
