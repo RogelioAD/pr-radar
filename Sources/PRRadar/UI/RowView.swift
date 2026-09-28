@@ -142,49 +142,64 @@ struct RowView: View {
     // MARK: - The automatic review
 
     /// What the review has done, and what is left for the reader to decide.
+    ///
+    /// Two bands, not one. What the review *found* and what you can *do* about
+    /// it are different kinds of thing, and running them through a single
+    /// `ChipFlow` let the boundary fall wherever the wrapping happened to put
+    /// it — "Comment only" could end up beside a nit count, with the rest of
+    /// the decisions on the line below. Giving the decisions their own flow
+    /// puts the break where the meaning already is.
     @ViewBuilder
     private func strip(_ review: AutoReviewRecord) -> some View {
-        ChipFlow(spacing: 5, lineSpacing: 4) {
-            switch review.status {
-            case .queued:
-                Chip(text: "queued for review", symbol: "clock", health: .neutral)
-            case .running:
-                Chip(text: "reviewing…", symbol: "wand.and.sparkles", health: .running)
-            case .skipped:
-                Chip(text: review.failure ?? "not reviewed", health: .neutral)
-            case .failed:
-                Chip(text: "review failed", symbol: "exclamationmark.triangle", health: .bad)
-                    .help(review.failure ?? "")
-                RowButton(title: "Retry", symbol: "arrow.clockwise", health: .running) {
-                    onAction?(.rerun)
-                }
-            case .ready:
-                Chip(text: "review ready", symbol: "wand.and.sparkles", health: .running)
-                tiers(review)
-                if review.isAwaitingSelection {
-                    RowButton(title: showingFindings ? "Hide findings" : "Choose findings",
-                              symbol: showingFindings ? "chevron.up" : "chevron.down",
-                              health: .neutral) {
-                        showingFindings.toggle()
+        VStack(alignment: .leading, spacing: 4) {
+            ChipFlow(spacing: 5, lineSpacing: 4) {
+                switch review.status {
+                case .queued:
+                    Chip(text: "queued for review", symbol: "clock", health: .neutral)
+                case .running:
+                    Chip(text: "reviewing…", symbol: "wand.and.sparkles", health: .running)
+                case .skipped:
+                    Chip(text: review.failure ?? "not reviewed", health: .neutral)
+                case .failed:
+                    Chip(text: "review failed", symbol: "exclamationmark.triangle", health: .bad)
+                        .help(review.failure ?? "")
+                    RowButton(title: "Retry", symbol: "arrow.clockwise", health: .running) {
+                        onAction?(.rerun)
                     }
+                case .ready:
+                    Chip(text: "review ready", symbol: "wand.and.sparkles", health: .running)
+                    tiers(review)
+                    if review.isAwaitingSelection {
+                        RowButton(title: showingFindings ? "Hide findings" : "Choose findings",
+                                  symbol: showingFindings ? "chevron.up" : "chevron.down",
+                                  health: .neutral) {
+                            showingFindings.toggle()
+                        }
+                    }
+                    RowButton(title: postTitle(review), symbol: "paperplane",
+                              health: .running, enabled: review.selection.chosen > 0) {
+                        onAction?(.post)
+                    }
+                    .help(review.selection.chosen > 0
+                          ? "Post the ticked findings as one review"
+                          : "Tick at least one finding first")
+                case .posted:
+                    Chip(text: "PR Radar left a review", symbol: "text.bubble", health: .running)
+                        .help("Opened on the PR — decide below, and this row stays until you do")
+                    tiers(review)
+                case .dismissed:
+                    Chip(text: "done", symbol: "checkmark", health: .good)
                 }
-                RowButton(title: postTitle(review), symbol: "paperplane",
-                          health: .running, enabled: review.selection.chosen > 0) {
-                    onAction?(.post)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if review.status == .posted {
+                ChipFlow(spacing: 5, lineSpacing: 4) {
+                    decisions
                 }
-                .help(review.selection.chosen > 0
-                      ? "Post the ticked findings as one review"
-                      : "Tick at least one finding first")
-            case .posted:
-                Chip(text: "PR Radar left a review", symbol: "text.bubble", health: .running)
-                    .help("Opened on the PR — decide below, and this row stays until you do")
-                tiers(review)
-                decisions
-            case .dismissed:
-                Chip(text: "done", symbol: "checkmark", health: .good)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func postTitle(_ review: AutoReviewRecord) -> String {
