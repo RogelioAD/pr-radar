@@ -21,6 +21,7 @@ struct HeaderControlsKey: PreferenceKey {
 }
 
 struct DrawerView: View {
+    @Environment(\.openURL) private var openURL
     /// Named so control frames are measured against the drawer's top-left,
     /// which is the frame of reference the zone rules already use.
     static let coordinateSpace = "drawer"
@@ -132,6 +133,34 @@ struct DrawerView: View {
     /// The character the header is showing, or nil when it is showing the
     /// plain identity glyph — either because the mascot is off, or because the
     /// content area below is already showing a bigger one.
+    /// A way straight to the release notes, beside the close box.
+    ///
+    /// The header carried a chip like this once and lost it, for a reason worth
+    /// restating: this is the most contested 440pt in the app and it doubles as
+    /// the window's drag handle. What makes one affordable again is that it is
+    /// a chip and not a banner, it is absent every day there is no release, and
+    /// `headerControl` takes it out of the drag region so the handle loses only
+    /// the width it actually occupies.
+    ///
+    /// It links out rather than opening Settings. The gear's dot already points
+    /// at the room that can act on it; this answers the other question — what
+    /// is even in it — which only the release page can.
+    @ViewBuilder
+    private var updateChip: some View {
+        if let version = state.updateStatus.newerVersion,
+           let url = state.updateStatus.url {
+            Button { openURL(url) } label: {
+                Chip(text: "update \(version.description)",
+                     symbol: "arrow.down.circle",
+                     health: .running)
+            }
+            .buttonStyle(.plain)
+            .help("What is in \(version.description) — opens the release notes")
+            .accessibilityLabel("Update \(version.description) available")
+            .headerControl()
+        }
+    }
+
     private var headerMascot: Mascot? {
         contentShowsMascot ? nil : state.selectedMascot
     }
@@ -181,6 +210,7 @@ struct DrawerView: View {
             Text("PR Radar")
                 .font(.system(size: 12.5, weight: .semibold))
             Spacer()
+            updateChip
             Button(action: onCollapse) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
