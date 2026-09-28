@@ -153,6 +153,20 @@ public enum TrophyEvaluator {
         award(.veteran, state.runningDays >= 30)
         award(.upToDate, state.has(TrophyFact.installedOfferedUpdate))
 
+        // MARK: Automatic review
+        //
+        // Read entirely off `state`, not off the snapshot. What a review found
+        // and how long it took are facts about a moment that has passed, and
+        // `AutoReviewLog` — the only other place they are written down — prunes
+        // at fourteen days. A shelf that forgot a trophy because the record
+        // behind it aged out would be worse than no shelf.
+
+        award(.secondOpinion, state.count(TrophyState.Counters.reviewsRun) >= 1)
+        award(.wellRead, state.count(TrophyState.Counters.reviewsRun) >= 10)
+        award(.snapJudgement, state.has(TrophyFact.reviewWasQuick))
+        award(.sharpEyes, state.has(TrophyFact.reviewFoundPriority))
+        award(.yourCall, state.has(TrophyFact.reviewDecided))
+
         // MARK: Hidden
 
         let home = snapshot.homeRepo

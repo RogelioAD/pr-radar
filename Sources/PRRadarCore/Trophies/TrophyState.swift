@@ -58,6 +58,12 @@ public enum TrophyFact {
     public static func badgeCorner(_ corner: String) -> String { cornerPrefix + corner }
     public static let usedStackedFilter = "used.stackedFilter"
     public static let installedOfferedUpdate = "update.installed"
+    /// A review that came back inside two minutes.
+    public static let reviewWasQuick = "review.quick"
+    /// A review that turned up something worth blocking on.
+    public static let reviewFoundPriority = "review.priority"
+    /// A verdict submitted from the row — approved, or changes requested.
+    public static let reviewDecided = "review.decided"
 }
 
 extension TrophyState {
@@ -102,6 +108,10 @@ extension TrophyState {
     public enum Counters {
         public static let runningDays = "running.days"
         public static let queueCleared = "queue.cleared"
+        /// Reviews the skill has finished. Counted here rather than read off
+        /// `AutoReviewLog`, which prunes at fourteen days and two hundred
+        /// records — a lifetime tally cannot live somewhere that forgets.
+        public static let reviewsRun = "reviews.run"
     }
 
     mutating func unlock(_ id: TrophyID, at date: Date) {

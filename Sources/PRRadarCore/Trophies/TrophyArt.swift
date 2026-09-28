@@ -298,6 +298,95 @@ public enum TrophyMotif {
             "............",
     ]
 
+    /// Two speech bubbles, the second answering the first.
+    ///
+    /// Filled, and in two different colours. Drawn as outlines they were the
+    /// right shape and unreadable anyway — inside a medal's engraving field
+    /// two empty rectangles are two empty rectangles, and the whole picture
+    /// rests on them being seen as *two* of something.
+    public static let secondOpinion = [
+            "............",
+            "..tttttt....",
+            "..tcccct....",
+            "..tcccct....",
+            "..tttttt....",
+            "...t........",
+            "....tttttt..",
+            "....tuuuut..",
+            "....tuuuut..",
+            "....tttttt..",
+            ".......t....",
+            "............",
+    ]
+
+    /// An open book. Read rather than skimmed, which is the difference the
+    /// trophy is about.
+    public static let wellRead = [
+            "............",
+            ".ttt....ttt.",
+            ".tcct..tcct.",
+            ".tcct..tcct.",
+            ".tcct..tcct.",
+            ".tcct..tcct.",
+            ".tcct..tcct.",
+            ".tcct..tcct.",
+            ".ttt....ttt.",
+            "...tttttt...",
+            "............",
+            "............",
+    ]
+
+    /// A stopwatch, barely started. The hands are the one coloured thing on
+    /// it, because the hands are what the trophy is for.
+    public static let snapJudgement = [
+            "............",
+            ".....tt.....",
+            "...tttttt...",
+            "..t......t..",
+            ".t...u....t.",
+            ".t...u....t.",
+            ".t...uuu..t.",
+            ".t........t.",
+            "..t......t..",
+            "...tttttt...",
+            "............",
+            "............",
+    ]
+
+    /// An eye, open. Crimson at the centre because what it found is the kind
+    /// worth stopping for.
+    public static let sharpEyes = [
+            "............",
+            "............",
+            "....tttt....",
+            "..tt....tt..",
+            ".t...rr...t.",
+            "t...rrrr...t",
+            "t...rrrr...t",
+            ".t...rr...t.",
+            "..tt....tt..",
+            "....tttt....",
+            "............",
+            "............",
+    ]
+
+    /// A seal with a mark struck through it — the verdict is yours, and this
+    /// is you putting your name to it.
+    public static let yourCall = [
+            "............",
+            "....tttt....",
+            "..tt....tt..",
+            ".t........t.",
+            "t.......f.t.",
+            "t......ff..t",
+            "t.f...ff...t",
+            "t.ff.ff....t",
+            ".t.fff....t.",
+            "..tt....tt..",
+            "....tttt....",
+            "............",
+    ]
+
     /// A zero with an arrow coming back round to it.
     ///
     /// Both drawn two cells wide: at one, the ring and the digit read as the

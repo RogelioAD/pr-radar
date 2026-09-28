@@ -43,6 +43,13 @@ public enum TrophyID: String, CaseIterable, Sendable {
     case fiftyMerged
     case century
 
+    // Automatic review.
+    case secondOpinion
+    case wellRead
+    case snapJudgement
+    case sharpEyes
+    case yourCall
+
     // Hidden.
     case homeTeam
     case peerReview
@@ -215,6 +222,24 @@ extension Trophy {
         Trophy(.century, "Century",
                "Merge a hundred pull requests.",
                art: TrophyArt.badge(.cup, motif: TrophyMotif.century, tier: .gold)),
+
+        // MARK: Automatic review
+
+        Trophy(.secondOpinion, "Second Opinion",
+               "Let PR Radar review a pull request for you.",
+               art: TrophyArt.badge(.medal, motif: TrophyMotif.secondOpinion, tier: .bronze)),
+        Trophy(.wellRead, "Well Read",
+               "Have PR Radar finish ten reviews.",
+               art: TrophyArt.badge(.cup, motif: TrophyMotif.wellRead, tier: .silver)),
+        Trophy(.snapJudgement, "Snap Judgement",
+               "Have a review come back in under two minutes.",
+               art: TrophyArt.badge(.plaque, motif: TrophyMotif.snapJudgement, tier: .bronze)),
+        Trophy(.sharpEyes, "Sharp Eyes",
+               "Have a review turn up something worth blocking on.",
+               art: TrophyArt.badge(.shield, motif: TrophyMotif.sharpEyes, tier: .silver)),
+        Trophy(.yourCall, "Your Call",
+               "Approve or request changes on a review PR Radar left.",
+               art: TrophyArt.badge(.medal, motif: TrophyMotif.yourCall, tier: .gold)),
 
         // MARK: Hidden
 

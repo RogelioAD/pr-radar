@@ -511,4 +511,73 @@ final class TrophyEvaluatorTests: XCTestCase {
         let positions = unlocked.compactMap { order.firstIndex(of: $0) }
         XCTAssertEqual(positions, positions.sorted())
     }
+    // MARK: - Automatic review
+
+    /// A helper for the state these five read, since none of them come off the
+    /// snapshot — what a review found is a fact about a moment that has passed.
+    private func withReviews(_ build: (inout TrophyState) -> Void) -> TrophyState {
+        var state = settled
+        build(&state)
+        return state
+    }
+
+    func testOneFinishedReviewEarnsSecondOpinion() {
+        let state = withReviews { $0.bump(TrophyState.Counters.reviewsRun) }
+        XCTAssertTrue(unlocks(snapshot(), from: state).contains(.secondOpinion))
+    }
+
+    func testNoReviewsEarnsNothing() {
+        let earned = unlocks(snapshot(), from: settled)
+        XCTAssertFalse(earned.contains(.secondOpinion))
+        XCTAssertFalse(earned.contains(.wellRead))
+        XCTAssertFalse(earned.contains(.snapJudgement))
+        XCTAssertFalse(earned.contains(.sharpEyes))
+        XCTAssertFalse(earned.contains(.yourCall))
+    }
+
+    func testTenReviewsEarnWellRead() {
+        let nine = withReviews { state in
+            for _ in 0..<9 { state.bump(TrophyState.Counters.reviewsRun) }
+        }
+        XCTAssertFalse(unlocks(snapshot(), from: nine).contains(.wellRead))
+
+        let ten = withReviews { state in
+            for _ in 0..<10 { state.bump(TrophyState.Counters.reviewsRun) }
+        }
+        XCTAssertTrue(unlocks(snapshot(), from: ten).contains(.wellRead))
+    }
+
+    func testAQuickReviewEarnsSnapJudgement() {
+        let state = withReviews { $0.record(TrophyFact.reviewWasQuick) }
+        XCTAssertTrue(unlocks(snapshot(), from: state).contains(.snapJudgement))
+    }
+
+    func testAPriorityFindingEarnsSharpEyes() {
+        let state = withReviews { $0.record(TrophyFact.reviewFoundPriority) }
+        XCTAssertTrue(unlocks(snapshot(), from: state).contains(.sharpEyes))
+    }
+
+    func testSubmittingAVerdictEarnsYourCall() {
+        let state = withReviews { $0.record(TrophyFact.reviewDecided) }
+        XCTAssertTrue(unlocks(snapshot(), from: state).contains(.yourCall))
+    }
+
+    /// These five survive the log being pruned, which is the whole reason they
+    /// are counted in `TrophyState` rather than read back off `AutoReviewLog`.
+    /// The state alone has to be enough.
+    func testTheReviewTrophiesNeedNothingFromTheSnapshot() {
+        let state = withReviews { state in
+            for _ in 0..<10 { state.bump(TrophyState.Counters.reviewsRun) }
+            state.record(TrophyFact.reviewWasQuick)
+            state.record(TrophyFact.reviewFoundPriority)
+            state.record(TrophyFact.reviewDecided)
+        }
+        // An entirely empty snapshot: no reviews, no PRs, nothing fetched.
+        let earned = unlocks(TrophySnapshot(), from: state)
+        for id in [TrophyID.secondOpinion, .wellRead, .snapJudgement,
+                   .sharpEyes, .yourCall] {
+            XCTAssertTrue(earned.contains(id), "\(id) needed the snapshot")
+        }
+    }
+
 }

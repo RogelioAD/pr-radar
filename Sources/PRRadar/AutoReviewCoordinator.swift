@@ -264,10 +264,12 @@ final class AutoReviewCoordinator {
             let composed = AutoReviewComment.compose(
                 prepared, skill: Prefs.reviewSkill ?? "", pingKey: key)
 
+            var seconds: TimeInterval?
             update(key) { record in
                 // Stamped here, where the run actually ended, and not inferred
                 // later from `finishedAt` — posting rewrites that.
                 record.runSeconds = record.startedAt.map { -$0.timeIntervalSinceNow }
+                seconds = record.runSeconds
                 record.counts = findings.counts
                 record.body = composed.body
                 record.threads = composed.threads
@@ -276,6 +278,7 @@ final class AutoReviewCoordinator {
                 record.finishedAt = Date()
             }
             consecutiveFailures = 0
+            recordTrophyFacts(findings, seconds: seconds)
 
             if state.reviewMode.postsWithoutAsking {
                 await post(item, composed)
@@ -452,6 +455,21 @@ final class AutoReviewCoordinator {
 
     // MARK: - Posting and deciding
 
+    /// What the shelf is allowed to remember about a finished review.
+    ///
+    /// Counted and flagged here rather than read back off the log later: the
+    /// log prunes, and a tally that forgets is not a tally. Only successes are
+    /// counted — a run that failed reviewed nothing.
+    private func recordTrophyFacts(_ findings: AutoReviewFindings, seconds: TimeInterval?) {
+        state.trophyState.bump(TrophyState.Counters.reviewsRun)
+        if let seconds, seconds < 120 {
+            state.trophyState.record(TrophyFact.reviewWasQuick)
+        }
+        if findings.counts[FindingTier.priority.rawValue, default: 0] > 0 {
+            state.trophyState.record(TrophyFact.reviewFoundPriority)
+        }
+    }
+
     private func post(_ item: ReviewItem, _ composed: ComposedReview) async {
         guard let client = client(for: item), let nodeID = item.nodeID else { return }
         do {
@@ -533,6 +551,10 @@ final class AutoReviewCoordinator {
         do {
             _ = try await client.submitReview(pullRequestID: nodeID, event: event,
                                               body: body, threads: [])
+            // Approve and Request-changes only. "Comment only" does not reach
+            // here, and it is deliberately not a verdict — it is letting the
+            // posted review stand without adding one.
+            state.trophyState.record(TrophyFact.reviewDecided)
             // Dismissed as well as cleared server-side: GitHub drops the review
             // request, but the refresh between the mutation landing and the
             // search catching up would otherwise look like an un-reviewed ping.

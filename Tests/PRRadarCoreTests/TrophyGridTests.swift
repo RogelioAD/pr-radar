@@ -48,9 +48,15 @@ final class TrophyGridTests: XCTestCase {
 
     // MARK: - Rows
 
+    /// Derived from the roster rather than written down, so adding trophies
+    /// does not mean editing an arithmetic fact about how many there are. What
+    /// is pinned is the thing that actually matters: the roster divides into
+    /// whole rows, so the grid never ends on a ragged one.
     func testTheRosterFillsWholeRows() {
         let rows = TrophyGrid.rows()
-        XCTAssertEqual(rows.count, 6)
+        XCTAssertEqual(Trophy.all.count % TrophyGrid.columns, 0,
+                       "the roster no longer divides into whole rows")
+        XCTAssertEqual(rows.count, Trophy.all.count / TrophyGrid.columns)
         for row in rows {
             XCTAssertEqual(row.count, TrophyGrid.columns)
         }
@@ -80,9 +86,10 @@ final class TrophyGridTests: XCTestCase {
     // MARK: - Progress
 
     func testProgressCountsWhatIsEarned() {
-        XCTAssertTrue(TrophyGrid.progress(unlocked: []).hasPrefix("0 / 30"))
+        let total = Trophy.all.count
+        XCTAssertTrue(TrophyGrid.progress(unlocked: []).hasPrefix("0 / \(total)"))
         XCTAssertTrue(TrophyGrid.progress(unlocked: [.swamped, .juggler])
-            .hasPrefix("2 / 30"))
+            .hasPrefix("2 / \(total)"))
     }
 
     /// The hidden count is reported as *found*, never as outstanding — saying
