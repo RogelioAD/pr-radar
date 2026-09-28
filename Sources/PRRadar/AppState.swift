@@ -225,6 +225,14 @@ final class AppState: ObservableObject {
     /// Not persisted: a review does not survive a relaunch.
     @Published var reviewInFlight: String?
 
+    /// Rows with a mutation in flight, so a button cannot be pressed twice
+    /// into the same round trip.
+    ///
+    /// Live and never persisted, like `reviewInFlight` beside it: an action
+    /// does not survive the app that started it, and one remembered across a
+    /// relaunch would be a row nobody could ever press again.
+    @Published var rowActions = ActionGate()
+
     /// Ping keys waiting their turn, in the order they will be taken.
     ///
     /// Live rather than persisted, deliberately. Waiting is a fact about this

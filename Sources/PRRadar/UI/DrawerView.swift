@@ -502,6 +502,7 @@ struct DrawerView: View {
                                 review: state.review(for: item),
                                 waiting: AutoReviewQueue.waiting(for: item.pingKey,
                                                                  in: state.reviewQueue),
+                                sending: state.rowActions.isActing(on: item.pingKey),
                                 onAction: { state.act($0, on: item) },
                                 onSetFinding: { state.setFinding($0, on: item, selected: $1) },
                                 onSetTier: { state.setTier($0, on: item, selected: $1) }) {

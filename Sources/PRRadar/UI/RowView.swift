@@ -13,6 +13,11 @@ struct RowView: View {
     /// is not waiting. Not part of `review`: a row waiting to be reviewed has
     /// no record yet, which is exactly why it used to say nothing.
     var waiting: AutoReviewQueue.Waiting?
+    /// Whether one of this row's buttons is mid-round-trip. Every button is
+    /// disabled while it is, because none of them change the record until the
+    /// mutation returns — so the row would otherwise go on offering the press
+    /// that is already in the air.
+    var sending = false
     var onAction: ((AutoReviewCoordinator.Action) -> Void)?
     var onSetFinding: ((String, Bool) -> Void)?
     var onSetTier: ((FindingTier, Bool) -> Void)?
@@ -202,13 +207,17 @@ struct RowView: View {
                             showingFindings.toggle()
                         }
                     }
-                    RowButton(title: postTitle(review), symbol: "paperplane",
-                              health: .running, enabled: review.selection.chosen > 0) {
+                    RowButton(title: sending ? "Sending…" : postTitle(review),
+                              symbol: sending ? "paperplane.fill" : "paperplane",
+                              health: .running,
+                              enabled: review.selection.chosen > 0 && !sending) {
                         onAction?(.post)
                     }
-                    .help(review.selection.chosen > 0
-                          ? "Post the ticked findings as one review"
-                          : "Tick at least one finding first")
+                    .help(sending
+                          ? "Already on its way to GitHub"
+                          : review.selection.chosen > 0
+                            ? "Post the ticked findings as one review"
+                            : "Tick at least one finding first")
                 case .posted:
                     Chip(text: "PR Radar left a review", symbol: "text.bubble", health: .running)
                         .help("Opened on the PR — decide below, and this row stays until you do")
@@ -375,7 +384,8 @@ struct RowView: View {
     /// dismissal.
     @ViewBuilder
     private var decisions: some View {
-        RowButton(title: "Comment only", symbol: "text.bubble", health: .neutral) {
+        RowButton(title: "Comment only", symbol: "text.bubble", health: .neutral,
+                  enabled: !sending) {
             onAction?(.commentOnly)
         }
         .help("Let the posted review stand. Nothing further is sent, and the row goes.")
@@ -386,7 +396,7 @@ struct RowView: View {
         RowButton(title: confirmingApprove ? "Approve?" : "Mark approved",
                   symbol: "checkmark.seal",
                   health: .good,
-                  enabled: item.nodeID != nil) {
+                  enabled: item.nodeID != nil && !sending) {
             if confirmingApprove {
                 confirmingApprove = false
                 onAction?(.approve)
@@ -403,12 +413,13 @@ struct RowView: View {
               : "Submit an approving review")
 
         RowButton(title: "Request changes", symbol: "exclamationmark.bubble",
-                  health: .bad, enabled: item.nodeID != nil) {
+                  health: .bad, enabled: item.nodeID != nil && !sending) {
             onAction?(.requestChanges)
         }
         .help("Submit a review requesting changes, using the priority findings")
 
-        RowButton(title: "Re-run", symbol: "arrow.clockwise", health: .running) {
+        RowButton(title: "Re-run", symbol: "arrow.clockwise", health: .running,
+                  enabled: !sending) {
             onAction?(.rerun)
         }
         .help("Review again and replace the review already posted")

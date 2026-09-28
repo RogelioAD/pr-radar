@@ -587,8 +587,24 @@ final class AutoReviewCoordinator {
         }
     }
 
+    /// One press per row at a time.
+    ///
+    /// Nothing about a row changes while its mutation is in the air — posting
+    /// leaves the record at `ready` until GitHub answers — so for the second or
+    /// so it takes, the row goes on drawing the enabled button that started it.
+    /// Pressing it again submitted the whole review a second time: same body,
+    /// same inline threads, one second apart, and GitHub accepted both.
+    ///
+    /// Released in every case, including a thrown one. A row held shut by a
+    /// failure would be worse than the duplicate, because at least the
+    /// duplicate did what was asked.
     func act(_ action: Action, on item: ReviewItem) {
-        Task { await perform(action, on: item) }
+        let key = item.pingKey
+        guard state.rowActions.begin(key) else { return }
+        Task {
+            await perform(action, on: item)
+            state.rowActions.end(key)
+        }
     }
 
     private func perform(_ action: Action, on item: ReviewItem) async {
