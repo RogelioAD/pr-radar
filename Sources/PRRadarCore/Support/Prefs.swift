@@ -30,6 +30,8 @@ public enum Prefs {
         static let legacyShowingTrophies = "drawer.showingTrophies"
         static let reviewAuto = "review.auto"
         static let reviewSkill = "review.skill"
+
+        static let claudePath = "review.claudePath"
         static let reviewMode = "review.mode"
         /// Superseded by `reviewMode`. Still read once, to carry anyone who had
         /// already turned automatic posting off.
@@ -291,6 +293,22 @@ public enum Prefs {
         set {
             if let newValue { defaults.set(newValue, forKey: Key.reviewSkill) }
             else { defaults.removeObject(forKey: Key.reviewSkill) }
+        }
+    }
+
+    /// A `claude` binary named by hand, for a setup neither the candidate list
+    /// nor the login shell turns up.
+    ///
+    /// Worth having because the failure it answers is total and silent: the
+    /// room says "Claude Code is not installed" and there is nothing the
+    /// developer can do about it from inside the app, however plainly they can
+    /// see the binary in their own terminal.
+    public static var claudePath: String? {
+        get { defaults.string(forKey: Key.claudePath) }
+        set {
+            let trimmed = newValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let trimmed, !trimmed.isEmpty { defaults.set(trimmed, forKey: Key.claudePath) }
+            else { defaults.removeObject(forKey: Key.claudePath) }
         }
     }
 

@@ -158,4 +158,74 @@ final class ClaudeInvocationTests: XCTestCase {
         let arguments = ClaudeInvocation.arguments(for: odd)
         XCTAssertEqual(arguments.filter { $0.contains("rm -rf") }.count, 1)
     }
+    // MARK: - Finding the binary
+
+    /// The bug this answers: a fixed list of five paths found Homebrew and told
+    /// everybody else Claude Code was not installed.
+    func testTheSearchCoversTheWaysANodeCLIIsActuallyInstalled() {
+        let directories = ClaudeInvocation.binDirectories(home: "/Users/dev", pathVariable: nil)
+
+        for expected in ["/opt/homebrew/bin",                  // Homebrew, Apple silicon
+                         "/usr/local/bin",                     // Homebrew, Intel
+                         "/opt/local/bin",                     // MacPorts
+                         "/Users/dev/.claude/local",           // Claude Code's installer
+                         "/Users/dev/.volta/bin",
+                         "/Users/dev/.bun/bin",
+                         "/Users/dev/.npm-global/bin",
+                         "/Users/dev/.asdf/shims",
+                         "/Users/dev/.local/share/mise/shims",
+                         "/Users/dev/.nix-profile/bin"] {
+            XCTAssertTrue(directories.contains(expected), "missing \(expected)")
+        }
+    }
+
+    /// PATH is folded in because it is the only source that knows about setups
+    /// nobody writing this list has thought of.
+    func testEveryDirectoryOnPathIsSearchedToo() {
+        let directories = ClaudeInvocation.binDirectories(
+            home: "/Users/dev", pathVariable: "/somewhere/odd/bin:/another/bin")
+
+        XCTAssertTrue(directories.contains("/somewhere/odd/bin"))
+        XCTAssertTrue(directories.contains("/another/bin"))
+    }
+
+    /// A directory named twice is one directory. Without this a PATH that
+    /// repeats the Homebrew entry makes the app stat it twice for one answer.
+    func testADirectoryNamedTwiceIsOnlySearchedOnce() {
+        let directories = ClaudeInvocation.binDirectories(
+            home: "/Users/dev", pathVariable: "/opt/homebrew/bin:/opt/homebrew/bin")
+
+        XCTAssertEqual(directories.filter { $0 == "/opt/homebrew/bin" }.count, 1)
+    }
+
+    /// Order is not incidental: the known-good locations are tried before
+    /// whatever PATH happens to say, so the answer does not change with the
+    /// environment the app was launched from.
+    func testTheKnownLocationsAreTriedBeforePath() {
+        let directories = ClaudeInvocation.binDirectories(
+            home: "/Users/dev", pathVariable: "/last/place")
+
+        XCTAssertEqual(directories.first, "/opt/homebrew/bin")
+        XCTAssertEqual(directories.last, "/last/place")
+    }
+
+    func testCandidatesAreTheDirectoriesWithTheBinaryOnTheEnd() {
+        let candidates = ClaudeInvocation.candidates(home: "/Users/dev", pathVariable: nil)
+
+        XCTAssertTrue(candidates.allSatisfy { $0.hasSuffix("/claude") })
+        XCTAssertTrue(candidates.contains("/opt/homebrew/bin/claude"))
+    }
+
+    /// nvm and friends put the version in the path, so it cannot be written
+    /// down in advance — only the parent can.
+    func testTheVersionedLayoutsAreDescribedByTheirParents() {
+        let parents = ClaudeInvocation.versionedParents(home: "/Users/dev")
+
+        XCTAssertTrue(parents.contains("/Users/dev/.nvm/versions/node"))
+        XCTAssertEqual(
+            ClaudeInvocation.versionedCandidate(parent: "/Users/dev/.nvm/versions/node",
+                                                version: "v22.3.0"),
+            "/Users/dev/.nvm/versions/node/v22.3.0/bin/claude")
+    }
+
 }

@@ -33,13 +33,73 @@ public enum ClaudeInvocation {
     ///
     /// Absolute paths, for the reason `Token.ghCandidates` gives: a GUI-launched
     /// app inherits no shell `PATH`, so a bare name can never be found.
-    public static let candidates = [
-        "/opt/homebrew/bin/claude",
-        "/usr/local/bin/claude",
-        NSHomeDirectory() + "/.claude/local/claude",
-        NSHomeDirectory() + "/.local/bin/claude",
-        "/opt/local/bin/claude",
-    ]
+    /// Directories a command-line tool might have been installed into, in the
+    /// order worth trying, with duplicates removed.
+    ///
+    /// Pure, and taking the home directory and `PATH` as arguments, so the
+    /// layouts this supports are a list that can be argued with in a test
+    /// rather than whatever happens to be true of the machine running it.
+    ///
+    /// The fixed entries are not enough on their own and were never going to
+    /// be: `claude` is a Node CLI, and a Node CLI lands wherever the version
+    /// manager the developer happens to use puts it — nvm, volta, asdf, mise,
+    /// bun, or an npm prefix of their own choosing. A hardcoded list finds the
+    /// two Homebrew paths and tells everybody else the tool is not installed.
+    /// `PATH` is folded in for the same reason, and last, because it is the
+    /// one source that knows about setups nobody here has thought of.
+    ///
+    /// A GUI-launched app has a minimal `PATH`, so this is a first pass and not
+    /// the whole answer — see the login-shell probe in `AppState`.
+    public static func binDirectories(home: String, pathVariable: String?) -> [String] {
+        var directories = [
+            "/opt/homebrew/bin",              // Homebrew, Apple silicon
+            "/usr/local/bin",                 // Homebrew, Intel
+            home + "/.claude/local",          // Claude Code's own installer
+            home + "/.local/bin",
+            "/opt/local/bin",                 // MacPorts
+            home + "/.volta/bin",
+            home + "/.bun/bin",
+            home + "/.npm-global/bin",
+            home + "/.npm/bin",
+            home + "/.yarn/bin",
+            home + "/.asdf/shims",
+            home + "/.local/share/mise/shims",
+            home + "/.nix-profile/bin",
+            "/run/current-system/sw/bin",     // nix-darwin, system profile
+            "/usr/bin",
+            "/bin",
+        ]
+        directories += (pathVariable ?? "")
+            .split(separator: ":", omittingEmptySubsequences: true)
+            .map(String.init)
+
+        var seen = Set<String>()
+        return directories.filter { seen.insert($0).inserted }
+    }
+
+    /// Where `claude` might be, given a home directory and a `PATH`.
+    public static func candidates(home: String = NSHomeDirectory(),
+                                  pathVariable: String? = ProcessInfo.processInfo
+                                      .environment["PATH"]) -> [String] {
+        binDirectories(home: home, pathVariable: pathVariable).map { $0 + "/claude" }
+    }
+
+    /// Parent directories whose every child may hold a `bin` — the shape nvm
+    /// and asdf install into, where the version is part of the path and so
+    /// cannot be written down in advance.
+    public static func versionedParents(home: String) -> [String] {
+        [
+            home + "/.nvm/versions/node",
+            home + "/.asdf/installs/nodejs",
+            home + "/.local/share/mise/installs/node",
+            home + "/Library/Application Support/fnm/node-versions",
+        ]
+    }
+
+    /// What a `claude` under one of those versioned parents would be called.
+    public static func versionedCandidate(parent: String, version: String) -> String {
+        "\(parent)/\(version)/bin/claude"
+    }
 
     /// The prompt is the slash command and its one argument, and nothing else.
     ///

@@ -303,8 +303,65 @@ final class AppState: ObservableObject {
     /// Where the `claude` CLI was found, or nil. Resolved once: a binary does
     /// not appear halfway through a session, and checking the filesystem on
     /// every settings redraw would be a lot of `stat` for a static answer.
-    lazy var claudePath: String? = ClaudeInvocation.candidates
-        .first { FileManager.default.isExecutableFile(atPath: $0) }
+    @Published var claudePath: String? = AppState.findClaude()
+
+    /// Everywhere `claude` can be found without asking a shell.
+    ///
+    /// A binary named by hand wins outright: somebody who has typed a path has
+    /// answered the question better than any search can, and silently ignoring
+    /// them in favour of a guess would be worse than not offering the field.
+    static func findClaude() -> String? {
+        let manager = FileManager.default
+        if let named = Prefs.claudePath, manager.isExecutableFile(atPath: named) {
+            return named
+        }
+        if let found = ClaudeInvocation.candidates()
+            .first(where: { manager.isExecutableFile(atPath: $0) }) {
+            return found
+        }
+        // The version-manager layouts, whose directory names cannot be known in
+        // advance because the version is in them. Newest last is not worth
+        // sorting for: any of them is a working `claude`.
+        for parent in ClaudeInvocation.versionedParents(home: NSHomeDirectory()) {
+            let versions = (try? manager.contentsOfDirectory(atPath: parent)) ?? []
+            for version in versions.sorted() {
+                let path = ClaudeInvocation.versionedCandidate(parent: parent, version: version)
+                if manager.isExecutableFile(atPath: path) { return path }
+            }
+        }
+        return nil
+    }
+
+    /// The last resort: ask the developer's own shell where `claude` is.
+    ///
+    /// A GUI-launched app inherits a `PATH` of `/usr/bin:/bin:/usr/sbin:/sbin`
+    /// and nothing else, so every version manager is invisible to it — but the
+    /// shell that starts when they open a terminal knows, because their own
+    /// rc files set it up. Run as login *and* interactive: nvm and mise are
+    /// conventionally initialised in `.zshrc`, which a login shell alone does
+    /// not read.
+    ///
+    /// Only ever called when everything cheaper has failed, and only once.
+    /// Timed out rather than trusted: this is somebody else's shell profile and
+    /// it is entitled to be slow, but not to hang a launch.
+    func resolveClaudeFromLoginShell() async {
+        guard claudePath == nil else { return }
+        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        guard FileManager.default.isExecutableFile(atPath: shell) else { return }
+
+        let result = try? await ProcessRunner.run(
+            executable: shell, arguments: ["-ilc", "command -v claude"], timeout: 15)
+        // The last usable line, because an rc file is free to print whatever it
+        // likes before the answer and plenty of them do.
+        let found = (result?.stdout ?? "")
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .last { $0.hasPrefix("/") && FileManager.default.isExecutableFile(atPath: $0) }
+        if let found {
+            claudePath = found
+            Log.debug("found claude via login shell: \(found)")
+        }
+    }
 
     /// Everything the feature needs before it can do anything.
     var canAutoReview: Bool {

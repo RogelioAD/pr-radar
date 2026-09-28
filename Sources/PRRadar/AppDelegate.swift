@@ -83,6 +83,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.menuProvider = { [weak self] in self?.buildMenu() }
         panel.show()
 
+        // Only does anything when the cheap search found nothing, and it runs
+        // off the launch path because it starts somebody else's shell.
+        Task { await state.resolveClaudeFromLoginShell() }
+
         startNetworkMonitor()
         startPolling()
         startClock()

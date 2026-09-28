@@ -414,8 +414,24 @@ final class AutoReviewCoordinator {
 
     private func helperPaths() -> [String] {
         // The skill shells out to `gh`, which a GUI-launched app's PATH does
-        // not contain.
-        ["/opt/homebrew/bin", "/usr/local/bin"]
+        // not contain. The same directories `claude` is looked for in, because
+        // the two are installed the same ways and by the same people — two
+        // Homebrew paths found `gh` on this machine and would have failed on a
+        // MacPorts or nix one, with the review dying halfway through rather
+        // than saying anything useful.
+        //
+        // The directory `claude` was actually found in goes first: whatever
+        // installed one very often installed the other beside it.
+        var paths: [String] = []
+        if let claude = state.claudePath {
+            paths.append((claude as NSString).deletingLastPathComponent)
+        }
+        paths += ClaudeInvocation.binDirectories(
+            home: NSHomeDirectory(),
+            pathVariable: ProcessInfo.processInfo.environment["PATH"])
+
+        var seen = Set<String>()
+        return paths.filter { seen.insert($0).inserted }
     }
 
     private static func runGit(_ arguments: [String]) async throws -> String {

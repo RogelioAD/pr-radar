@@ -13,14 +13,37 @@ if [ "${FORCE:-0}" = "1" ]; then
     exit 0
 fi
 
-# Nothing can be in flight if nothing is running. Checked first, and this is
-# also what stops a stale record left by an older build from wedging `install`
-# shut with no way to get the fix for it onto the machine.
-if ! pgrep -f 'PRRadar\.app/Contents/MacOS/PRRadar' >/dev/null 2>&1; then
+root=$(cd "$(dirname "$0")/.." && pwd)
+
+# Read from bundle.sh rather than written down again here. The README tells a
+# fork to rename the bundle identifier and lists the files to do it in; this
+# script is not one of them, so a second copy of the string would have gone
+# stale on every fork and quietly stopped matching any domain at all — leaving
+# a guard that never fires and never says why.
+bundle_id=$(sed -n 's/^BUNDLE_ID="\(.*\)"$/\1/p' "$root/Scripts/bundle.sh")
+app_name=$(sed -n 's|^APP="\$ROOT/\(.*\)"$|\1|p' "$root/Scripts/bundle.sh")
+: "${app_name:=PRRadar.app}"
+
+if [ -z "$bundle_id" ]; then
+    echo "==> note: could not read BUNDLE_ID from Scripts/bundle.sh;"
+    echo "    installing without checking for a review in progress."
     exit 0
 fi
 
-running=$(defaults export com.rogelioacosta.prradar - 2>/dev/null | python3 -c '
+# Nothing can be in flight if nothing is running. Checked first, and this is
+# also what stops a stale record wedging `install` shut with no way to get the
+# fix for it onto the machine.
+if ! pgrep -f "$app_name/Contents/MacOS/" >/dev/null 2>&1; then
+    exit 0
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "==> note: python3 not found, so a review in progress cannot be"
+    echo "    detected. Installing anyway — check the drawer first."
+    exit 0
+fi
+
+running=$(defaults export "$bundle_id" - 2>/dev/null | python3 -c '
 import sys, plistlib, json
 try:
     blob = plistlib.loads(sys.stdin.buffer.read()).get("review.log")

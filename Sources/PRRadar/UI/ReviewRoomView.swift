@@ -134,19 +134,53 @@ struct ReviewRoomView: View {
         Divider()
 
         row("Claude Code") {
-            if let path = state.claudePath {
-                Text(path)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                    .help(path)
-            } else {
-                Label("Not found", systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(Health.bad.tint)
-                    .help("Install Claude Code — automatic review has nothing to "
-                          + "run without it")
+            HStack(spacing: 6) {
+                if let path = state.claudePath {
+                    Text(FolderPicker.display(path))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .help(path)
+                } else {
+                    Label("Not found", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(Health.bad.tint)
+                        .help("Looked in the usual places and asked your login "
+                              + "shell. Point at it by hand if it lives "
+                              + "somewhere else.")
+                }
+                Spacer(minLength: 4)
+                Button(state.claudePath == nil ? "Locate…" : "Change…") { chooseClaude() }
+                    .buttonStyle(.link)
+                    .font(.system(size: 10))
+                    .help("Choose the claude binary yourself")
             }
         }
+    }
+
+    /// Lets the developer name the binary when nothing found it for them.
+    ///
+    /// Worth a control of its own because the alternative is a dead end: the
+    /// row says it is not installed, the feature will not switch on, and a
+    /// developer looking straight at `claude` in their own terminal has no way
+    /// to tell the app where it is. Hidden files are shown, because two of the
+    /// commonest homes for it — `~/.claude/local` and `~/.nvm` — are hidden.
+    private func chooseClaude() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true
+        panel.title = "Choose the claude binary"
+        panel.prompt = "Use"
+        if let current = state.claudePath {
+            panel.directoryURL = URL(fileURLWithPath: current).deletingLastPathComponent()
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Prefs.claudePath = url.path
+        state.claudePath = AppState.findClaude()
+        // A path that turned out not to be runnable is not kept: it would sit
+        // there outranking a perfectly good one the search can find.
+        if state.claudePath == nil { Prefs.claudePath = nil }
     }
 
     // MARK: - Skill
