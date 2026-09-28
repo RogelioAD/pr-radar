@@ -224,7 +224,7 @@ row's edge, where it was clipped away entirely.
 
 ### Stacks
 
-Press the **pancake button** in the filter bar and the list narrows to PRs that
+Press the **pancake button** in the tab strip and the list narrows to PRs that
 sit on each other, drawn as groups: outlined together, one outline per stack.
 
 Everywhere else the list is a **flat list of rows, exactly as it always was**. A
@@ -314,6 +314,38 @@ filter has already excluded.
 ---
 
 ## The drawer
+
+### Why the filters are still their own band
+
+Folding them into the tab strip was tried and reverted. The two bands look half
+empty and they are — but only when nothing is selected. With a real repository
+picked, the filter pills come to 406pt on their own, and the merged band
+overflowed 440 by **334**. What looked like wasted space was the *empty* state
+of a bar that fills right up.
+
+Measuring it turned up an older problem: the filter bar was already overflowing
+by 24pt on its own, once a long repository name and the stack toggle were both
+showing. These pills are `Menu` labels carrying `.fixedSize()`, so they refuse
+to compress — past the edge they are clipped, not shortened. So every label is
+capped, and the sort control lost its word: an up arrow, a down arrow and
+`textformat.abc` are the three answers, and spelling them out again cost 70pt
+in a band that had none. The order it is sorted by is in the tooltip.
+
+The tab strip's right side does get used — by the one thing that belongs to a
+tab rather than to the app.
+
+### Every room in the footer
+
+The gear, the trophy and the wand sit together, bottom-left. Two of them were
+in the header and one down here, which meant *where do I find a room?* had two
+answers. Each position was defensible alone — the gear is bottom-left because
+that is where this platform has trained people to look — but the reasoning did
+not survive a third room being added somewhere else.
+
+The footer won the tie because the gear was already there, so the habit that
+exists is the one kept; and because the header is the window's **drag handle**,
+where every control competes with the gesture that moves the panel. The header
+now holds the mascot, the name and the close box, and hands back the rest.
 
 **Shows every row by default**, growing to fit the whole list. Nothing is
 hidden until it has to be.
@@ -421,7 +453,7 @@ ranks what is wrong.
 
 ## Trophies
 
-Thirty of them, on a shelf behind the trophy button in the header. Five across,
+Thirty of them, on a shelf behind the trophy button in the footer. Five across,
 six rows, every one a 32x32 pixel drawing — four times the budget a mascot gets,
 which is what lets a trophy carry a readable picture inside a readable frame.
 
@@ -433,13 +465,14 @@ written as an instruction rather than a description.
 
 ### The room
 
-The button sits beside the close box, and it is a **toggle**: it is the only
+The button sits in the footer beside the gear and the wand, and it is a
+**toggle**: it is the only
 way in, so it has to be the way out. Pressing it again puts back whichever tab
 you were on — the tab was never changed underneath, so there is nothing to
 restore.
 
-Opening it replaces **everything below the header**. The tab strip and the
-filter bar are not hidden but absent: two controls with nothing to act on are
+Opening it replaces **everything below the header**. The tab strip is not
+hidden but absent: a control with nothing to act on is
 two controls asking to be pressed, and a band of chrome the shelf then has to
 be shorter than. The footer becomes the count.
 
@@ -543,6 +576,108 @@ The rest is all about not wearing out:
 `defaults write com.yourname.prradar celebrate.cleared -bool false` turns the
 banner off, for anyone who would rather it did not. The shelf still fills.
 
+---
+
+## Automatic review
+
+Off until asked for. Turned on with the wand beside the trophy, it runs the
+review skill **you already have** against every PR waiting on you, and posts
+what it found as a review from your own account.
+
+The skill is typed into Settings — `/code-review`, or whatever you use. It is
+deliberately not a picker and deliberately not hardcoded: which review skill a
+developer has is theirs, and a list here would go stale the first time they
+installed another one. It runs headlessly, so a skill that asks questions will
+time out rather than work; the field says so, and the tool that would ask is
+denied outright so the failure is fast and legible instead of a quarter-hour of
+nothing.
+
+### The pin, which is the whole feature
+
+A PR leaves the Reviews list the moment you comment on it. That rule is what
+makes the list honest, and it is also what would make an automatic comment
+useless: the PR would vanish at the exact moment it had something to say.
+
+So a reviewed PR is **pinned**. It stays in the list, wearing its findings,
+until you pick one of four buttons on the row:
+
+| Button | What it does |
+|---|---|
+| Comment only | Lets the review stand. Nothing further is sent. |
+| Mark approved | Submits an approving review. Asks twice. |
+| Request changes | Submits one, using the priority findings as the body. |
+| Re-run | Reviews again and retires the review already posted. |
+
+The pin names **one node id** — the review PR Radar posted — and says it does
+not count as you having dealt with the PR. Everything else about the rule runs
+completely unchanged, which is the point.
+
+Storing a timestamp instead and keeping the row while your activity was older
+than it was the other way to build this, and it is wrong in a way that only
+shows up on somebody else's machine: a Mac running a second ahead of GitHub
+reads its own review as newer than the pin and drops the row the instant it is
+posted. A node id has no clock in it.
+
+Three things therefore need no handling at all. A pin cannot resurrect a PR the
+search stopped returning, because it only ever relaxes a filter over rows that
+came back. A comment you write yourself is a different node, is not pinned, and
+hides the row exactly as it always did. And a re-request is a new ping, so it
+is a new key, so the old pin does not answer it and the PR is reviewed again.
+
+### What gets posted
+
+One review, submitted as a **comment** rather than an approval or a rejection —
+which is also why the PR stays put, since GitHub only clears a review request
+for the other two.
+
+Every priority and mild finding is anchored **inline at its own `file:line`**,
+carrying what it found, what to do about it, and a ` ```suggestion ` block
+where the fix is a literal replacement. The summary comment lists them again,
+because somebody scanning the conversation should not have to open the Files
+tab to count them.
+
+Nits are counted and never raised. Posting a colleague a list of nits under
+your own name is how an automated reviewer gets muted.
+
+Some details that had to be decided:
+
+- **It posts as you, and says PR Radar in the body.** There is no bot account.
+  The reviewer stays accountable for what carries their name, and the reader is
+  told where the list came from.
+- **A suggestion is only rendered when it can be applied cleanly** — the range
+  is named, and the replacement has exactly that many lines. GitHub's Apply
+  replaces the commented range, so a mismatched block silently deletes or
+  duplicates code. A wrong Apply button is worse than no Apply button.
+- **A finding pointing outside the diff falls back to the summary.** One
+  rejected thread costs the entire review rather than just itself, so a
+  near-miss is snapped to the nearest changed line in the same hunk — and says
+  it moved — while anything further away is carried in the body instead.
+- **A run that finished but produced nothing readable is a failure, never zero
+  findings.** An automated clean bill of health, under your name, backed by
+  nothing, is the worst thing this could produce.
+- **Reviews run in your own clone**, in a throwaway worktree at the PR head, so
+  your working tree is never touched. The head is fetched into `refs/pr-radar/*`
+  so it cannot collide with a branch of yours. A repo with no clone says so on
+  the row rather than being reviewed blind.
+- **One at a time.** A review is a whole Claude Code session, and three at once
+  on a laptop is a fan event.
+- **Three failures in a row and it switches itself off.** An auto-poster that
+  is broken should stop, not work its way down the list.
+
+### The allowlist
+
+Automatic review only touches repositories ticked in Settings. Everywhere else
+the row says so and nothing is sent.
+
+An allowlist rather than a blocklist because the two failure modes are not
+symmetric: forgetting to add a repo costs a review that did not happen, and
+forgetting to block one costs an automated comment on a stranger's pull
+request, under your own name, that cannot be taken back.
+
+`PRRADAR_FAKE_REVIEW=running|ready|posted|failed|skipped` stands a record up on
+every row, because the state this feature exists to produce is otherwise
+reachable only by spending real money on somebody's real PR.
+
 ## Notifications
 
 A native notification when a PR you have not seen appears; clicking it opens
@@ -563,7 +698,8 @@ When a new version is released, running copies find out two ways:
   involved; it works today.
 - **The app checks itself.** It reads the repo's latest release, compares the
   tag against its own `CFBundleShortVersionString`, and shows an
-  `update 1.1.0` chip in the drawer header plus a one-time notification.
+  dot on the gear plus a one-time notification; Settings has the button that
+  opens the release.
   Clicking either opens the release page, whose notes lead with the upgrade
   command — the chip would otherwise land you on a bare commit list.
 
@@ -592,6 +728,12 @@ Things left out on purpose, and why:
   floating panel is a lot of risk for a command that belongs in a terminal.
 - **No merging from the widget.** Same reasoning. The green badge tells you
   when to go do it.
+- **Approving and requesting changes are the exception to those two**, and it
+  is worth naming rather than leaving the rule above looking intact. They
+  arrived with automatic review, where the app has already read the diff and
+  written the comment — refusing to let you act on what it just showed you
+  would be a strange place to stop. They are also both reversible, which a
+  force-push and a merge are not. Approve asks twice regardless.
 - **The badge never counts your own PRs.** Mixing "work you owe others" with
   "your work in flight" into one number makes it mean nothing.
 - **No wallpaper sampling for the icon colour.** It would need Screen Recording

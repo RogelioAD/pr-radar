@@ -157,16 +157,196 @@ final class AppState: ObservableObject {
     /// selected the old value and started typing a new one.
     @Published var updateRepoDraft: String = Prefs.updateRepo
 
+    // MARK: - Automatic review
+
+    /// Whether PR Radar reviews the PRs waiting on you by itself.
+    ///
+    /// Written through like every other switch, but see `toggleAutoReview()`
+    /// for the one path that is allowed to refuse.
+    @Published var autoReviewEnabled: Bool = Prefs.autoReview {
+        didSet { Prefs.autoReview = autoReviewEnabled }
+    }
+
+    /// How much of a finished review goes out without being looked at.
+    @Published var reviewMode: AutoReviewMode = Prefs.reviewMode {
+        didSet { Prefs.reviewMode = reviewMode }
+    }
+
+    /// Ticks or unticks one finding on a held review.
+    ///
+    /// Writes straight back to the log, which is what persists the choice: a
+    /// review can sit half-picked-over across a relaunch, and losing the ticks
+    /// would mean reading nine findings again.
+    func setFinding(_ id: String, on item: ReviewItem, selected: Bool) {
+        guard var record = autoReviewLog[item.pingKey],
+              let index = record.prepared.firstIndex(where: { $0.id == id })
+        else { return }
+        record.prepared[index].isSelected = selected
+        autoReviewLog[item.pingKey] = record
+    }
+
+    /// Ticks or unticks a whole tier at once — the "all three nits, actually"
+    /// case, which is otherwise three presses in a narrow drawer.
+    func setTier(_ tier: FindingTier, on item: ReviewItem, selected: Bool) {
+        guard var record = autoReviewLog[item.pingKey] else { return }
+        for index in record.prepared.indices where record.prepared[index].tier == tier {
+            record.prepared[index].isSelected = selected
+        }
+        autoReviewLog[item.pingKey] = record
+    }
+
+    /// Repos automatic review is allowed to touch, lowercased for comparison.
+    @Published var reviewRepos: [String] = Prefs.reviewRepos {
+        didSet { Prefs.reviewRepos = reviewRepos }
+    }
+
+    var reviewAllowlist: Set<String> { Set(reviewRepos.map { $0.lowercased() }) }
+
+    func isReviewAllowed(_ repo: String) -> Bool {
+        reviewAllowlist.contains(repo.lowercased())
+    }
+
+    func setReviewAllowed(_ repo: String, _ allowed: Bool) {
+        let key = repo.lowercased()
+        if allowed {
+            guard !reviewRepos.contains(where: { $0.lowercased() == key }) else { return }
+            reviewRepos = (reviewRepos + [repo]).sorted()
+        } else {
+            reviewRepos.removeAll { $0.lowercased() == key }
+        }
+    }
+
+    /// Every automatic review the app remembers.
+    @Published var autoReviewLog: AutoReviewLog = Prefs.autoReviewLog {
+        didSet { Prefs.autoReviewLog = autoReviewLog }
+    }
+
+    /// The pingKey of the review currently running, for the header's pulse.
+    /// Not persisted: a review does not survive a relaunch.
+    @Published var reviewInFlight: String?
+
+    /// What the row shows for this PR.
+    ///
+    /// `PRRADAR_FAKE_REVIEW` stands a record up for every row, because the
+    /// states this feature exists to produce are otherwise reachable only by
+    /// spending real money on somebody's real pull request.
+    func review(for item: ReviewItem) -> AutoReviewRecord? {
+        if let faked = Log.fakeReview { return faked }
+        return autoReviewLog[item.pingKey]
+    }
+
+    /// Held weakly: the coordinator already refers back to this state, and the
+    /// delegate owns them both.
+    weak var autoReviewer: AutoReviewCoordinator?
+
+    func act(_ action: AutoReviewCoordinator.Action, on item: ReviewItem) {
+        autoReviewer?.act(action, on: item)
+    }
+
+    /// The skill to run, as the settings field holds it — an edit buffer for
+    /// the same reason `updateRepoDraft` is one.
+    @Published var reviewSkillDraft: String = Prefs.reviewSkill ?? ""
+
+    /// The ceiling on one review, in dollars. Zero means no ceiling.
+    ///
+    /// Surfaced rather than buried in `defaults` because of how it failed when
+    /// it was buried: an invisible cap set below the cost of a real review
+    /// killed every one of them partway through, and nothing on screen said a
+    /// budget existed at all.
+    @Published var reviewBudget: Double = Prefs.reviewBudget {
+        didSet { Prefs.reviewBudget = reviewBudget }
+    }
+
+    /// Where the clones live.
+    ///
+    /// Written through the moment it changes rather than buffered like the
+    /// skill field, because it is now picked rather than typed — and this
+    /// platform's convention, which the settings room already keeps, is that
+    /// anything you choose from a menu applies at once. It is also why it does
+    /// not appear in `hasPendingSettings`: a picker is never unsaved.
+    @Published var reviewWorkspace: String? = Prefs.reviewWorkspace {
+        didSet { Prefs.reviewWorkspace = reviewWorkspace }
+    }
+
+    /// Where the folder menu starts when nothing has been chosen. Home, because
+    /// that is where a developer's clones almost always are.
+    var reviewBrowsingFrom: String {
+        reviewWorkspace.map(FolderPicker.normalized) ?? NSHomeDirectory()
+    }
+
+    /// The subfolders of whatever is being browsed, capped.
+    ///
+    /// Reads the disk, so it is a method on the store rather than something the
+    /// view recomputes as it draws: a menu body is evaluated more often than it
+    /// is opened, and listing a directory on each of those would be a lot of
+    /// syscalls to draw the same six names.
+    func reviewSubfolders(of path: String) -> [String] {
+        let contents = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
+        return FolderPicker.visible(contents).filter { name in
+            var isDirectory: ObjCBool = false
+            let child = (path as NSString).appendingPathComponent(name)
+            return FileManager.default.fileExists(atPath: child, isDirectory: &isDirectory)
+                && isDirectory.boolValue
+        }
+    }
+
+    /// How many of a folder's children are git clones — the one fact that says
+    /// whether this is the right folder.
+    func reviewCloneCount(in path: String) -> Int {
+        reviewSubfolders(of: path).prefix(FolderPicker.limit * 4).count { name in
+            let child = (path as NSString).appendingPathComponent(name)
+            return FileManager.default.fileExists(
+                atPath: (child as NSString).appendingPathComponent(".git"))
+        }
+    }
+
+    /// Where the `claude` CLI was found, or nil. Resolved once: a binary does
+    /// not appear halfway through a session, and checking the filesystem on
+    /// every settings redraw would be a lot of `stat` for a static answer.
+    lazy var claudePath: String? = ClaudeInvocation.candidates
+        .first { FileManager.default.isExecutableFile(atPath: $0) }
+
+    /// Everything the feature needs before it can do anything.
+    var canAutoReview: Bool {
+        claudePath != nil && ReviewSkill.normalized(reviewSkillDraft) != nil
+    }
+
+    /// The room's switch.
+    ///
+    /// It refuses to turn on without a skill to run, and it can do that quietly
+    /// because of where it now lives: the field it is complaining about is two
+    /// rows below it, already wearing its own warning. The header button used
+    /// to be this control and had to open Settings to explain itself; giving
+    /// automatic review a room of its own is what made that unnecessary.
+    func toggleAutoReview() {
+        autoReviewEnabled = autoReviewEnabled ? false : canAutoReview
+    }
+
+    func commitReviewSkill() {
+        if let skill = ReviewSkill.normalized(reviewSkillDraft) {
+            Prefs.reviewSkill = skill
+        }
+        reviewSkillDraft = Prefs.reviewSkill ?? ""
+        // A feature with nothing to run must not sit there claiming to be on.
+        if !canAutoReview { autoReviewEnabled = false }
+    }
+
     /// Whether anything typed is waiting to be applied.
     ///
     /// Only the typed fields can be pending. Switches and pickers write through
     /// the moment they are touched — that is this platform's convention and the
     /// room keeps it — so they are never unsaved and never light this up.
-    var hasPendingSettings: Bool { updateRepoDraft != Prefs.updateRepo }
+    var hasPendingSettings: Bool {
+        updateRepoDraft != Prefs.updateRepo
+            || reviewSkillDraft != (Prefs.reviewSkill ?? "")
+    }
 
     /// Applies every pending field. Same path the fields take on Return and on
     /// losing focus, so the button can never mean something they do not.
-    func saveSettings() { commitUpdateRepo() }
+    func saveSettings() {
+        commitUpdateRepo()
+        commitReviewSkill()
+    }
 
     /// Accepts the draft if it names a repo, and otherwise puts back whatever
     /// is actually stored — so leaving the field never silently breaks the
@@ -204,6 +384,28 @@ final class AppState: ObservableObject {
     var trophyRows: [[Trophy]] { TrophyGrid.rows() }
 
     var settingsSections: [SettingsSection] { SettingsSection.allCases }
+    var reviewSections: [ReviewSection] { ReviewSection.allCases }
+
+    /// The review room's footer line: on or off, and what it has done.
+    ///
+    /// Counts the *posted* records against the rows currently waiting, which is
+    /// the only honest denominator — the log remembers pings that have long
+    /// since left the list, and "12 reviewed" next to a drawer holding two
+    /// would be a number about nothing on screen.
+    var reviewSummary: String {
+        guard autoReviewEnabled else {
+            return canAutoReview ? "Off" : "Off — nothing to run"
+        }
+        if let key = reviewInFlight,
+           let running = items.first(where: { $0.pingKey == key }) {
+            return "Reviewing \(running.repoShortName)#\(running.number)"
+        }
+        let waiting = items.filter { autoReviewLog[$0.pingKey]?.status == .posted }.count
+        guard waiting > 0 else { return "On · \(reviewRepos.count) repos" }
+        return waiting == 1
+            ? "On · 1 review waiting on you"
+            : "On · \(waiting) reviews waiting on you"
+    }
 
     var trophyProgress: String {
         TrophyGrid.progress(unlocked: trophyState.unlockedIDs)
@@ -211,9 +413,29 @@ final class AppState: ObservableObject {
 
     /// Opening the shelf is what counts as having looked at it. Every other
     /// room simply opens.
+    /// Which trophies to mark as new *while the shelf is open*.
+    ///
+    /// Opening the room has always cleared `unseen` — that is what takes the
+    /// dot off the button, and it should, because you have now seen them. But
+    /// clearing it on the way in left nothing for the shelf itself to point at:
+    /// the room knew something was new right up until the moment you could have
+    /// looked. This holds the answer for the length of the visit.
+    ///
+    /// Not persisted. It is a fact about this visit, not about the shelf.
+    @Published private(set) var newTrophies: Set<String> = []
+
     func open(_ room: DrawerRoom) {
+        let leavingShelf = self.room == .trophies && room != .trophies
         self.room = room
-        if room == .trophies, trophyState.hasUnseen { trophyState.markAllSeen() }
+        if room == .trophies {
+            // Captured before clearing, so the room can still say which.
+            if trophyState.hasUnseen {
+                newTrophies = trophyState.unseen
+                trophyState.markAllSeen()
+            }
+        } else if leavingShelf {
+            newTrophies = []
+        }
     }
 
     /// Enters `room`, or leaves it if it is already the one open.
@@ -225,11 +447,18 @@ final class AppState: ObservableObject {
     /// each other rather than only from the drawer.
     func toggle(_ room: DrawerRoom) {
         if self.room == room {
+            if room == .trophies { newTrophies = [] }
             self.room = nil
         } else {
             open(room)
         }
     }
+
+    /// Whether this trophy was unlocked since the shelf was last looked at.
+    func isNew(_ id: TrophyID) -> Bool { newTrophies.contains(id.rawValue) }
+
+    /// The visit is over — by leaving the room, or by shutting the drawer on it.
+    func endTrophyVisit() { newTrophies = [] }
 
     /// Measured height of each row, keyed by a surface-namespaced row id.
     @Published var rowHeights: [String: CGFloat] = [:]
@@ -446,6 +675,7 @@ final class AppState: ObservableObject {
         // drawer settle between a section's header and the first thing under
         // it, which reads as a heading for nothing.
         case .settings: return SettingsSection.allCases.count
+        case .review: return ReviewSection.allCases.count
         }
     }
 
@@ -453,7 +683,17 @@ final class AppState: ObservableObject {
     func rowHeights(for surface: DrawerSurface) -> [CGFloat] {
         switch surface {
         case .reviews:
-            return displayedItems.compactMap { rowHeights[rowKey(.reviews, $0.id)] }
+            // `map` with a fallback, not `compactMap`. Dropping the rows that
+            // have not reported yet shortens the array, and the sizing reads it
+            // positionally — so row 2's measurement was being used as row 1's,
+            // and the list came out the wrong height whenever a row in the
+            // middle of it had not been drawn yet. Keeping every position and
+            // filling the gaps with the estimate is what makes the index mean
+            // what the sizing thinks it means.
+            return displayedItems.map {
+                rowHeights[rowKey(.reviews, $0.id)]
+                    ?? Layout.estimatedRowHeight(for: .reviews)
+            }
         case .mine:
             return MyPRGrouping.stopHeights(
                 units: displayedMyPRUnits,
@@ -466,6 +706,10 @@ final class AppState: ObservableObject {
         case .settings:
             return SettingsSection.allCases.compactMap {
                 rowHeights[rowKey(.settings, $0.id)]
+            }
+        case .review:
+            return ReviewSection.allCases.compactMap {
+                rowHeights[rowKey(.review, $0.id)]
             }
         }
     }

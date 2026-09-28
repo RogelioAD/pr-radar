@@ -10,6 +10,7 @@ import Foundation
 ///
 /// Order: who the app is looking as, then the settings everyone changes, then
 /// what it is watching, then how it looks, then the machinery underneath.
+
 public enum SettingsSection: String, CaseIterable, Sendable, Identifiable {
     case accounts
     case general

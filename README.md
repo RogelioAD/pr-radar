@@ -15,6 +15,7 @@ how to get it running.
 | macOS | 14 or later (built and run on 26) |
 | Swift | 5.9+ — Xcode or the Command Line Tools (`xcode-select --install`) |
 | [`gh`](https://cli.github.com) | installed and authenticated |
+| [Claude Code](https://claude.com/claude-code) | only for automatic review, which is off until you turn it on |
 
 Check all three:
 

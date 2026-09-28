@@ -59,6 +59,15 @@ enum Layout {
     /// drawer sideways.
     static let drawerWidth: CGFloat = 440
     static let tabStripHeight: CGFloat = 30
+
+    /// The band the scope and narrowing controls sit in.
+    ///
+    /// Its own band, and it has to be. Folding it into the tab strip was tried:
+    /// the two looked half empty, and they are — but only when nothing is
+    /// selected. With a real repository picked the pills come to 406pt on their
+    /// own, and the merged band overflowed 440 by 334. What looked like wasted
+    /// space was the *empty* state of a bar that fills right up.
+    static let filterBarHeight: CGFloat = 32
     /// Sized for the mascot lockup: 12pt resize strip plus a 36pt row, which is
     /// exactly what a 2x character with its bob room needs. Was 40 when the
     /// header carried only a 12pt SF Symbol.
@@ -66,8 +75,14 @@ enum Layout {
     /// Nothing else has to change for this: `chromeHeight(for:)` is derived
     /// from it and `DrawerSizing` reads that, so the drawer re-measures on
     /// its own.
+    /// Not reduced when the header emptied out, and that is deliberate.
+    ///
+    /// Forty was tried: the band's inner height is `headerHeight - resizeEdge`,
+    /// and the mascot is twelve sprite rows at `headerMascotScale` plus its
+    /// padding — about 28pt. Forty leaves exactly 28, so the character sat
+    /// flush against both edges with nowhere to breathe. The header has room to
+    /// spare now; the mascot is what decides how much it needs.
     static let headerHeight: CGFloat = 48
-    static let filterBarHeight: CGFloat = 32
     static let footerHeight: CGFloat = 28
     static let rowSpacing: CGFloat = 2
     static let listPadding: CGFloat = 12
@@ -84,6 +99,18 @@ enum Layout {
     /// The empty states already reserve a whole row's height for a 20pt SF
     /// Symbol, so this costs no layout at all.
     static let emptyStateMascotScale: CGFloat = 3
+
+    /// How much room a list with nothing in it takes.
+    ///
+    /// Measured rather than guessed: the mascot is twelve sprite rows at
+    /// `emptyStateMascotScale` (36pt), then 6pt, a 12.5pt title, 6pt, and up to
+    /// two 11pt lines of detail, inside 8pt of padding each side — 111pt. It
+    /// was being given one row's worth, which is now 78, and the difference was
+    /// spilling out of the top and the bottom of the drawer.
+    ///
+    /// One number, read by both the view that draws it and the sizing that
+    /// makes room for it, because the two disagreeing is exactly the bug.
+    static let emptyStateHeight: CGFloat = 112
 
     // MARK: - Achievement banner
 
@@ -250,7 +277,9 @@ enum Layout {
     /// it only squared up once the rows reported and the layout ran again.
     static func estimatedRowHeight(for surface: DrawerSurface) -> CGFloat {
         switch surface {
-        case .reviews: return 80
+        // Two metadata lines became one when the author joined the number and
+        // the repo, so the pre-measurement guess came down with them.
+        case .reviews: return 66
         case .mine: return 130
         // Not an estimate at all: every grid row is one cell tall, and a cell
         // is a fixed sprite at a fixed scale. The trophy room is the one
@@ -259,7 +288,7 @@ enum Layout {
         // A section's height depends entirely on how many controls it holds,
         // so this is a genuine estimate — near the middle of the three, used
         // only for the single frame before the groups report themselves.
-        case .settings: return 130
+        case .settings, .review: return 130
         }
     }
 
@@ -281,10 +310,10 @@ enum Layout {
         // header + tab strip + filter bar + footer, plus four dividers.
         case .reviews, .mine:
             return headerHeight + tabStripHeight + filterBarHeight + footerHeight + 4
-        // header + progress footer, plus two dividers. The settings room hides
-        // the same two controls and carries a footer of the same height, so it
-        // comes to exactly the same chrome.
-        case .trophies, .settings:
+        // header + progress footer, plus two dividers. Every other room hides
+        // the same two controls and carries a footer of the same height, so
+        // they all come to exactly the same chrome.
+        case .trophies, .settings, .review:
             return headerHeight + footerHeight + 2
         }
     }
@@ -292,13 +321,13 @@ enum Layout {
     /// The gap a room puts between its units, where a list would use
     /// `rowSpacing`. nil for the tabs, which use the list's own 2pt.
     ///
-    /// Both rooms need more air than a list does and for the same reason: list
+    /// Every room needs more air than a list does and for the same reason: list
     /// rows are separated by their own borders, and neither a trophy grid nor a
     /// stack of setting groups has any — the gap *is* the separation.
     static func roomSpacing(for surface: DrawerSurface) -> CGFloat? {
         switch surface {
         case .trophies: return trophyGridSpacing
-        case .settings: return settingsSectionSpacing
+        case .settings, .review: return settingsSectionSpacing
         case .reviews, .mine: return nil
         }
     }
@@ -336,7 +365,8 @@ enum Layout {
             listPadding: listPadding,
             chromeHeight: chromeHeight(for: surface),
             maxHeight: fallbackMaxHeight,
-            estimatedRowHeight: estimatedRowHeight(for: surface)
+            estimatedRowHeight: estimatedRowHeight(for: surface),
+            emptyHeight: emptyStateHeight
         )
     }
 

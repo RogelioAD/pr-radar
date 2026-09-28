@@ -13,15 +13,29 @@ import Foundation
 /// A Comment-type review does *not* clear it, which is the whole reason this
 /// rule exists. Anchoring to the *latest* ping also makes re-requests work —
 /// a PR I already commented on resurfaces the moment someone pings me again.
+///
+/// `pins` is the one exception, and it is deliberately narrow: it names review
+/// nodes that do not count as *me* having dealt with the PR, because PR Radar
+/// posted them on my behalf. The rule above then runs completely unchanged —
+/// which is the point. Suppressing by node id rather than by "anything before
+/// this timestamp" keeps a clock out of it: a Mac running a second ahead of
+/// GitHub would otherwise read our own review as activity newer than the pin
+/// and drop the row the instant it was posted, which is the exact thing the
+/// auto-review feature exists to prevent.
 public struct ReviewInbox {
     public let viewerLogin: String
     public let teamSlugs: Set<String>
     public let includeDrafts: Bool
+    /// Node ids of reviews PR Radar left for me, keyed by the ping they answer.
+    /// Empty by default, so the pin is inert everywhere that does not opt in.
+    public let pins: [String: String]
 
-    public init(viewerLogin: String, teams: [TeamRef], includeDrafts: Bool = true) {
+    public init(viewerLogin: String, teams: [TeamRef], includeDrafts: Bool = true,
+                pins: [String: String] = [:]) {
         self.viewerLogin = viewerLogin
         self.teamSlugs = Set(teams.map(\.slug))
         self.includeDrafts = includeDrafts
+        self.pins = pins
     }
 
     public func build(from searches: [String: SearchResult]) -> [ReviewItem] {
@@ -54,7 +68,10 @@ public struct ReviewInbox {
         if isDraft && !includeDrafts { return nil }
 
         guard let latestPing = latestPing(in: node) else { return nil }
-        if let activity = latestActivity(in: node), activity >= latestPing { return nil }
+        let pinned = pins[ReviewItem.pingKey(repo: repo, number: number, pingedAt: latestPing)]
+        if let activity = latestActivity(in: node, ignoring: pinned), activity >= latestPing {
+            return nil
+        }
 
         return ReviewItem(
             repo: repo,
@@ -64,7 +81,8 @@ public struct ReviewInbox {
             isDraft: isDraft,
             authorLogin: author.login,
             authorAvatarURL: author.avatarUrl.flatMap(URL.init(string:)),
-            pingedAt: latestPing
+            pingedAt: latestPing,
+            nodeID: node.id
         )
     }
 
@@ -84,11 +102,17 @@ public struct ReviewInbox {
         }.max()
     }
 
-    /// Newest review or issue comment the viewer authored.
-    func latestActivity(in node: PRNode) -> Date? {
+    /// Newest review or issue comment the viewer authored, skipping one node.
+    ///
+    /// `ignoring` is how a pin works. It is a single node id rather than a set
+    /// because there is only ever one PR Radar review per ping — a re-run
+    /// supersedes its predecessor rather than adding to it.
+    func latestActivity(in node: PRNode, ignoring excluded: String? = nil) -> Date? {
         let mine = { (conn: TimelineConn?) -> [Date] in
             conn?.nodes.compactMap { entry in
-                entry.author?.login == viewerLogin ? entry.createdAt : nil
+                guard entry.author?.login == self.viewerLogin else { return nil }
+                if let excluded, entry.id == excluded { return nil }
+                return entry.createdAt
             } ?? []
         }
         return (mine(node.myReviews) + mine(node.myComments)).max()

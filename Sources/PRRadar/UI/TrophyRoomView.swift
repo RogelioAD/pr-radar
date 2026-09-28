@@ -41,7 +41,8 @@ struct TrophyRoomView: View {
         HStack(spacing: Layout.trophyGridSpacing) {
             ForEach(row) { trophy in
                 TrophyCell(trophy: trophy,
-                           unlocked: state.trophyState.isUnlocked(trophy.id))
+                           unlocked: state.trophyState.isUnlocked(trophy.id),
+                           isNew: state.isNew(trophy.id))
             }
             if row.count < Layout.trophyColumns {
                 Spacer(minLength: 0)
@@ -55,13 +56,31 @@ struct TrophyRoomView: View {
 struct TrophyCell: View {
     let trophy: Trophy
     let unlocked: Bool
+    /// Earned since the shelf was last looked at.
+    var isNew = false
 
     var body: some View {
         SpriteCanvas(layout: .trophy(trophy.art(unlocked: unlocked)),
                      scale: Layout.trophyScale,
                      locked: !unlocked)
+            // Bottom-right, where the same dot on the room's own button is
+            // top-right. Thirty drawings is a lot to scan for the one that
+            // changed, and the button that brought you here has already stopped
+            // saying which — it goes quiet the moment the room opens.
+            .overlay(alignment: .bottomTrailing) {
+                if isNew {
+                    Circle()
+                        .fill(Health.good.tint)
+                        .frame(width: 6, height: 6)
+                        // A ring in the room's own material, so the dot reads
+                        // as sitting on the trophy rather than painted into it.
+                        .overlay(Circle().strokeBorder(.background, lineWidth: 1.5))
+                        .offset(x: 2, y: 2)
+                }
+            }
             .help(trophy.tooltip(unlocked: unlocked))
             .accessibilityLabel(trophy.name(unlocked: unlocked))
             .accessibilityValue(unlocked ? "Unlocked" : "Locked")
+            .accessibilityAddTraits(isNew ? [.isSelected] : [])
     }
 }

@@ -272,3 +272,52 @@ final class RowHeightKeysTests: XCTestCase {
                        "a refresh that changes nothing must discard nothing")
     }
 }
+
+// MARK: - An empty list is not a short list
+
+/// Where a row would be, an empty list puts a mascot, a title and a line of
+/// explanation — which comes to more than any one row does. Sizing the panel to
+/// one row instead left the character and its caption hanging over both edges,
+/// and the view could not fix that alone: the panel had already been told how
+/// tall to be.
+extension DrawerSizingTests {
+
+    private func sizing(empty: CGFloat?) -> DrawerSizing {
+        DrawerSizing(rowSpacing: 2, listPadding: 12, chromeHeight: 142,
+                     maxHeight: 900, estimatedRowHeight: 66, emptyHeight: empty)
+    }
+
+    func testAnEmptyListIsGivenItsOwnHeight() {
+        let s = sizing(empty: 112)
+        XCTAssertEqual(s.rowBoundaries(rowHeights: [], itemCount: 0), [112])
+    }
+
+    /// The bug, stated as a test: one row is 78pt and the empty state needs
+    /// 111, so anything that treats them as the same number overflows by 33.
+    func testAnEmptyListIsNotSizedAsOneRow() {
+        let s = sizing(empty: 112)
+        XCTAssertNotEqual(s.rowBoundaries(rowHeights: [], itemCount: 0),
+                          s.rowBoundaries(rowHeights: [], itemCount: 1))
+    }
+
+    /// A list with rows in it is unaffected — the empty height is only ever the
+    /// answer to having none.
+    func testAListWithRowsIgnoresTheEmptyHeight() {
+        let s = sizing(empty: 500)
+        let expected: [CGFloat] = [52, 104]   // 40+12, then 40+50+2+12
+        XCTAssertEqual(s.rowBoundaries(rowHeights: [40, 50], itemCount: 2), expected)
+    }
+
+    /// Defaulted, so every caller written before the empty height existed keeps
+    /// exactly the behaviour it was written against.
+    func testOmittingTheEmptyHeightKeepsTheOldBehaviour() {
+        let s = sizing(empty: nil)
+        XCTAssertEqual(s.emptyHeight, 66 + 12)
+        XCTAssertEqual(s.rowBoundaries(rowHeights: [], itemCount: 0), [78])
+    }
+
+    /// A negative count is a nonsense the drawer must not crash on.
+    func testANegativeCountIsTreatedAsEmpty() {
+        XCTAssertEqual(sizing(empty: 112).rowBoundaries(rowHeights: [], itemCount: -3), [112])
+    }
+}

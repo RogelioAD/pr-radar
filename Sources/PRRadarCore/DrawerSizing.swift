@@ -21,17 +21,30 @@ public struct DrawerSizing: Sendable {
     public let chromeHeight: CGFloat
     public let maxHeight: CGFloat
     public let estimatedRowHeight: CGFloat
+    /// What a list with nothing in it occupies.
+    ///
+    /// Its own number because an empty list is not a short list: where a row
+    /// would be there is a mascot, a title and a line of explanation, and that
+    /// comes to more than any one row does. Sizing the panel to one row instead
+    /// left the character and its caption hanging over both edges — and the
+    /// worse half of that bug is that the view could not fix it alone, because
+    /// the panel had already been told how tall to be.
+    public let emptyHeight: CGFloat
 
     public init(rowSpacing: CGFloat,
                 listPadding: CGFloat,
                 chromeHeight: CGFloat,
                 maxHeight: CGFloat,
-                estimatedRowHeight: CGFloat) {
+                estimatedRowHeight: CGFloat,
+                emptyHeight: CGFloat? = nil) {
         self.rowSpacing = rowSpacing
         self.listPadding = listPadding
         self.chromeHeight = chromeHeight
         self.maxHeight = maxHeight
         self.estimatedRowHeight = estimatedRowHeight
+        // Defaulted so every existing construction site — the tests included —
+        // keeps the behaviour it was written against.
+        self.emptyHeight = emptyHeight ?? (estimatedRowHeight + listPadding)
     }
 
     /// Height needed to show the first `rows` rows in full. Rows that have not
@@ -50,8 +63,11 @@ public struct DrawerSizing: Sendable {
     /// row up to all of them. These are the only heights the drawer may take,
     /// which is what stops a row being clipped in half.
     public func rowBoundaries(rowHeights: [CGFloat], itemCount: Int) -> [CGFloat] {
-        let count = max(itemCount, 1)
-        return (1...count).map { contentHeight(rowHeights: rowHeights, rows: $0) }
+        // Nothing to show is its own stop, not the first row's. Treating it as
+        // one row is what made the empty state overflow: the drawer was sized
+        // for a row and handed a mascot.
+        guard itemCount > 0 else { return [emptyHeight] }
+        return (1...itemCount).map { contentHeight(rowHeights: rowHeights, rows: $0) }
     }
 
     /// Largest boundary that fits inside `limit`, or the smallest boundary when

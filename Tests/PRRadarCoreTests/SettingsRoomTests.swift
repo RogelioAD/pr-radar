@@ -157,3 +157,95 @@ final class SettingsRoomTests: XCTestCase {
                        "my-org/dot.net_thing")
     }
 }
+
+// MARK: - The automatic-review room
+
+/// Automatic review is a room rather than a section of settings, and the
+/// invariants that makes it answerable for are the same ones every other room
+/// has to satisfy.
+extension SettingsRoomTests {
+
+    func testReviewIsARoomWithASurfaceOfItsOwn() {
+        XCTAssertEqual(DrawerRoom.review.surface, .review)
+        XCTAssertTrue(DrawerSurface.allCases.contains(.review))
+    }
+
+    /// The raw value is persisted — in the stored room, in the drawer-height
+    /// key and in every row-height key — so changing it silently discards
+    /// whatever the user had dragged to.
+    func testTheReviewRoomsStoredNameIsStable() {
+        XCTAssertEqual(DrawerRoom.review.rawValue, "review")
+        XCTAssertEqual(DrawerSurface.review.rawValue, "review")
+    }
+
+    /// A form has a bottom. Every height other than its own either hides a
+    /// control or leaves a band of empty material under the last one.
+    func testTheReviewRoomFitsItsContentTheWaySettingsDoes() {
+        XCTAssertTrue(DrawerSurface.review.fitsContent)
+    }
+
+    /// The review room's surface must not collide with the *reviews tab's*.
+    /// They are one letter apart and mean entirely different things — one is a
+    /// list of pull requests, the other is a form — and sharing a namespace
+    /// would have a drag in one resize the other.
+    func testTheReviewRoomIsNotTheReviewsTab() {
+        XCTAssertNotEqual(DrawerSurface.review, DrawerSurface.reviews)
+        XCTAssertNotEqual(DrawerSurface.review.rawValue, DrawerSurface.reviews.rawValue)
+        XCTAssertFalse(DrawerSurface.reviews.fitsContent)
+    }
+
+    func testReviewSectionIDsAreUnique() {
+        let ids = ReviewSection.allCases.map(\.id)
+        XCTAssertEqual(Set(ids).count, ids.count)
+    }
+
+    /// The drawer snaps to whole groups, so a section the view draws without an
+    /// entry here would let the height settle mid-group.
+    func testEveryReviewSectionIsNamedAndIllustrated() {
+        for section in ReviewSection.allCases {
+            XCTAssertFalse(section.title.isEmpty, section.rawValue)
+            XCTAssertFalse(section.symbol.isEmpty, section.rawValue)
+        }
+    }
+
+    /// Settings gave these controls up when the room took them. Leaving a
+    /// second copy behind would be two places to change one setting.
+    func testSettingsNoLongerCarriesAReviewSection() {
+        XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("review"))
+    }
+}
+
+// MARK: - The two review modes
+
+extension SettingsRoomTests {
+
+    func testEveryModeIsNamedAndExplainedAndIllustrated() {
+        for mode in AutoReviewMode.allCases {
+            XCTAssertFalse(mode.title.isEmpty, mode.rawValue)
+            XCTAssertFalse(mode.detail.isEmpty, mode.rawValue)
+            XCTAssertFalse(mode.symbol.isEmpty, mode.rawValue)
+        }
+    }
+
+    /// Exactly one mode posts on its own. If both did, or neither, the picker
+    /// would be describing a distinction the code does not make.
+    func testOnlyAutomaticPostsWithoutAsking() {
+        XCTAssertTrue(AutoReviewMode.automatic.postsWithoutAsking)
+        XCTAssertFalse(AutoReviewMode.curated.postsWithoutAsking)
+        XCTAssertEqual(AutoReviewMode.allCases.filter(\.postsWithoutAsking).count, 1)
+    }
+
+    /// The raw values are persisted, so changing one silently resets somebody's
+    /// choice — to the more consequential of the two, at that.
+    func testStoredModeNamesAreStable() {
+        XCTAssertEqual(AutoReviewMode.automatic.rawValue, "automatic")
+        XCTAssertEqual(AutoReviewMode.curated.rawValue, "curated")
+    }
+
+    /// A build that cannot understand the stored mode must not resolve that
+    /// doubt by posting to somebody's pull request.
+    func testAnUnknownModeIsNotAMode() {
+        XCTAssertNil(AutoReviewMode(rawValue: "yolo"))
+        XCTAssertNil(AutoReviewMode(rawValue: ""))
+    }
+}

@@ -12,12 +12,14 @@ import Foundation
 /// its filter bar, and a list.
 public enum DrawerRoom: String, CaseIterable, Sendable {
     case trophies
+    case review
     case settings
 
     /// The geometry this room measures and remembers its height under.
     public var surface: DrawerSurface {
         switch self {
         case .trophies: return .trophies
+        case .review: return .review
         case .settings: return .settings
         }
     }

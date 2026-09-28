@@ -317,6 +317,9 @@ final class PanelController {
     /// The badge is the drawer's own bottom-right corner, so the two frames
     /// interpolate directly with nothing faked in between.
     private func collapse() {
+        // Shutting the drawer on the shelf ends the visit as surely as walking
+        // out of it does, so the dots do not survive to a second opening.
+        if state.room == .trophies { state.endTrophyVisit() }
         removeOutsideClickMonitor()
         // The character may have been switched in the header while the drawer
         // was open, so the badge it is folding back into is not necessarily the
@@ -393,9 +396,29 @@ final class PanelController {
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(frame, display: true)
         }, completionHandler: { [weak self] in
+            guard let self else { return }
             // The drawer has finished travelling; whatever is under the pointer
             // now is the answer, whether or not the pointer moved to get there.
-            self?.hostingView.refreshHoverZone()
+            self.hostingView.refreshHoverZone()
+
+            // And it may have been travelling to the wrong place.
+            //
+            // A row that is taller than the estimate — one carrying an
+            // automatic review's status strip, say — has no measurement at all
+            // for the frame *before* it is drawn: `activeRowHeights` drops the
+            // rows it has not heard from, so the target falls back to the
+            // estimate. Switching to a tab therefore aims the animation at a
+            // height that is about to be wrong, the real measurement lands
+            // mid-flight, and the direct `setFrame` it triggers is overwritten
+            // when the animation reaches the height it was originally aimed at.
+            // The row ends up cut off by the footer.
+            //
+            // Re-reading the target here is the fix: whatever the rows have
+            // since said they need, this is the last word.
+            let settled = self.targetFrame()
+            if abs(settled.height - self.panel.frame.height) >= 1 {
+                self.panel.setFrame(settled, display: true)
+            }
         })
     }
 
@@ -447,8 +470,8 @@ final class PanelController {
         let probes: [(String, CGFloat)] = [
             ("grab edge (visual top)", 2),
             ("header", Layout.headerHeight / 2),
-            ("filter bar", Layout.headerHeight + Layout.filterBarHeight / 2),
-            ("first row", Layout.headerHeight + Layout.filterBarHeight + 30),
+            ("tab strip", Layout.headerHeight + Layout.tabStripHeight / 2),
+            ("first row", Layout.headerHeight + Layout.tabStripHeight + 30),
             ("footer / Refresh", height - Layout.footerHeight / 2),
         ]
         Log.debug("zone map (flipped=\(hostingView.isFlipped) height=\(height) "

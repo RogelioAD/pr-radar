@@ -28,6 +28,17 @@ public enum Prefs {
         /// Superseded by `drawerRoom`. Still read once, to carry an upgrader
         /// who left the drawer sitting in the trophy room.
         static let legacyShowingTrophies = "drawer.showingTrophies"
+        static let reviewAuto = "review.auto"
+        static let reviewSkill = "review.skill"
+        static let reviewMode = "review.mode"
+        /// Superseded by `reviewMode`. Still read once, to carry anyone who had
+        /// already turned automatic posting off.
+        static let reviewAutoPost = "review.autoPost"
+        static let reviewRepos = "review.repos"
+        static let reviewWorkspace = "review.workspace"
+        static let reviewModel = "review.model"
+        static let reviewBudget = "review.budget"
+        static let reviewLog = "review.log"
     }
 
     public static var badgeOrigin: CGPoint? {
@@ -256,6 +267,103 @@ public enum Prefs {
         } else {
             defaults.removeObject(forKey: key)
         }
+    }
+
+    // MARK: - Automatic review
+
+    /// Whether PR Radar reviews the PRs waiting on you by itself.
+    ///
+    /// Off until asked, and inert without `reviewSkill` — the header toggle
+    /// sends you to Settings rather than turning on a feature that has nothing
+    /// to run.
+    public static var autoReview: Bool {
+        get { defaults.bool(forKey: Key.reviewAuto) }
+        set { defaults.set(newValue, forKey: Key.reviewAuto) }
+    }
+
+    /// The review skill to run, as the user types it — `/code-review`.
+    ///
+    /// Deliberately not hardcoded and deliberately not a picker: which review
+    /// skill a developer has is theirs, and a list here would go stale the
+    /// first time they installed another one.
+    public static var reviewSkill: String? {
+        get { defaults.string(forKey: Key.reviewSkill) }
+        set {
+            if let newValue { defaults.set(newValue, forKey: Key.reviewSkill) }
+            else { defaults.removeObject(forKey: Key.reviewSkill) }
+        }
+    }
+
+    /// How much of a finished review goes out without being looked at.
+    ///
+    /// Superseded the old `review.autoPost` boolean, which is still read once
+    /// so that anyone who had turned posting off does not silently get it back
+    /// on: off meant "let me see it first", which is exactly `.curated`.
+    ///
+    /// An unrecognised value reads as `.curated` rather than `.automatic`. A
+    /// build that cannot understand the stored mode must not resolve that
+    /// doubt by posting to somebody's pull request.
+    public static var reviewMode: AutoReviewMode {
+        get {
+            if let raw = defaults.string(forKey: Key.reviewMode) {
+                return AutoReviewMode(rawValue: raw) ?? .curated
+            }
+            guard defaults.object(forKey: Key.reviewAutoPost) != nil else { return .automatic }
+            return defaults.bool(forKey: Key.reviewAutoPost) ? .automatic : .curated
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.reviewMode) }
+    }
+
+    /// The repositories automatic review is allowed to touch, as `owner/name`.
+    ///
+    /// An allowlist rather than a blocklist, because the failure modes are not
+    /// symmetric: forgetting to add a repo costs a review that did not happen,
+    /// and forgetting to block one costs a comment on a stranger's PR.
+    public static var reviewRepos: [String] {
+        get { defaults.stringArray(forKey: Key.reviewRepos) ?? [] }
+        set { defaults.set(newValue, forKey: Key.reviewRepos) }
+    }
+
+    /// Where the user's clones live, so a review has code to read.
+    public static var reviewWorkspace: String? {
+        get { defaults.string(forKey: Key.reviewWorkspace) }
+        set {
+            if let newValue { defaults.set(newValue, forKey: Key.reviewWorkspace) }
+            else { defaults.removeObject(forKey: Key.reviewWorkspace) }
+        }
+    }
+
+    /// An explicit model for the review session, or nil to let the CLI choose.
+    public static var reviewModel: String? {
+        get { defaults.string(forKey: Key.reviewModel) }
+        set {
+            if let newValue { defaults.set(newValue, forKey: Key.reviewModel) }
+            else { defaults.removeObject(forKey: Key.reviewModel) }
+        }
+    }
+
+    /// The ceiling on one review, in dollars. Zero means no ceiling, which is
+    /// a choice rather than a default.
+    ///
+    /// Ten, because the first real measurement of this was $3.89 for one review
+    /// of one pull request — and the fifty cents it defaulted to before that
+    /// was not a cautious ceiling, it was a guarantee of failure. Every review
+    /// died partway through, exited non-zero, and reported nothing useful. A
+    /// cap is worth having; a cap below the cost of the thing it caps is just a
+    /// slow way of turning the feature off.
+    public static var reviewBudget: Double {
+        get {
+            guard defaults.object(forKey: Key.reviewBudget) != nil else { return 10 }
+            return defaults.double(forKey: Key.reviewBudget)
+        }
+        set { defaults.set(newValue, forKey: Key.reviewBudget) }
+    }
+
+    /// Every automatic review the app remembers, as one JSON blob — the same
+    /// shape, and for the same reason, as `trophyState`.
+    public static var autoReviewLog: AutoReviewLog {
+        get { AutoReviewLog.decoded(from: defaults.data(forKey: Key.reviewLog)) }
+        set { defaults.set(newValue.encoded(), forKey: Key.reviewLog) }
     }
 
     public static var seenPings: Set<String> {

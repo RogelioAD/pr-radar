@@ -1,5 +1,6 @@
 import AppKit
 import OSLog
+import PRRadarCore
 
 /// Debug tracing. Always recorded through unified logging, and additionally
 /// echoed to stderr when PRRADAR_DEBUG=1.
@@ -67,6 +68,30 @@ enum Log {
         ProcessInfo.processInfo.environment["PRRADAR_FAKE_ACCOUNTS"]
             .flatMap(Int.init)
             .map { min(max($0, 1), 6) }
+    }
+
+    /// PRRADAR_FAKE_REVIEW=running|ready|posted|failed|skipped stands an
+    /// automatic-review record up on every review row.
+    ///
+    /// Same reason as the fakes around it, only more so: the one state this
+    /// feature exists to produce — a row that has been reviewed and is waiting
+    /// on a decision — is otherwise reachable only by spending real money on
+    /// somebody's real pull request and then living with the comment.
+    static var fakeReview: AutoReviewRecord? {
+        guard let raw = ProcessInfo.processInfo.environment["PRRADAR_FAKE_REVIEW"],
+              let status = AutoReviewStatus(rawValue: raw)
+        else { return nil }
+        var record = AutoReviewRecord(status: status)
+        record.counts = ["priority": 2, "mild": 5, "nit": 4]
+        record.reviewNodeID = "PRR_fake"
+        record.reviewURLString = "https://github.com"
+        record.finishedAt = Date()
+        switch status {
+        case .failed: record.failure = "unknown skill: /nope"
+        case .skipped: record.failure = AutoReviewSkip.repoNotAllowed.reason
+        default: break
+        }
+        return record
     }
 
     /// PRRADAR_FAKE_READY=1 forces every one of my PRs to look mergeable, so

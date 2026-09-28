@@ -52,7 +52,10 @@ struct AccountFilterMenu: View {
             // or on the menu itself is dropped. Tried all three.
             FilterPill(symbol: symbol,
                        text: pillText,
-                       active: state.accountFilter != nil)
+                       active: state.accountFilter != nil,
+                       // Only ever shown when there are two or more accounts,
+                       // which is exactly the case where the bar is fullest.
+                       maxTextWidth: 52)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

@@ -51,6 +51,10 @@ struct DrawerView: View {
                 TrophyRoomView(state: state, onRowHeights: onRowHeights)
                 Divider().opacity(0.6)
                 trophyFooter
+            case .review:
+                ReviewRoomView(state: state, onRowHeights: onRowHeights)
+                Divider().opacity(0.6)
+                reviewFooter
             case .settings:
                 SettingsView(state: state,
                              onRowHeights: onRowHeights,
@@ -176,25 +180,7 @@ struct DrawerView: View {
             identity
             Text("PR Radar")
                 .font(.system(size: 12.5, weight: .semibold))
-            roomButton(.trophies, symbol: "trophy", filled: "trophy.fill")
-            if state.myPRsReadyToMerge > 0 {
-                Chip(text: "\(state.myPRsReadyToMerge) ready to merge",
-                     symbol: "checkmark.seal", health: .good)
-            }
             Spacer()
-            if let version = state.updateStatus.newerVersion {
-                Button {
-                    if let url = state.updateStatus.url {
-                        NSWorkspace.shared.open(url)
-                    }
-                } label: {
-                    Chip(text: "update \(version)", symbol: "arrow.down.circle",
-                         health: .running, filled: true)
-                }
-                .buttonStyle(.plain)
-                .help("A newer PR Radar release is available")
-                .headerControl()
-            }
             Button(action: onCollapse) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
@@ -237,9 +223,9 @@ struct DrawerView: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(open ? Color.accentColor : .secondary)
                 .overlay(alignment: .topTrailing) {
-                    if unseenDot(for: room) {
+                    if let tint = dot(for: room) {
                         Circle()
-                            .fill(Health.good.tint)
+                            .fill(tint)
                             .frame(width: 5, height: 5)
                             .offset(x: 3, y: -2)
                     }
@@ -276,28 +262,86 @@ struct DrawerView: View {
         }
     }
 
-    /// The dot is the entire announcement for a silent backfill. Nothing
-    /// banners on first run, so without it a shelf could fill up with nobody
-    /// ever learning there was a shelf. Settings has no such backlog to
-    /// announce, and a permanent dot on a gear would only teach the dot to be
-    /// ignored on the trophy beside it.
-    private func unseenDot(for room: DrawerRoom) -> Bool {
-        room == .trophies && state.trophyState.hasUnseen && state.room != .trophies
+    /// The dot over a room's button, or nil for no dot.
+    ///
+    /// On the trophy it is the entire announcement for a silent backfill:
+    /// nothing banners on first run, so without it a shelf could fill up with
+    /// nobody ever learning there was a shelf.
+    ///
+    /// On the wand it says the opposite kind of thing — not "there is something
+    /// new in here" but "this is switched on", which a room button cannot
+    /// otherwise show: its accent colour is already spoken for, meaning the
+    /// room is open. Green for armed, blue while a review is actually running.
+    /// Two signals on one glyph would be too many; this is the second half of
+    /// one signal, which is how much the header can carry.
+    ///
+    /// Settings has neither a backlog to announce nor a state to be in, and a
+    /// permanent dot on a gear would only teach the dot to be ignored on the
+    /// two beside it.
+    private func dot(for room: DrawerRoom) -> Color? {
+        switch room {
+        case .trophies:
+            guard state.trophyState.hasUnseen, state.room != .trophies else { return nil }
+            return Health.good.tint
+        case .review:
+            if state.reviewInFlight != nil { return Health.running.tint }
+            return state.autoReviewEnabled ? Health.good.tint : nil
+        case .settings:
+            // A new release, which Settings already has a row to act on. The
+            // dot is the announcement; the chip that used to make it sat in the
+            // header, which is the most contested 440pt in the app and also the
+            // window's drag handle — a lot of room for something that is true
+            // a few days a year.
+            return state.updateStatus.newerVersion != nil ? Health.running.tint : nil
+        }
     }
 
     private func name(of room: DrawerRoom) -> String {
         switch room {
         case .trophies: return "Trophy room"
+        case .review: return "Automatic review"
         case .settings: return "Settings"
         }
     }
 
     private func help(for room: DrawerRoom) -> String {
         if state.room == room { return "Back to your pull requests" }
-        guard room == .trophies else { return name(of: room) }
-        let unseen = state.trophyState.unseenCount
-        guard unseen > 0 else { return "Trophy room" }
-        return unseen == 1 ? "Trophy room — 1 new" : "Trophy room — \(unseen) new"
+        switch room {
+        case .trophies:
+            let unseen = state.trophyState.unseenCount
+            guard unseen > 0 else { return "Trophy room" }
+            return unseen == 1 ? "Trophy room — 1 new" : "Trophy room — \(unseen) new"
+        case .review:
+            // Names the PR being reviewed, which is the one fact the room is
+            // opened to check and the only place it is said without opening it.
+            if let key = state.reviewInFlight,
+               let running = state.items.first(where: { $0.pingKey == key }) {
+                return "Reviewing \(running.repoShortName)#\(running.number)"
+            }
+            return state.autoReviewEnabled
+                ? "Automatic review — on"
+                : "Automatic review — off"
+        case .settings:
+            guard let version = state.updateStatus.newerVersion else { return name(of: room) }
+            return "Settings — PR Radar \(version) is available"
+        }
+    }
+
+    /// What the review room has instead of a footer.
+    ///
+    /// The one-line version of the group above: whether it is on, and what it
+    /// is doing. The refresh button below a list is about the list, and this is
+    /// not a list.
+    private var reviewFooter: some View {
+        HStack(spacing: 6) {
+            roomButtons
+            Text(state.reviewSummary)
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .frame(height: Layout.footerHeight)
     }
 
     /// What the room has instead of a footer.
@@ -307,7 +351,7 @@ struct DrawerView: View {
     /// drawings whatever GitHub says.
     private var trophyFooter: some View {
         HStack(spacing: 6) {
-            settingsButton
+            roomButtons
             Text(state.trophyProgress)
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
@@ -328,6 +372,30 @@ struct DrawerView: View {
         roomButton(.settings, symbol: "gearshape", filled: "gearshape.fill", in: .footer)
     }
 
+    /// Every room, in one place.
+    ///
+    /// The shelf and the wand used to live in the header and the gear down
+    /// here, which meant "where do I find a room?" had two answers. Each was
+    /// defensible on its own — the gear is bottom-left because that is where
+    /// this platform has trained people to look — but the reasoning does not
+    /// survive a third room being added somewhere else.
+    ///
+    /// The footer wins the tie for two reasons. It is where the gear already
+    /// was, so the habit that exists is the one kept; and the header is the
+    /// window's drag handle, where every control is competing with the gesture
+    /// that moves the panel.
+    ///
+    /// Gear first: it is the oldest of the three and the one hands already go
+    /// to. The other two then read as having joined it.
+    private var roomButtons: some View {
+        HStack(spacing: 2) {
+            settingsButton
+            roomButton(.trophies, symbol: "trophy", filled: "trophy.fill", in: .footer)
+            roomButton(.review, symbol: "wand.and.stars",
+                       filled: "wand.and.sparkles", in: .footer)
+        }
+    }
+
     /// What the settings room has instead of a footer.
     ///
     /// The running version, and nothing else. It is the one fact a settings
@@ -335,7 +403,7 @@ struct DrawerView: View {
     /// there is no Dock icon, no menu bar item and so no About window.
     private var settingsFooter: some View {
         HStack(spacing: 6) {
-            settingsButton
+            roomButtons
             Text("PR Radar \(state.appVersion)")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
@@ -400,7 +468,11 @@ struct DrawerView: View {
                 VStack(spacing: Layout.rowSpacing) {
                     ForEach(items) { item in
                         RowView(item: item, now: state.clock,
-                                accountLabel: state.accountLabel(for: item.account)) {
+                                accountLabel: state.accountLabel(for: item.account),
+                                review: state.review(for: item),
+                                onAction: { state.act($0, on: item) },
+                                onSetFinding: { state.setFinding($0, on: item, selected: $1) },
+                                onSetTier: { state.setTier($0, on: item, selected: $1) }) {
                             onOpen(item)
                         }
                     }
@@ -451,7 +523,7 @@ struct DrawerView: View {
 
     private var footer: some View {
         HStack(spacing: 6) {
-            settingsButton
+            roomButtons
             Button(action: onRefresh) {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.clockwise")
@@ -498,8 +570,12 @@ struct DrawerView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 20)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
-        .frame(height: Layout.singleRowHeight())
+        // The same number the panel sizes itself by. A floor alone was not
+        // enough: the view grew, and the drawer it was growing inside had
+        // already been told it only needed one row.
+        .frame(height: Layout.emptyStateHeight)
     }
 }
 
@@ -528,8 +604,8 @@ struct ReviewFilterBar: View {
                     }
                 }
             } label: {
-                FilterPill(symbol: state.sortOrder.symbol,
-                           text: state.sortOrder.label, active: false)
+                FilterPill(symbol: state.sortOrder.symbol, active: false)
+                    .help("Sorted by \((state.sortOrder.label).lowercased())")
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -585,7 +661,7 @@ struct ReviewFilterBar: View {
                 .help("Clear filters")
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 8)
         .frame(height: Layout.filterBarHeight)
     }
 }

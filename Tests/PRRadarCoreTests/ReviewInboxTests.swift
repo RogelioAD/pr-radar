@@ -14,29 +14,42 @@ final class ReviewInboxTests: XCTestCase {
     }
 
     /// Builds a single-PR search payload.
+    ///
+    /// Reviews and comments carry a node id because that is what a pin names.
+    /// It defaults to one derived from the position so the existing tests, which
+    /// do not care, did not have to learn about it.
     func payload(number: Int = 1,
                  author: String = "someone",
                  draft: Bool = false,
+                 nodeID: String = "PR_node1",
                  requests: [(String, String, String)] = [],   // (typename, identity, date)
                  reviews: [(String, String)] = [],            // (login, date)
-                 comments: [(String, String)] = []) -> String {
+                 comments: [(String, String)] = [],
+                 reviewIDs: [String] = [],
+                 commentIDs: [String] = []) -> String {
         func reviewerJSON(_ typename: String, _ identity: String) -> String {
             typename == "User"
                 ? #"{"__typename":"User","login":"\#(identity)"}"#
                 : #"{"__typename":"Team","slug":"\#(identity)"}"#
         }
+        func id(_ given: [String], _ index: Int, _ prefix: String) -> String {
+            index < given.count ? given[index] : "\(prefix)\(index)"
+        }
         let reqNodes = requests.map { t, i, d in
             #"{"createdAt":"\#(d)","requestedReviewer":\#(reviewerJSON(t, i))}"#
         }.joined(separator: ",")
-        let revNodes = reviews.map { l, d in
-            #"{"createdAt":"\#(d)","state":"COMMENTED","author":{"login":"\#(l)"}}"#
+        let revNodes = reviews.enumerated().map { index, entry in
+            let (l, d) = entry
+            return #"{"id":"\#(id(reviewIDs, index, "REV_"))","createdAt":"\#(d)","state":"COMMENTED","author":{"login":"\#(l)"}}"#
         }.joined(separator: ",")
-        let comNodes = comments.map { l, d in
-            #"{"createdAt":"\#(d)","author":{"login":"\#(l)"}}"#
+        let comNodes = comments.enumerated().map { index, entry in
+            let (l, d) = entry
+            return #"{"id":"\#(id(commentIDs, index, "IC_"))","createdAt":"\#(d)","author":{"login":"\#(l)"}}"#
         }.joined(separator: ",")
 
         return """
         {"direct":{"nodes":[{
+          "id":"\(nodeID)",
           "number":\(number),
           "title":"a pull request",
           "url":"https://github.com/acme/repo/pull/\(number)",
@@ -50,8 +63,17 @@ final class ReviewInboxTests: XCTestCase {
         """
     }
 
-    func inbox(includeDrafts: Bool = true) -> ReviewInbox {
-        ReviewInbox(viewerLogin: me, teams: myTeams, includeDrafts: includeDrafts)
+    func inbox(includeDrafts: Bool = true,
+               pins: [String: String] = [:]) -> ReviewInbox {
+        ReviewInbox(viewerLogin: me, teams: myTeams,
+                    includeDrafts: includeDrafts, pins: pins)
+    }
+
+    /// The key a pin is filed under, for the single-PR payload above.
+    func key(number: Int = 1, pingedAt: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        return ReviewItem.pingKey(repo: "acme/repo", number: number,
+                                  pingedAt: formatter.date(from: pingedAt)!)
     }
 
     // MARK: - The core rule
@@ -188,3 +210,125 @@ final class ReviewInboxTests: XCTestCase {
 }
 
 extension Staleness: Equatable {}
+
+// MARK: - Pins
+
+/// A pin names one review — the one PR Radar posted on my behalf — and says it
+/// does not count as me having dealt with the PR. Everything else about the rule
+/// is unchanged, which is what these tests are really checking.
+extension ReviewInboxTests {
+
+    private var ping: String { "2026-09-15T11:00:00Z" }
+
+    /// The whole feature. Without this the automated comment dismisses the very
+    /// PR it was meant to draw attention to.
+    func testAPinnedReviewDoesNotCountAsMeHavingDealtWithIt() throws {
+        let data = try decode(payload(
+            requests: [("User", me, ping)],
+            reviews: [(me, "2026-09-15T12:00:00Z")],
+            reviewIDs: ["REV_pr_radar"]))
+        let pins = [key(pingedAt: ping): "REV_pr_radar"]
+        XCTAssertEqual(inbox(pins: pins).build(from: data).count, 1)
+    }
+
+    /// The existing rule must not be weakened in the process: an ordinary review
+    /// of mine, with no pin naming it, still hides the row.
+    func testAnUnpinnedReviewStillHidesTheRow() throws {
+        let data = try decode(payload(
+            requests: [("User", me, ping)],
+            reviews: [(me, "2026-09-15T12:00:00Z")],
+            reviewIDs: ["REV_pr_radar"]))
+        XCTAssertTrue(inbox().build(from: data).isEmpty)
+    }
+
+    /// Having read the findings I comment myself, on github.com. That is a
+    /// different node, it is not pinned, and it means I have dealt with the PR —
+    /// so the row goes, without PR Radar being told anything.
+    func testMyOwnLaterCommentStillHidesAPinnedRow() throws {
+        let data = try decode(payload(
+            requests: [("User", me, ping)],
+            reviews: [(me, "2026-09-15T12:00:00Z")],
+            comments: [(me, "2026-09-15T13:00:00Z")],
+            reviewIDs: ["REV_pr_radar"],
+            commentIDs: ["IC_mine"]))
+        let pins = [key(pingedAt: ping): "REV_pr_radar"]
+        XCTAssertTrue(inbox(pins: pins).build(from: data).isEmpty)
+    }
+
+    /// A re-request is a new ping, so it is a new key, so the old pin does not
+    /// answer it. The PR comes back looking un-reviewed — which is correct: it
+    /// is asking again, and it should be reviewed again.
+    func testAPinForAnOlderPingDoesNotHoldANewerOne() throws {
+        let newPing = "2026-09-16T09:00:00Z"
+        let data = try decode(payload(
+            requests: [("User", me, ping), ("User", me, newPing)],
+            reviews: [(me, "2026-09-15T12:00:00Z")],
+            reviewIDs: ["REV_pr_radar"]))
+        let pins = [key(pingedAt: ping): "REV_pr_radar"]
+        let items = inbox(pins: pins).build(from: data)
+        XCTAssertEqual(items.count, 1)
+        // Anchored to the newest ping, so the row's age is honest.
+        XCTAssertEqual(items.first?.pingKey, key(pingedAt: newPing))
+    }
+
+    /// A pin only ever relaxes a filter over nodes the payload already carried.
+    /// A merged or approved PR stops coming back from the search, and there is
+    /// nothing for the pin to act on — it cannot conjure a row.
+    func testAPinCannotResurrectAPRTheSearchNoLongerReturns() throws {
+        let data = try decode(#"{"direct":{"nodes":[]}}"#)
+        let pins = [key(pingedAt: ping): "REV_pr_radar"]
+        XCTAssertTrue(inbox(pins: pins).build(from: data).isEmpty)
+    }
+
+    /// Drafts are excluded before any of this is consulted. A pin is about
+    /// whether I have responded, not about whether the PR is asking yet.
+    func testAPinDoesNotOverrideTheDraftFilter() throws {
+        let data = try decode(payload(
+            draft: true,
+            requests: [("User", me, ping)],
+            reviews: [(me, "2026-09-15T12:00:00Z")],
+            reviewIDs: ["REV_pr_radar"]))
+        let pins = [key(pingedAt: ping): "REV_pr_radar"]
+        XCTAssertTrue(inbox(includeDrafts: false, pins: pins).build(from: data).isEmpty)
+    }
+
+    /// A pin naming a node that is not in the payload is inert, not a crash and
+    /// not a row that hangs around forever.
+    func testAPinNamingAnAbsentNodeChangesNothing() throws {
+        let data = try decode(payload(
+            requests: [("User", me, ping)],
+            reviews: [(me, "2026-09-15T12:00:00Z")],
+            reviewIDs: ["REV_pr_radar"]))
+        let pins = [key(pingedAt: ping): "REV_something_else"]
+        XCTAssertTrue(inbox(pins: pins).build(from: data).isEmpty)
+    }
+
+    /// Mutations need the PR's node id, so the inbox has to carry it through.
+    func testTheNodeIDIsCarriedOntoTheItem() throws {
+        let data = try decode(payload(nodeID: "PR_abc",
+                                      requests: [("User", me, ping)]))
+        XCTAssertEqual(inbox().build(from: data).first?.nodeID, "PR_abc")
+    }
+
+    /// An older payload without one still builds a row — it just cannot be
+    /// acted on, which the UI says rather than hiding the PR.
+    func testAMissingNodeIDIsNotAFailureToBuild() throws {
+        let json = try decode(payload(requests: [("User", me, ping)])
+            .replacingOccurrences(of: #""id":"PR_node1","#, with: ""))
+        let items = inbox().build(from: json)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertNil(items.first?.nodeID)
+    }
+
+    /// The key is written in one place and read in another, so the static and
+    /// the property must not be allowed to drift apart.
+    func testTheStaticKeyAndThePropertyAgree() {
+        let when = Date(timeIntervalSince1970: 1_789_000_000)
+        let item = ReviewItem(repo: "acme/repo", number: 7,
+                              title: "t", url: URL(string: "https://x")!,
+                              isDraft: false, authorLogin: "a",
+                              authorAvatarURL: nil, pingedAt: when)
+        XCTAssertEqual(item.pingKey,
+                       ReviewItem.pingKey(repo: "acme/repo", number: 7, pingedAt: when))
+    }
+}

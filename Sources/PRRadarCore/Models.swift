@@ -18,6 +18,13 @@ public struct ReviewItem: Identifiable, Equatable, Sendable {
     /// construction site and test compiling unchanged.
     public var account: String = ""
 
+    /// The pull request's GraphQL node id, which every mutation needs as its
+    /// subject. Optional, and defaulted, for the same reason `account` is: a
+    /// required parameter here would break every existing construction site and
+    /// test. nil means "this row cannot be acted on", which the UI says out loud
+    /// rather than hiding the buttons.
+    public var nodeID: String?
+
     public var id: String { "\(repo)#\(number)" }
     /// Short repo name without the owner prefix.
     public var repoShortName: String {
@@ -25,11 +32,32 @@ public struct ReviewItem: Identifiable, Equatable, Sendable {
     }
     /// Key used to remember that we already notified about this particular ping.
     /// Includes the ping timestamp so a re-request notifies again.
-    public var pingKey: String { "\(id)@\(ISO8601DateFormatter().string(from: pingedAt))" }
+    public var pingKey: String {
+        ReviewItem.pingKey(repo: repo, number: number, pingedAt: pingedAt)
+    }
+
+    /// The same key, before there is an item to ask for it.
+    ///
+    /// `ReviewInbox` has to look a ping up in the auto-review log at the point
+    /// it is deciding whether to build the item at all, so the key cannot be a
+    /// property of the thing it decides the existence of.
+    public static func pingKey(repo: String, number: Int, pingedAt: Date) -> String {
+        "\(repo)#\(number)@\(iso8601.string(from: pingedAt))"
+    }
+
+    /// One formatter, because two of them are a way for a key written in one
+    /// place to stop matching one read in another. The options are spelled out
+    /// rather than left default so a future SDK cannot quietly change the shape
+    /// of every key already persisted.
+    private static let iso8601: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
 
     public init(repo: String, number: Int, title: String, url: URL, isDraft: Bool,
                 authorLogin: String, authorAvatarURL: URL?, pingedAt: Date,
-                account: String = "") {
+                account: String = "", nodeID: String? = nil) {
         self.repo = repo
         self.number = number
         self.title = title
@@ -39,6 +67,7 @@ public struct ReviewItem: Identifiable, Equatable, Sendable {
         self.authorAvatarURL = authorAvatarURL
         self.pingedAt = pingedAt
         self.account = account
+        self.nodeID = nodeID
     }
 }
 

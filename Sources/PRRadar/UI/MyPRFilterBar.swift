@@ -43,7 +43,7 @@ struct MyPRFilterBar: View {
                 .help("Clear filters")
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 8)
         .frame(height: Layout.filterBarHeight)
     }
 
@@ -61,8 +61,8 @@ struct MyPRFilterBar: View {
                 }
             }
         } label: {
-            FilterPill(symbol: state.myPRSortOrder.symbol,
-                       text: state.myPRSortOrder.label, active: false)
+            FilterPill(symbol: state.myPRSortOrder.symbol, active: false)
+                .help("Sorted by \((state.myPRSortOrder.label).lowercased())")
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -150,15 +150,37 @@ struct RepoFilterMenu: View {
 /// Shared pill used by both tabs' filter bars.
 struct FilterPill: View {
     let symbol: String
-    let text: String
+    /// nil for the controls whose symbol already says it. The sort order is
+    /// one: an up arrow, a down arrow and `textformat.abc` are the three
+    /// answers, and spelling them out again cost 70pt in a band that had none.
+    var text: String?
     let active: Bool
+    /// How much room the label may take. Tighter for the account pill, which
+    /// only appears alongside everything else and so is the one that decides
+    /// whether the bar fits at all.
+    var maxTextWidth: CGFloat = 68
 
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: symbol).font(.system(size: 9, weight: .semibold))
-            Text(text).font(.system(size: 10.5, weight: active ? .semibold : .regular))
-                .lineLimit(1)
-            Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold))
+            if let text {
+                Text(text).font(.system(size: 10.5, weight: active ? .semibold : .regular))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    // Capped because the bar genuinely runs out of room: with a
+                    // repository like `elevation-church-mobile-rust` selected,
+                    // the pills came to 464pt of an available 440 — an overflow
+                    // that predates the cap and only showed up on measuring.
+                    //
+                    // The cap is not a nicety. These pills are `Menu` labels
+                    // carrying `.fixedSize()`, so they refuse to compress: past
+                    // the edge they are *clipped*, not shortened, and a control
+                    // half off the drawer is worse than a shortened word.
+                    .frame(maxWidth: maxTextWidth)
+                // A chevron under a word says "there is a menu here". Next to a
+                // bare glyph it is just a second glyph.
+                Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold))
+            }
         }
         .foregroundStyle(active ? Color.accentColor : .secondary)
         .padding(.horizontal, 7)

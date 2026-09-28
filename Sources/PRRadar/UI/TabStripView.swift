@@ -7,11 +7,26 @@ struct TabStripView: View {
     let onSelect: (DrawerTab) -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             ForEach(DrawerTab.allCases, id: \.self) { tab in
                 tabButton(tab)
             }
-            Spacer()
+
+            Spacer(minLength: 8)
+
+            // The right of this band really is empty — the tabs end after a
+            // third of it — and this is the one thing that earns a place there.
+            // It was in the header, visible while you were reading the reviews
+            // somebody else is waiting on, which is the mixing of "work you owe
+            // others" with "your work in flight" that the badge refuses to do.
+            //
+            // The *filters* were tried here too and do not fit: with a real
+            // repository picked they come to 406pt on their own.
+            if state.myPRsReadyToMerge > 0 {
+                Chip(text: "\(state.myPRsReadyToMerge) ready",
+                     symbol: "checkmark.seal", health: .good)
+                    .help("\(state.myPRsReadyToMerge) of your PRs are ready to merge")
+            }
         }
         .padding(.horizontal, 8)
         .frame(height: Layout.tabStripHeight)

@@ -193,6 +193,7 @@ public enum Query {
 
         return """
         fragment PRCore on PullRequest {
+          id
           number
           title
           url
@@ -212,10 +213,10 @@ public enum Query {
             }
           }
           myReviews: timelineItems(last: 100, itemTypes: [PULL_REQUEST_REVIEW]) {
-            nodes { ... on PullRequestReview { createdAt state author { login } } }
+            nodes { ... on PullRequestReview { id createdAt state author { login } } }
           }
           myComments: timelineItems(last: 100, itemTypes: [ISSUE_COMMENT]) {
-            nodes { ... on IssueComment { createdAt author { login } } }
+            nodes { ... on IssueComment { id createdAt author { login } } }
           }
         }
         query {

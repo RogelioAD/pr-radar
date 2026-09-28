@@ -113,3 +113,59 @@ final class TrophyStateTests: XCTestCase {
         XCTAssertFalse(state.hasUnseen)
     }
 }
+
+// MARK: - Which trophy is the new one
+
+/// The shelf's button goes quiet the moment the room opens — you have seen
+/// them, so the dot on the button is right to go. But that left nothing to say
+/// *which* of thirty drawings had changed, at exactly the moment you could
+/// finally look. The unseen set is therefore read before it is cleared, and the
+/// answer held for the length of the visit.
+extension TrophyStateTests {
+
+    func testTheUnseenSetIsWhatTheRoomHasToCaptureBeforeClearing() {
+        var state = TrophyState()
+        state.unlocked["swamped"] = epoch
+        state.unseen = ["swamped"]
+        XCTAssertTrue(state.hasUnseen)
+
+        let captured = state.unseen
+        state.markAllSeen()
+
+        // The button has nothing left to announce...
+        XCTAssertFalse(state.hasUnseen)
+        XCTAssertEqual(state.unseenCount, 0)
+        // ...and the room still knows which one it was.
+        XCTAssertEqual(captured, ["swamped"])
+    }
+
+    /// Several at once is the case the dot exists for: a backfill can unlock a
+    /// handful, and "3 new" on the button does not say which three.
+    func testEveryNewlyUnlockedTrophyIsCaptured() {
+        var state = TrophyState()
+        state.unseen = ["swamped", "century", "nightowl"]
+        XCTAssertEqual(state.unseenCount, 3)
+        let captured = state.unseen
+        state.markAllSeen()
+        XCTAssertEqual(captured.count, 3)
+        XCTAssertTrue(state.unseen.isEmpty)
+    }
+
+    /// Nothing new means nothing to capture, and no dots to draw.
+    func testAShelfWithNothingNewCapturesNothing() {
+        var state = TrophyState()
+        state.unlocked["swamped"] = epoch
+        XCTAssertFalse(state.hasUnseen)
+        XCTAssertTrue(state.unseen.isEmpty)
+    }
+
+    /// The marker is not persisted as a *seen* flag per trophy, so a round trip
+    /// must not resurrect an announcement that has already been made.
+    func testSeenTrophiesStaySeenAcrossARoundTrip() {
+        var state = TrophyState()
+        state.unlocked["swamped"] = epoch
+        state.unseen = ["swamped"]
+        state.markAllSeen()
+        XCTAssertFalse(TrophyState.decoded(from: state.encoded()).hasUnseen)
+    }
+}

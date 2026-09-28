@@ -31,6 +31,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the teams that decide which review requests are yours are a property of
     /// the account, not of the machine.
     private var viewerCache: [String: (login: String, teams: [TeamRef])] = [:]
+    private lazy var autoReviewer: AutoReviewCoordinator = {
+        let coordinator = AutoReviewCoordinator(state: state)
+        state.autoReviewer = coordinator
+        return coordinator
+    }()
 
     private let pathMonitor = NWPathMonitor()
     /// Assumed true until the monitor says otherwise, so a slow first callback
@@ -328,6 +333,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // read both.
         evaluateTrophies()
 
+        // Deliberately not awaited, and deliberately outside `isRefreshing`:
+        // a review can run for a quarter of an hour, and holding the refresh
+        // flag for that long would freeze the poll loop and grey out the
+        // drawer's own refresh button until it finished.
+        autoReviewer.isOnline = isOnline
+        autoReviewer.refreshLanded()
+
         panel.refreshLayoutIfExpanded()
         panel.refreshBadgeSize()
         panel.syncVisibility()
@@ -392,9 +404,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 viewer = (discovered.login, discovered.teams)
                 viewerCache[account.id] = viewer
             }
+            autoReviewer.viewerLogins.insert(viewer.login)
 
             let searches = try await client.fetchPullRequests(teams: viewer.teams)
-            let inbox = ReviewInbox(viewerLogin: viewer.login, teams: viewer.teams)
+            // Without this the automatic review's own comment would dismiss the
+            // very PR it was posted to draw attention to.
+            let inbox = ReviewInbox(viewerLogin: viewer.login, teams: viewer.teams,
+                                    pins: state.autoReviewLog.pins)
             var result = AccountFetch(account: account,
                                       items: tagged(inbox.build(from: searches), with: account))
 

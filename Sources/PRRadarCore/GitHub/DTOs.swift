@@ -32,6 +32,8 @@ public struct MergedCountPayload: Decodable {
 }
 
 public struct PRNode: Decodable {
+    /// The GraphQL node id, which every mutation needs as its subject.
+    public let id: String?
     public let number: Int?
     public let title: String?
     public let url: String?
@@ -57,6 +59,9 @@ public struct TimelineConn: Decodable {
 }
 
 public struct TimelineNode: Decodable {
+    /// Identifies one review or comment, so a pin can name the single artifact
+    /// PR Radar posted and let every other one count as ordinary activity.
+    public let id: String?
     public let createdAt: Date?
     public let requestedReviewer: ReviewerDTO?
     public let author: ActorDTO?

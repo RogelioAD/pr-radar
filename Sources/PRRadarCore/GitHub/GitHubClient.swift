@@ -28,15 +28,31 @@ public struct GitHubClient {
     }
 
     public func run<T: Decodable>(_ query: String, as type: T.Type) async throws -> T {
+        try await run(query, variables: [:], as: type)
+    }
+
+    /// The same, with GraphQL variables.
+    ///
+    /// Variables rather than interpolation is not a style preference for the
+    /// write path. A review body is full of backticks, quotes, newlines and
+    /// whatever code the diff contained; pasting that into a document the way
+    /// `Query.mentionableUsers` escapes a search term would be a document
+    /// injection with someone else's source as the payload. Read queries carry
+    /// no variables and encode byte-identically to before.
+    public func run<T: Decodable>(_ query: String,
+                                  variables: [String: GraphQLValue],
+                                  as type: T.Type,
+                                  timeout: TimeInterval = 20) async throws -> T {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("PRRadar", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 20
+        request.timeoutInterval = timeout
         // Encoding through JSONEncoder keeps the embedded quotes in the
         // GraphQL document correctly escaped.
-        request.httpBody = try JSONEncoder().encode(["query": query])
+        request.httpBody = try JSONEncoder().encode(
+            GraphQLRequest(query: query, variables: variables.isEmpty ? nil : variables))
 
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {

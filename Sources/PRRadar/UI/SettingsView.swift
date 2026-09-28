@@ -88,7 +88,7 @@ struct SettingsView: View {
         // The field writes through on Return and on losing focus; closing the
         // drawer does neither, so it is committed here as well rather than
         // thrown away.
-        .onDisappear { state.commitUpdateRepo() }
+        .onDisappear { state.saveSettings() }
     }
 
     // MARK: - Groups
