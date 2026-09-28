@@ -86,6 +86,14 @@ enum Log {
         record.reviewNodeID = "PRR_fake"
         record.reviewURLString = "https://github.com"
         record.finishedAt = Date()
+        // A stopwatch with nothing on it cannot be looked at. A running review
+        // starts from zero and climbs; a finished one carries a plausible run.
+        if status == .running {
+            record.startedAt = Date()
+        } else {
+            record.startedAt = Date().addingTimeInterval(-531)
+            record.runSeconds = 531
+        }
         switch status {
         case .failed: record.failure = "unknown skill: /nope"
         case .skipped: record.failure = AutoReviewSkip.repoNotAllowed.reason

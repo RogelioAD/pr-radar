@@ -84,6 +84,14 @@ public struct AutoReviewRecord: Codable, Equatable, Sendable {
     /// trace and never a whole stderr dump — see `truncated(_:)`.
     public var failure: String?
 
+    /// How long the run itself took, in seconds, stamped when it stopped.
+    ///
+    /// Measured rather than derived, because `finishedAt` does not survive as a
+    /// record of it: posting a curated review writes `finishedAt` again, so a
+    /// run of eight minutes that sat two hours waiting to be posted would have
+    /// reported two hours. The row is saying how long the *work* took.
+    public var runSeconds: TimeInterval?
+
     /// The pull request this review is about, kept so its row can be drawn
     /// after the search has stopped returning it.
     ///
@@ -137,11 +145,26 @@ public struct AutoReviewRecord: Codable, Equatable, Sendable {
         // row's worth of convenience, and must never cost the whole record —
         // which is the failure mode every other field here is written to avoid.
         subject = try? container.decodeIfPresent(ReviewItem.self, forKey: .subject)
+        runSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .runSeconds)
     }
 
     public var reviewURL: URL? { reviewURLString.flatMap(URL.init(string:)) }
 
     public func count(_ tier: FindingTier) -> Int { counts[tier.rawValue] ?? 0 }
+
+    /// The number on the stopwatch: still climbing while the review runs, fixed
+    /// at what the run took once it has stopped.
+    ///
+    /// Falls back to the timestamps for records written before runs were timed,
+    /// which is right for a failure — nothing rewrites `finishedAt` on one —
+    /// and the best available guess for anything else.
+    public func runTime(now: Date) -> TimeInterval? {
+        if status == .running {
+            return RunTime.elapsed(startedAt: startedAt, finishedAt: nil, now: now)
+        }
+        if let runSeconds { return runSeconds }
+        return RunTime.elapsed(startedAt: startedAt, finishedAt: finishedAt, now: now)
+    }
 
     /// A failure message a row can carry. Long enough to name a cause, short
     /// enough that a runaway stderr cannot grow the stored blob without bound.

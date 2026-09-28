@@ -158,16 +158,19 @@ struct RowView: View {
                     Chip(text: "queued for review", symbol: "clock", health: .neutral)
                 case .running:
                     Chip(text: "reviewing…", symbol: "wand.and.sparkles", health: .running)
+                    runTime(review)
                 case .skipped:
                     Chip(text: review.failure ?? "not reviewed", health: .neutral)
                 case .failed:
                     Chip(text: "review failed", symbol: "exclamationmark.triangle", health: .bad)
                         .help(review.failure ?? "")
+                    runTime(review)
                     RowButton(title: "Retry", symbol: "arrow.clockwise", health: .running) {
                         onAction?(.rerun)
                     }
                 case .ready:
                     Chip(text: "review ready", symbol: "wand.and.sparkles", health: .running)
+                    runTime(review)
                     tiers(review)
                     if review.isAwaitingSelection {
                         RowButton(title: showingFindings ? "Hide findings" : "Choose findings",
@@ -186,6 +189,7 @@ struct RowView: View {
                 case .posted:
                     Chip(text: "PR Radar left a review", symbol: "text.bubble", health: .running)
                         .help("Opened on the PR — decide below, and this row stays until you do")
+                    runTime(review)
                     tiers(review)
                 case .dismissed:
                     Chip(text: "done", symbol: "checkmark", health: .good)
@@ -199,6 +203,39 @@ struct RowView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+    }
+
+    /// The stopwatch: how long the review has been going, or how long it took.
+    ///
+    /// A review runs for minutes with nothing to show for it, and "reviewing…"
+    /// alone cannot tell a long diff from a wedged session. Green or red once
+    /// it stops, so the row says how it went and what it cost in one glance.
+    @ViewBuilder
+    private func runTime(_ review: AutoReviewRecord) -> some View {
+        if review.status == .running, let startedAt = review.startedAt {
+            // Its own timeline, redrawing this chip once a second and nothing
+            // else. The app's shared clock ticks every thirty seconds — right
+            // for "requested 28m ago", useless for something being watched —
+            // and speeding that up would redraw every row in the drawer to
+            // animate one number.
+            TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                stopwatch(review, now: context.date, health: .running)
+            }
+        } else {
+            stopwatch(review, now: Date(), health: review.status == .failed ? .bad : .good)
+        }
+    }
+
+    @ViewBuilder
+    private func stopwatch(_ review: AutoReviewRecord,
+                           now: Date,
+                           health: Health) -> some View {
+        if let seconds = review.runTime(now: now) {
+            Chip(text: RunTime.clock(seconds), symbol: "stopwatch", health: health)
+                .help(review.status == .running
+                      ? "Running for \(RunTime.spoken(seconds))"
+                      : "Took \(RunTime.spoken(seconds))")
         }
     }
 

@@ -265,6 +265,9 @@ final class AutoReviewCoordinator {
                 prepared, skill: Prefs.reviewSkill ?? "", pingKey: key)
 
             update(key) { record in
+                // Stamped here, where the run actually ended, and not inferred
+                // later from `finishedAt` — posting rewrites that.
+                record.runSeconds = record.startedAt.map { -$0.timeIntervalSinceNow }
                 record.counts = findings.counts
                 record.body = composed.body
                 record.threads = composed.threads
@@ -574,6 +577,9 @@ final class AutoReviewCoordinator {
     private func fail(_ key: String, _ message: String) {
         consecutiveFailures += 1
         update(key) { record in
+            if record.runSeconds == nil {
+                record.runSeconds = record.startedAt.map { -$0.timeIntervalSinceNow }
+            }
             record.status = .failed
             record.failure = message
             record.finishedAt = Date()
