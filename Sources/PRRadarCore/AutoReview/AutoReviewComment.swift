@@ -104,6 +104,20 @@ extension AutoReviewRecord {
 /// wording can be argued with in a test.
 public enum AutoReviewComment {
 
+    /// Appended when GitHub refused the inline anchors and the summary went out
+    /// alone, so the pull request says why the findings are in one block rather
+    /// than against the lines they are about.
+    ///
+    /// Said on the review itself rather than only in the app: the person
+    /// reading it is the author, who has no way to see PR Radar's row.
+    public static let anchorsDroppedNote = """
+
+
+    ---
+
+    *GitHub would not anchor these findings to their lines — usually because     the line is outside this pull request's diff — so they are listed above     rather than attached inline.*
+    """
+
     /// GitHub's own limit is 65536; the margin is for the marker and footer.
     static let bodyLimit = 60_000
 

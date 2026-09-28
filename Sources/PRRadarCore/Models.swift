@@ -30,6 +30,14 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
     /// rather than hiding the buttons.
     public var nodeID: String?
 
+    /// The branch this pull request is into.
+    ///
+    /// Optional and defaulted like the two above, and for the same reason. nil
+    /// means "not known", which the review falls back from rather than guessing
+    /// at — guessing is what produced a diff of five hundred files for a pull
+    /// request that touched thirty-nine.
+    public var baseRef: String?
+
     public var id: String { "\(repo)#\(number)" }
     /// Short repo name without the owner prefix.
     public var repoShortName: String {
@@ -62,7 +70,7 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
 
     public init(repo: String, number: Int, title: String, url: URL, isDraft: Bool,
                 authorLogin: String, authorAvatarURL: URL?, pingedAt: Date,
-                account: String = "", nodeID: String? = nil) {
+                account: String = "", nodeID: String? = nil, baseRef: String? = nil) {
         self.repo = repo
         self.number = number
         self.title = title
@@ -73,6 +81,7 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
         self.pingedAt = pingedAt
         self.account = account
         self.nodeID = nodeID
+        self.baseRef = baseRef
     }
 }
 

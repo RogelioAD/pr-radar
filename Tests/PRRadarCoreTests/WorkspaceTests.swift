@@ -175,4 +175,38 @@ extension WorkspaceTests {
         XCTAssertFalse(Workspace.isReapable(.unmarked, age: 15 * 60 + 1))
     }
 
+    // MARK: - The base a pull request is actually into
+
+    /// The bug this exists for: diffing against the repository's default branch
+    /// instead of the pull request's own base. On a pull request onto a
+    /// long-running sprint branch that made 513 files look changed when 39
+    /// were, every extra line looked commentable, and GitHub refused the
+    /// anchor with "Line could not be resolved" — losing the whole review,
+    /// because it posts as one mutation.
+    func testTheBaseGetsItsOwnRefPerPullRequest() {
+        XCTAssertEqual(Workspace.baseRef(forPR: 806), "refs/pr-radar/base-806")
+        XCTAssertEqual(Workspace.baseRef(forPR: 812), "refs/pr-radar/base-812")
+    }
+
+    /// Per pull request, not per branch: two open pull requests onto the same
+    /// sprint branch must not fight over one ref.
+    func testTwoPullRequestsOntoOneBranchDoNotShareARef() {
+        XCTAssertNotEqual(Workspace.baseRef(forPR: 806), Workspace.baseRef(forPR: 812))
+    }
+
+    func testTheBaseIsFetchedIntoThatRef() {
+        XCTAssertEqual(
+            Workspace.baseRefspec(branch: "feat/sprint/sprint-18", forPR: 806),
+            "feat/sprint/sprint-18:refs/pr-radar/base-806")
+    }
+
+    /// Both live under the same namespace, which is what makes them obviously
+    /// ours and keeps them out of anybody's branch list.
+    func testHeadAndBaseShareTheNamespace() {
+        for ref in [Workspace.ref(forPR: 1), Workspace.baseRef(forPR: 1)] {
+            XCTAssertTrue(ref.hasPrefix("refs/pr-radar/"), ref)
+        }
+        XCTAssertNotEqual(Workspace.ref(forPR: 1), Workspace.baseRef(forPR: 1))
+    }
+
 }

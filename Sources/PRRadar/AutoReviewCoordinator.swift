@@ -359,12 +359,53 @@ final class AutoReviewCoordinator {
         // RIGHT-side line numbers an inline comment needs are numbers in the
         // head blob, and the head blob is exactly what has just been checked
         // out — so they agree by construction.
-        let base = (try? await Self.runGit(["-C", path.path, "merge-base", "HEAD", "origin/HEAD"]))?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let range = (base?.isEmpty == false) ? "\(base!)..HEAD" : "HEAD~1..HEAD"
+        //
+        // Against the pull request's *own* base, which `origin/HEAD` is not.
+        // A pull request onto a long-running sprint branch diffed against the
+        // default branch appears to change everything that branch has done
+        // since it forked — 513 files for one that touched 39, on the pull
+        // request that turned this up. Every extra line then looks commentable,
+        // GitHub refuses the anchor with "Line could not be resolved", and
+        // because a review posts as one mutation the *whole* review is lost
+        // rather than the one bad thread. The skill was already being told to
+        // use the pull request's own base; this is the diff agreeing with it.
+        let range = await diffRange(for: item, clone: clone, worktree: path)
         let diff = (try? await Self.runGit(["-C", path.path, "diff", "--unified=3", range])) ?? ""
 
         return Worktree(clone: clone, path: path, diff: diff)
+    }
+
+    /// What to diff the checked-out head against.
+    ///
+    /// Three answers, in descending order of how much they actually know:
+    /// the pull request's declared base, then the repository's default branch,
+    /// then the head's own parent. The last two are guesses and are only
+    /// reached when the first is unavailable — a base GitHub did not report, or
+    /// one the fetch could not find, such as a branch already deleted after a
+    /// merge.
+    private func diffRange(for item: ReviewItem, clone: URL, worktree: URL) async -> String {
+        if let branch = item.baseRef, !branch.isEmpty {
+            let target = Workspace.baseRef(forPR: item.number)
+            let fetched = try? await Self.runGit(
+                ["-C", clone.path, "fetch", "origin", "--force",
+                 Workspace.baseRefspec(branch: branch, forPR: item.number)])
+            if fetched != nil,
+               let merge = try? await Self.runGit(
+                   ["-C", worktree.path, "merge-base", "HEAD", target]),
+               case let base = merge.trimmingCharacters(in: .whitespacesAndNewlines),
+               !base.isEmpty {
+                return "\(base)..HEAD"
+            }
+            Log.debug("base \(branch) unavailable for \(item.repo)#\(item.number); "
+                      + "falling back")
+        }
+        if let merge = try? await Self.runGit(
+            ["-C", worktree.path, "merge-base", "HEAD", "origin/HEAD"]),
+           case let base = merge.trimmingCharacters(in: .whitespacesAndNewlines),
+           !base.isEmpty {
+            return "\(base)..HEAD"
+        }
+        return "HEAD~1..HEAD"
     }
 
     /// Always, whatever happened: a worktree left behind is litter in somebody
@@ -476,28 +517,55 @@ final class AutoReviewCoordinator {
             let review = try await client.submitReview(
                 pullRequestID: nodeID, event: .comment,
                 body: composed.body, threads: composed.threads)
-            update(item.pingKey) { record in
-                record.status = .posted
-                // Kept now, because this is the moment the row stops being
-                // reachable: the review we have just submitted fulfils the
-                // request, GitHub drops us from the reviewers, and the next
-                // poll cannot find this pull request at all. The live item is
-                // in hand here and nowhere later.
-                record.subject = item
-                record.reviewNodeID = review.id
-                record.reviewURLString = review.url
-                record.threadNodeIDs = review.commentIDs
-                record.finishedAt = Date()
-                record.failure = nil
-                // Drafts, now that they are real comments on the PR. Keeping
-                // them would grow the stored blob by a review's worth of prose
-                // per pull request, to say something `threadNodeIDs` already
-                // says better.
-                record.threads = []
-                record.prepared = []
-            }
+            record(review, for: item)
         } catch {
-            fail(item.pingKey, AutoReviewRecord.truncated(error.localizedDescription))
+            // A review goes out as one mutation, so GitHub refusing a single
+            // anchor — "Line could not be resolved" — takes every other finding
+            // with it. Nothing is wrong with the *review* in that case, only
+            // with where one comment was pinned, so the summary goes out on its
+            // own rather than the work being thrown away.
+            //
+            // Only worth trying when there were threads to be the problem.
+            guard !composed.threads.isEmpty else {
+                fail(item.pingKey, AutoReviewRecord.truncated(error.localizedDescription))
+                return
+            }
+            Log.debug("posting \(item.repo)#\(item.number) with "
+                      + "\(composed.threads.count) thread(s) failed: "
+                      + "\(error.localizedDescription) — retrying as a summary")
+            do {
+                let review = try await client.submitReview(
+                    pullRequestID: nodeID, event: .comment,
+                    body: composed.body + AutoReviewComment.anchorsDroppedNote,
+                    threads: [])
+                record(review, for: item)
+            } catch {
+                fail(item.pingKey, AutoReviewRecord.truncated(error.localizedDescription))
+            }
+        }
+    }
+
+    /// Writes down a review that went out, however it went out.
+    private func record(_ review: SubmittedReview, for item: ReviewItem) {
+        update(item.pingKey) { record in
+            record.status = .posted
+            // Kept now, because this is the moment the row stops being
+            // reachable: the review we have just submitted fulfils the
+            // request, GitHub drops us from the reviewers, and the next
+            // poll cannot find this pull request at all. The live item is
+            // in hand here and nowhere later.
+            record.subject = item
+            record.reviewNodeID = review.id
+            record.reviewURLString = review.url
+            record.threadNodeIDs = review.commentIDs
+            record.finishedAt = Date()
+            record.failure = nil
+            // Drafts, now that they are real comments on the PR. Keeping
+            // them would grow the stored blob by a review's worth of prose
+            // per pull request, to say something `threadNodeIDs` already
+            // says better.
+            record.threads = []
+            record.prepared = []
         }
     }
 
@@ -538,7 +606,11 @@ final class AutoReviewCoordinator {
             await supersede(record, on: item)
             update(key) { record in
                 record.status = .queued
-                record.failure = nil
+                // `failure` is deliberately left alone. Only `failed` and
+                // `skipped` rows ever show it, so a stale one cannot reach the
+                // screen — and clearing it here meant pressing Retry destroyed
+                // the only record of what went wrong, which is precisely what
+                // somebody does before asking why it went wrong.
                 record.reviewNodeID = nil
                 record.threadNodeIDs = []
             }
@@ -597,6 +669,11 @@ final class AutoReviewCoordinator {
     }
 
     private func fail(_ key: String, _ message: String) {
+        // Logged as well as stored. The record is the only other copy and it is
+        // routinely overwritten — a retry starts by clearing the row — so
+        // without this a failure that somebody retried before mentioning it
+        // leaves nothing behind to diagnose.
+        Log.debug("review failed [\(key)]: \(message)")
         consecutiveFailures += 1
         update(key) { record in
             if record.runSeconds == nil {

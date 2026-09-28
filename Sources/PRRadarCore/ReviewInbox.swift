@@ -82,7 +82,8 @@ public struct ReviewInbox {
             authorLogin: author.login,
             authorAvatarURL: author.avatarUrl.flatMap(URL.init(string:)),
             pingedAt: latestPing,
-            nodeID: node.id
+            nodeID: node.id,
+            baseRef: node.baseRefName
         )
     }
 

@@ -233,6 +233,7 @@ public enum Query {
           url
           isDraft
           state
+          baseRefName
           author { login avatarUrl }
           repository { nameWithOwner }
           requests: timelineItems(last: 100, itemTypes: [REVIEW_REQUESTED_EVENT]) {

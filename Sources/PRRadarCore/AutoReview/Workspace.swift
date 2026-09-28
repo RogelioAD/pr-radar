@@ -148,4 +148,21 @@ public enum Workspace {
     public static func fetchRefspec(forPR number: Int) -> String {
         "pull/\(number)/head:\(ref(forPR: number))"
     }
+
+    /// Where a pull request's *base* branch is parked.
+    ///
+    /// Its own ref, and fetched per pull request, because the base is a
+    /// property of the pull request and not of the repository. Reviewing
+    /// against the default branch instead is not a near-miss: a pull request
+    /// onto a long-running sprint branch then appears to change every file
+    /// that branch has touched since it forked, and the map of what can carry
+    /// an inline comment is wrong by two orders of magnitude.
+    public static func baseRef(forPR number: Int) -> String {
+        "refs/pr-radar/base-\(number)"
+    }
+
+    /// Fetching that base branch into it.
+    public static func baseRefspec(branch: String, forPR number: Int) -> String {
+        "\(branch):\(baseRef(forPR: number))"
+    }
 }

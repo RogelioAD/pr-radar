@@ -43,6 +43,9 @@ public struct PRNode: Decodable {
     /// OPEN, CLOSED or MERGED. Absent from the searches, which already filter
     /// on `is:open`; asked for by the pinned lookup, which cannot.
     public let state: String?
+    /// The branch this pull request is *into*, which is the only correct thing
+    /// to diff it against.
+    public let baseRefName: String?
     public let author: ActorDTO?
     public let repository: RepoDTO?
     public let requests: TimelineConn?
