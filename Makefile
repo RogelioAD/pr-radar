@@ -19,6 +19,9 @@ bundle:
 
 # Installs to /Applications and registers the login item.
 install: bundle
+	@# A review in flight is killed by the pkill below and cannot be resumed,
+	@# only paid for again. FORCE=1 skips the question.
+	@Scripts/review-in-flight.sh
 	@echo "==> installing to /Applications"
 	@# launchctl unload below only stops the copy it manages. One started any
 	@# other way — double-clicked, an old login item — would survive and be

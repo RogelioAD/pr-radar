@@ -47,6 +47,93 @@ final class AutoReviewCoordinator {
 
     init(state: AppState) {
         self.state = state
+        recoverFromInterruption()
+    }
+
+    /// Whatever the last run left in flight goes back in the queue, and the
+    /// checkouts it left behind go in the bin.
+    ///
+    /// A review does not survive the app that started it, and it is routinely
+    /// asked not to: `make install` pkills the running copy, and a crash or a
+    /// log-out does the same thing less politely. Both halves of a review leak
+    /// when that happens. The record sticks at `running`, where — being read as
+    /// `.alreadyHandled` — nothing will ever reconsider it and no button is
+    /// drawn to argue with, so the row says "reviewing…" for ever. And the
+    /// worktree survives, because the `defer` that removes it died with the
+    /// process; a checkout of a real repository is tens of megabytes, and one
+    /// is stranded per interrupted run.
+    ///
+    /// Done in `init` rather than at the first refresh so that it lands before
+    /// `recordSkips` and `pending` ever see the log.
+    private func recoverFromInterruption() {
+        var log = state.autoReviewLog
+        let interrupted = log.reconcileInterrupted()
+        if !interrupted.isEmpty {
+            state.autoReviewLog = log
+            Log.debug("re-queued \(interrupted.count) interrupted review(s): "
+                      + interrupted.joined(separator: ", "))
+        }
+        reapWorktrees()
+    }
+
+    /// Deletes review worktrees that no longer have a review behind them.
+    ///
+    /// Which is emphatically *not* everything carrying our prefix. A copy of
+    /// this app started by `make run` sits alongside the installed one by
+    /// design, and both use the same temporary directory — so the question is
+    /// never "is this ours" but "is anyone still using it". `Workspace` owns
+    /// the answer; the two shims below are the parts of it that need the world.
+    private func reapWorktrees() {
+        let temp = FileManager.default.temporaryDirectory
+        let stale = ((try? FileManager.default.contentsOfDirectory(atPath: temp.path)) ?? [])
+            .filter { Workspace.isWorktree(path: $0) }
+            .filter { name in
+                let path = temp.appendingPathComponent(name).path
+                return Workspace.isReapable(Self.owner(of: path), age: Self.age(of: path))
+            }
+        guard !stale.isEmpty else { return }
+
+        Task.detached {
+            for name in stale {
+                let path = temp.appendingPathComponent(name).path
+                // Asked before the files go, because afterwards there is nothing
+                // left to ask: a worktree knows which clone owns it, and that
+                // clone is the only place the registration can be pruned from.
+                // `worktree remove` is not used — git refuses to remove the
+                // worktree it was invoked inside, which is the only place we can
+                // invoke it from without already knowing the answer.
+                let owner = try? await Self.runGit(
+                    ["-C", path, "rev-parse", "--path-format=absolute", "--git-common-dir"])
+                try? FileManager.default.removeItem(atPath: path)
+                if let owner = owner?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !owner.isEmpty {
+                    _ = try? await Self.runGit(["-C", owner, "worktree", "prune"])
+                }
+            }
+        }
+    }
+
+    /// Who owns a worktree, by asking the operating system about the pid its
+    /// marker names.
+    ///
+    /// `kill(pid, 0)` signals nothing; it only reports whether the process is
+    /// there. A recycled pid would read as `live` and leave a dead review's
+    /// checkout on disk — which is the harmless way round to be wrong, and the
+    /// reason the test is framed this way rather than the other.
+    private static func owner(of path: String) -> Workspace.WorktreeOwner {
+        let marker = (path as NSString).appendingPathComponent(Workspace.ownerMarker)
+        guard let text = try? String(contentsOfFile: marker, encoding: .utf8),
+              let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        else { return .unmarked }
+        return kill(pid, 0) == 0 ? .live : .abandoned
+    }
+
+    /// How long ago a worktree was created. Unreadable reads as brand new, so
+    /// the doubt is resolved by leaving it alone.
+    private static func age(of path: String) -> TimeInterval {
+        let created = (try? FileManager.default.attributesOfItem(atPath: path))?[.creationDate]
+        guard let created = created as? Date else { return 0 }
+        return Date().timeIntervalSince(created)
     }
 
     deinit { worker?.cancel() }
@@ -250,9 +337,17 @@ final class AutoReviewCoordinator {
                                    Workspace.fetchRefspec(forPR: item.number)])
 
         let path = FileManager.default.temporaryDirectory
-            .appendingPathComponent("pr-radar-\(item.number)-\(UUID().uuidString.prefix(8))")
+            .appendingPathComponent(Workspace.worktreeName(
+                forPR: item.number, token: String(UUID().uuidString.prefix(8))))
         _ = try await Self.runGit(["-C", clone.path, "worktree", "add", "--detach",
                                    path.path, ref])
+
+        // Left before any reviewing starts, so another copy of the app launching
+        // midway through this review can tell that it is somebody's and not
+        // litter to be swept up.
+        try? String(ProcessInfo.processInfo.processIdentifier).write(
+            toFile: path.appendingPathComponent(Workspace.ownerMarker).path,
+            atomically: true, encoding: .utf8)
 
         // The diff comes from here rather than from a second API call: the
         // RIGHT-side line numbers an inline comment needs are numbers in the

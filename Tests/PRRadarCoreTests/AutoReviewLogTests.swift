@@ -183,4 +183,84 @@ extension AutoReviewLogTests {
         XCTAssertEqual(log["k"]?.status, .ready)
         XCTAssertTrue(log["k"]?.threads.isEmpty == true)
     }
+    // MARK: - Recovering an interrupted review
+
+    /// The bug this exists for: `make install` pkills the app mid-review, and
+    /// the record it wrote is still `running` when the next copy reads it back.
+    func testAReviewInterruptedByARestartGoesBackInTheQueue() {
+        var log = AutoReviewLog()
+        var record = AutoReviewRecord(status: .running)
+        record.startedAt = epoch
+        record.attempts = 1
+        log["acme/repo#1@2026-09-28T13:45:31Z"] = record
+
+        let moved = log.reconcileInterrupted()
+
+        XCTAssertEqual(moved, ["acme/repo#1@2026-09-28T13:45:31Z"])
+        XCTAssertEqual(log["acme/repo#1@2026-09-28T13:45:31Z"]?.status, .queued)
+        XCTAssertNil(log["acme/repo#1@2026-09-28T13:45:31Z"]?.startedAt)
+    }
+
+    /// A run that produced nothing must not spend one of the two attempts a
+    /// ping gets — two interrupted installs would otherwise exhaust a PR's
+    /// budget without anybody having read a word of a review.
+    func testAnInterruptedAttemptIsNotChargedToTheRetryBudget() {
+        var log = AutoReviewLog()
+        var record = AutoReviewRecord(status: .running)
+        record.attempts = 1
+        log["k"] = record
+
+        log.reconcileInterrupted()
+
+        XCTAssertEqual(log["k"]?.attempts, 0)
+    }
+
+    /// Never below zero, whatever a hand-edited or older record claims.
+    func testRollingBackAnAttemptNeverGoesNegative() {
+        var log = AutoReviewLog()
+        log["k"] = AutoReviewRecord(status: .running)   // attempts defaults to 0
+
+        log.reconcileInterrupted()
+
+        XCTAssertEqual(log["k"]?.attempts, 0)
+    }
+
+    /// Finished work is not reopened. Only `running` is an orphan by
+    /// construction; every other status belongs to somebody.
+    func testNoOtherStatusIsDisturbed() {
+        var log = AutoReviewLog()
+        for status in AutoReviewStatus.allCases where status != .running {
+            log[status.rawValue] = record(status, finishedAt: epoch)
+        }
+        let before = log
+
+        XCTAssertTrue(log.reconcileInterrupted().isEmpty)
+        XCTAssertEqual(log, before)
+    }
+
+    /// Two interrupted at once — the queue picks them up oldest ping first, so
+    /// both have to come back, not just the one that happened to be found.
+    func testEveryInterruptedReviewComesBackNotJustTheFirst() {
+        var log = AutoReviewLog()
+        log["b"] = AutoReviewRecord(status: .running)
+        log["a"] = AutoReviewRecord(status: .running)
+        log["done"] = record(.posted, finishedAt: epoch)
+
+        XCTAssertEqual(log.reconcileInterrupted(), ["a", "b"])
+        XCTAssertEqual(log["a"]?.status, .queued)
+        XCTAssertEqual(log["b"]?.status, .queued)
+        XCTAssertEqual(log["done"]?.status, .posted)
+    }
+
+    /// Running it twice must not undo a real attempt made in between.
+    func testReconcilingAgainWithNothingInFlightChangesNothing() {
+        var log = AutoReviewLog()
+        log["k"] = AutoReviewRecord(status: .running)
+        log.reconcileInterrupted()
+        let afterFirst = log
+
+        XCTAssertTrue(log.reconcileInterrupted().isEmpty)
+        XCTAssertEqual(log, afterFirst)
+    }
+
 }

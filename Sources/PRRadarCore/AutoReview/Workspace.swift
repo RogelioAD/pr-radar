@@ -72,6 +72,71 @@ public enum Workspace {
         return slug.lowercased() == repo.lowercased()
     }
 
+    /// The prefix every throwaway review checkout is named with.
+    ///
+    /// A shared constant rather than a literal at the point the worktree is
+    /// created, because the launch-time sweep that removes the ones a killed
+    /// app left behind has to recognise exactly what the creating side
+    /// produces. Two spellings of the same string is how a reaper quietly
+    /// stops matching and the litter comes back.
+    public static let worktreePrefix = "pr-radar-"
+
+    /// What to call the throwaway worktree for one pull request.
+    ///
+    /// `token` keeps two checkouts of the same PR from colliding — a re-run can
+    /// begin while the last one's directory is still being removed.
+    public static func worktreeName(forPR number: Int, token: String) -> String {
+        "\(worktreePrefix)\(number)-\(token)"
+    }
+
+    /// Whether a path is one of ours, and so safe to delete unasked.
+    ///
+    /// Matched on the last component only. Testing the whole path would sweep
+    /// up every checkout belonging to anyone whose temporary directory happens
+    /// to sit inside a folder whose name starts the same way.
+    public static func isWorktree(path: String) -> Bool {
+        (path as NSString).lastPathComponent.hasPrefix(worktreePrefix)
+    }
+
+    /// The file a review leaves in its worktree naming the process that owns it.
+    ///
+    /// A dotfile inside the checkout rather than a sibling beside it, so it goes
+    /// when the tree goes and cannot itself become the litter. It is untracked
+    /// and the review diffs a commit range, so it never reaches a finding.
+    public static let ownerMarker = ".pr-radar-owner"
+
+    /// Who, if anyone, is still using a review worktree.
+    public enum WorktreeOwner: Equatable, Sendable {
+        /// The marker names a process that is still running.
+        case live
+        /// The marker names a process that has gone.
+        case abandoned
+        /// No marker — written by a build from before there was one.
+        case unmarked
+    }
+
+    /// Whether a review worktree may be deleted.
+    ///
+    /// The sweep cannot simply take everything it finds. `make run` starts an
+    /// unbundled debug copy *alongside* the installed one — the app is built to
+    /// allow exactly that — and the two share one temporary directory, so a
+    /// launching copy that deleted every worktree it saw would cut the legs off
+    /// a review the other copy was in the middle of.
+    ///
+    /// An unmarked tree is given a grace period instead of being trusted or
+    /// condemned outright. It cannot be matched to a process, so the only thing
+    /// known about it is its age, and no live review can be older than the
+    /// fifteen-minute timeout that ends one. The default leaves double that.
+    public static func isReapable(_ owner: WorktreeOwner,
+                                  age: TimeInterval,
+                                  grace: TimeInterval = 1_800) -> Bool {
+        switch owner {
+        case .live: return false
+        case .abandoned: return true
+        case .unmarked: return age > grace
+        }
+    }
+
     /// The ref a fetched pull request head is parked on.
     ///
     /// Its own namespace rather than a branch: `refs/pr-radar/*` cannot collide

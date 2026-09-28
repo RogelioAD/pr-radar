@@ -183,6 +183,43 @@ public struct AutoReviewLog: Codable, Equatable, Sendable {
         }
     }
 
+    /// Puts every review that was in flight when the app last stopped back in
+    /// the queue, and names the ones it moved.
+    ///
+    /// Called once, at launch, and it is the only thing that rescues them.
+    /// `running` is persisted; the work behind it — a subprocess and a `Task` —
+    /// is not. So a `running` record read back at startup belongs to a process
+    /// that no longer exists, and nothing in the ordinary flow ever reconsiders
+    /// it: `AutoReviewQueue.skip` reads it as `.alreadyHandled`, `recordSkips`
+    /// declines to touch any record that is not `skipped`, and `prune` keeps
+    /// anything without a `finishedAt` for good. The row sat at "reviewing…"
+    /// for ever, with no button on it, and the only way out was deleting a
+    /// defaults key.
+    ///
+    /// Reset to `queued` rather than `failed`, because being interrupted is not
+    /// a verdict on the review: `failed` would park it in `backingOff` for an
+    /// hour to punish it for the app having been restarted. The attempt is
+    /// rolled back for the same reason — it produced no findings, so it should
+    /// not count against `maxAttempts`, or two interrupted installs would
+    /// exhaust a PR's budget without anyone having read a word.
+    @discardableResult
+    public mutating func reconcileInterrupted() -> [String] {
+        let interrupted = records.compactMap { $0.value.status == .running ? $0.key : nil }
+        for key in interrupted {
+            // Through a local, because reading and writing `records` in one
+            // expression is two overlapping accesses to the same storage and
+            // Swift will not have it.
+            guard var record = records[key] else { continue }
+            record.status = .queued
+            record.startedAt = nil
+            record.attempts = max(0, record.attempts - 1)
+            records[key] = record
+        }
+        // Sorted so a caller logging them gets a stable line rather than a
+        // dictionary's order.
+        return interrupted.sorted()
+    }
+
     /// Round-trips through JSON, which is how `Prefs` stores it. Total: a
     /// corrupt or absent value reads as an empty log rather than throwing,
     /// because a review history is not worth failing a launch over.

@@ -112,4 +112,67 @@ extension WorkspaceTests {
             "https://github.com/elevationchurch/elevation-church-mobile-rust.git",
             names: "elevationchurch/elevation-church-mobile-rust"))
     }
+    // MARK: - The throwaway review checkout
+
+    func testAWorktreeNameCarriesThePrefixThatTheSweepLooksFor() {
+        let name = Workspace.worktreeName(forPR: 812, token: "52FD6D0D")
+        XCTAssertEqual(name, "pr-radar-812-52FD6D0D")
+        XCTAssertTrue(Workspace.isWorktree(path: "/tmp/" + name))
+    }
+
+    /// The whole point of the shared prefix: whatever the creating side makes,
+    /// the reaper has to recognise. A regression here is silent and the symptom
+    /// is a slowly filling disk.
+    func testEveryNameTheAppCreatesIsOneTheSweepWillRecognise() {
+        for number in [1, 42, 812, 99_999] {
+            let path = "/var/folders/xx/T/"
+                + Workspace.worktreeName(forPR: number, token: "ABCD1234")
+            XCTAssertTrue(Workspace.isWorktree(path: path), "missed \(path)")
+        }
+    }
+
+    func testSomebodyElsesCheckoutIsNotOursToDelete() {
+        XCTAssertFalse(Workspace.isWorktree(path: "/tmp/elevation-church-mobile-rust"))
+        XCTAssertFalse(Workspace.isWorktree(path: "/tmp/pr-radar/my-real-clone"))
+    }
+
+    /// Matched on the last component only, so a temporary directory that
+    /// happens to live inside a folder named like ours does not cost somebody
+    /// every checkout underneath it.
+    func testAParentFolderNamedLikeOursDoesNotCondemnWhatIsInsideIt() {
+        XCTAssertFalse(Workspace.isWorktree(path: "/Users/me/pr-radar-stuff/important-clone"))
+    }
+
+    // MARK: - Deciding what the sweep may delete
+
+    /// The one that matters: `make run` puts a second copy alongside the
+    /// installed one, sharing a temporary directory. A launching copy must not
+    /// delete a worktree the other copy is reviewing in.
+    func testAWorktreeAnotherCopyIsStillUsingIsNeverDeleted() {
+        XCTAssertFalse(Workspace.isReapable(.live, age: 0))
+        XCTAssertFalse(Workspace.isReapable(.live, age: 86_400))
+    }
+
+    /// The leak this exists for: the owning process was killed, so the `defer`
+    /// that removes the tree never ran. Reaped at once, whatever its age —
+    /// waiting out a grace period would miss it in the commonest case of all,
+    /// an install that relaunches seconds later.
+    func testAWorktreeWhoseOwnerIsGoneIsReapedImmediately() {
+        XCTAssertTrue(Workspace.isReapable(.abandoned, age: 1))
+    }
+
+    /// Written by a build from before the marker existed: nothing links it to a
+    /// process, so age is the only evidence there is.
+    func testAnUnmarkedWorktreeIsSpAredUntilItIsTooOldToBeLive() {
+        XCTAssertFalse(Workspace.isReapable(.unmarked, age: 60))
+        XCTAssertFalse(Workspace.isReapable(.unmarked, age: 15 * 60))
+        XCTAssertTrue(Workspace.isReapable(.unmarked, age: 31 * 60))
+    }
+
+    /// The grace period has to clear the fifteen-minute review timeout, or the
+    /// sweep could delete a live unmarked checkout.
+    func testTheGracePeriodOutlastsTheLongestPossibleReview() {
+        XCTAssertFalse(Workspace.isReapable(.unmarked, age: 15 * 60 + 1))
+    }
+
 }
