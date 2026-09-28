@@ -209,7 +209,7 @@ public enum AutoReviewComment {
         var lines = [marker(pingKey: pingKey)]
         lines.append("**PR Radar** · automatic review · `\(ReviewSkill.name(of: skill))`")
         lines.append("")
-        lines.append(tally(findings))
+        lines.append(tally(findings, unanchored: unanchored.count))
         lines.append("")
 
         let unanchoredIDs = Set(unanchored.map(identity))
@@ -344,13 +344,39 @@ public enum AutoReviewComment {
         return "_\(phrase) not raised._"
     }
 
-    static func tally(_ findings: [Finding]) -> String {
+    /// The opening line: what was found, and where to actually find it.
+    ///
+    /// The second half has to be told how many findings could not be anchored,
+    /// because it used to assert "Each is commented inline below" whatever was
+    /// true. A review that raised two findings and could anchor one said both
+    /// were inline, and then contradicted itself four lines later on the
+    /// finding's own row — which is how this was reported: as inline comments
+    /// going missing, by somebody who had been told to expect two.
+    ///
+    /// Nothing was ever lost. The review was describing itself wrongly, which
+    /// is worse than being quiet: it is the sentence a reader trusts to know
+    /// whether to go looking in the Files tab.
+    static func tally(_ findings: [Finding], unanchored: Int = 0) -> String {
         let parts = FindingTier.allCases
             .map { tier in (tier, findings.filter { $0.tier == tier }.count) }
             .filter { $0.1 > 0 }
             .map { "\($0.1) \($0.0.rawValue)" }
         guard !parts.isEmpty else { return "**Nothing to raise.**" }
-        return "**\(parts.joined(separator: " · ")).** Each is commented inline below."
+
+        let counts = "**\(parts.joined(separator: " · ")).**"
+        let stranded = min(max(unanchored, 0), findings.count)
+        let inline = findings.count - stranded
+
+        if stranded == 0 { return "\(counts) Each is commented inline below." }
+        if inline == 0 {
+            return stranded == 1
+                ? "\(counts) It is not in this pull request's diff, so it appears here "
+                    + "rather than inline."
+                : "\(counts) None are in this pull request's diff, so they appear here "
+                    + "rather than inline."
+        }
+        return "\(counts) \(inline) commented inline below; \(stranded) not in the "
+            + "diff and listed here only."
     }
 
     static func summaryLine(_ finding: Finding, inlined: Bool) -> String {

@@ -94,6 +94,32 @@ enum Log {
             record.startedAt = Date().addingTimeInterval(-531)
             record.runSeconds = 531
         }
+        // Two findings, one of which has nowhere to hang. The mix is the whole
+        // point: a review where every finding anchors looks fine however the
+        // summary is worded, and the row that says "summary only" is the one
+        // nobody can conjure on demand — it needs a real pull request whose
+        // diff happens not to contain a line the model wanted to talk about.
+        if status == .ready || status == .posted {
+            record.prepared = [
+                PreparedFinding(
+                    finding: Finding(tier: .mild, file: "Sources/Deep/Link.swift",
+                                     line: 351, endLine: nil,
+                                     summary: "The guard sits under the wrong comment.",
+                                     detail: nil, recommendation: "Move it below.",
+                                     suggestion: nil),
+                    anchor: ReviewThread(path: "Sources/Deep/Link.swift", line: 351,
+                                         startLine: nil, body: "…"),
+                    isSelected: true),
+                PreparedFinding(
+                    finding: Finding(tier: .mild, file: "docs/specs/home-view.md",
+                                     line: 102, endLine: nil,
+                                     summary: "The spec still documents the apex URL.",
+                                     detail: nil, recommendation: "Update it.",
+                                     suggestion: nil),
+                    anchor: nil,
+                    isSelected: true),
+            ]
+        }
         switch status {
         case .failed: record.failure = "unknown skill: /nope"
         case .skipped: record.failure = AutoReviewSkip.repoNotAllowed.reason

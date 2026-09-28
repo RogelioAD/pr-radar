@@ -453,4 +453,69 @@ extension AutoReviewCommentTests {
         record.body = "b"
         XCTAssertFalse(record.isAwaitingSelection)
     }
+    // MARK: - Saying how many are actually inline
+
+    private func mild(_ summary: String, file: String? = "a.swift",
+                      line: Int? = 10) -> Finding {
+        Finding(tier: .mild, file: file, line: line, endLine: nil,
+                summary: summary, detail: nil, recommendation: "do it", suggestion: nil)
+    }
+
+    func testEverythingAnchoredSaysEachIsInline() {
+        let text = AutoReviewComment.tally([mild("one"), mild("two")], unanchored: 0)
+        XCTAssertTrue(text.contains("2 mild"), text)
+        XCTAssertTrue(text.contains("Each is commented inline below."), text)
+    }
+
+    /// The bug as reported: two findings ticked, one anchorable, and the review
+    /// announced that both were inline — then contradicted itself on the
+    /// finding's own row. Nothing was lost; the summary was lying about it.
+    func testAMixSaysHowManyAreInlineAndHowManyAreNot() {
+        let text = AutoReviewComment.tally([mild("one"), mild("two")], unanchored: 1)
+        XCTAssertFalse(text.contains("Each is commented inline below."),
+                       "claimed every finding was inline when one was not: \(text)")
+        XCTAssertTrue(text.contains("1 commented inline below"), text)
+        XCTAssertTrue(text.contains("1 not in the diff"), text)
+    }
+
+    func testNothingAnchoredSaysSoRatherThanPromisingInlineComments() {
+        let none = AutoReviewComment.tally([mild("one"), mild("two")], unanchored: 2)
+        XCTAssertFalse(none.contains("inline below"), none)
+        XCTAssertTrue(none.contains("None are in this pull request's diff"), none)
+
+        let one = AutoReviewComment.tally([mild("only")], unanchored: 1)
+        XCTAssertTrue(one.contains("It is not in this pull request's diff"), one)
+        XCTAssertFalse(one.contains("It is in this pull"), "reads as the opposite: \(one)")
+    }
+
+    /// Whatever the caller passes, the sentence has to describe the findings it
+    /// was actually given.
+    func testTheCountIsClampedToTheFindingsItDescribes() {
+        XCTAssertTrue(AutoReviewComment.tally([mild("one")], unanchored: 9)
+            .contains("It is not in this pull request's diff"))
+        XCTAssertTrue(AutoReviewComment.tally([mild("one")], unanchored: -3)
+            .contains("Each is commented inline below."))
+    }
+
+    func testAnEmptyReviewStillSaysNothingToRaise() {
+        XCTAssertEqual(AutoReviewComment.tally([], unanchored: 0), "**Nothing to raise.**")
+    }
+
+    /// End to end through `body`, which is what actually reaches the pull
+    /// request — the unit under report was the composed review, not the helper.
+    func testTheComposedBodyAgreesWithItsOwnFindingRows() {
+        let anchored = mild("anchored one")
+        let stranded = mild("stranded one", file: "untouched.md", line: 102)
+        let body = AutoReviewComment.body([anchored, stranded],
+                                          skill: "/judge",
+                                          pingKey: "acme/repo#1@t",
+                                          unanchored: [stranded])
+
+        XCTAssertFalse(body.contains("Each is commented inline below."), body)
+        XCTAssertTrue(body.contains("1 commented inline below"), body)
+        // The row-level note that used to contradict the opening line.
+        XCTAssertTrue(body.contains("stranded one _(not in the diff; no inline comment)_"),
+                      body)
+    }
+
 }

@@ -310,9 +310,17 @@ struct RowView: View {
                         // where you are looking" is not something to discover
                         // on the PR afterwards.
                         if !prepared.isAnchored {
+                            // Tinted rather than tertiary. It sat in the same
+                            // grey as the file path beside it, so the one row
+                            // that behaves differently from every other looked
+                            // exactly like them — and the difference was found
+                            // on the pull request afterwards instead of here.
                             Text("summary only")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.tertiary)
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(Health.attention.tint)
+                                .help("Not in this pull request's diff. It will be "
+                                      + "posted in the summary rather than against "
+                                      + "its line.")
                         }
                         if prepared.finding.suggestion != nil && prepared.isAnchored {
                             Image(systemName: "wand.and.stars.inverse")
