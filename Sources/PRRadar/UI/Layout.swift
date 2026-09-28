@@ -21,6 +21,15 @@ enum Layout {
     /// Dock, not the user's own hand.
     static let badgeSizing = BadgeSizing(minimum: 28, maximum: 128)
 
+    /// The "something in here changed" dot, wherever one is drawn.
+    ///
+    /// One number rather than three. The same signal appears on the footer's
+    /// room buttons, on the tab strip and on a newly-won trophy, and the
+    /// trophy's was a point larger than the other two for no reason anybody
+    /// could have named — which reads as two different marks rather than one
+    /// mark in two places.
+    static let noticeDot: CGFloat = 5
+
     /// Grip depth at each corner of the collapsed badge. Generous for the same
     /// reason as `resizeEdge`: 6pt was missed more often than it was hit.
     /// `BadgeZones` shrinks it on a small badge so the middle stays clickable.

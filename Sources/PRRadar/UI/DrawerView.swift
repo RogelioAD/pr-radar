@@ -226,7 +226,7 @@ struct DrawerView: View {
                     if let tint = dot(for: room) {
                         Circle()
                             .fill(tint)
-                            .frame(width: 5, height: 5)
+                            .frame(width: Layout.noticeDot, height: Layout.noticeDot)
                             .offset(x: 3, y: -2)
                     }
                 }

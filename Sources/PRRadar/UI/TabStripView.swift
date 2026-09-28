@@ -68,7 +68,8 @@ struct TabStripView: View {
                     .padding(.vertical, 0.5)
                     .background(Capsule().fill(Color.primary.opacity(selected ? 0.16 : 0.10)))
                 if readyDot(tab) {
-                    Circle().fill(Health.good.tint).frame(width: 5, height: 5)
+                    Circle().fill(Health.good.tint)
+                        .frame(width: Layout.noticeDot, height: Layout.noticeDot)
                 }
             }
             .foregroundStyle(selected ? Color.primary : Color.secondary)

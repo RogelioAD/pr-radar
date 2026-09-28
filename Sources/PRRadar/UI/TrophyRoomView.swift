@@ -71,7 +71,7 @@ struct TrophyCell: View {
                 if isNew {
                     Circle()
                         .fill(Health.good.tint)
-                        .frame(width: 6, height: 6)
+                        .frame(width: Layout.noticeDot, height: Layout.noticeDot)
                         // A ring in the room's own material, so the dot reads
                         // as sitting on the trophy rather than painted into it.
                         .overlay(Circle().strokeBorder(.background, lineWidth: 1.5))
