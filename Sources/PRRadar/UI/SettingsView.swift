@@ -292,6 +292,15 @@ struct SettingsView: View {
         row("Latest release") {
             switch state.updateStatus {
             case .available(let version, let url):
+                // The same dot, in the same blue, as the one on the gear that
+                // brought you here. The gear says there is something in this
+                // room; without this the room says nothing back, and the thing
+                // it was pointing at sits below General, Leads and Appearance
+                // with nothing to catch the eye on the way past.
+                Circle()
+                    .fill(Health.running.tint)
+                    .frame(width: Layout.noticeDot, height: Layout.noticeDot)
+                    .accessibilityHidden(true)
                 Button("Get \(version.description)") { openURL(url) }
                     .help("Open the release page for \(version.description)")
             case .upToDate:

@@ -102,6 +102,26 @@ enum Log {
         return record
     }
 
+    /// PRRADAR_FAKE_UPDATE=<version> stands the app up as though that release
+    /// were published — the dot on the gear, the tooltip naming the version,
+    /// and the Get button in Settings.
+    ///
+    /// The same reason as the banner fake, and the comment on the gear's dot
+    /// says it outright: a release is announced a few days a year. Waiting for
+    /// a real one in order to look at how the announcement reads is not a plan,
+    /// and publishing one in order to see it is worse.
+    ///
+    /// The URL is built from whichever repository the update check is actually
+    /// watching, so a fork looking at this sees its own releases page rather
+    /// than somebody else's.
+    static var fakeUpdate: UpdateStatus? {
+        guard let raw = ProcessInfo.processInfo.environment["PRRADAR_FAKE_UPDATE"],
+              let version = AppVersion(raw),
+              let url = URL(string: "https://github.com/\(Prefs.updateRepo)/releases")
+        else { return nil }
+        return .available(version: version, url: url)
+    }
+
     /// PRRADAR_FAKE_READY=1 forces every one of my PRs to look mergeable, so
     /// the badge's green dot can be inspected. Both real PRs are BLOCKED on
     /// reviews, so there is otherwise no way to see it.

@@ -195,6 +195,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state.trophyState.record(TrophyFact.installedOfferedUpdate)
         }
 
+        // Before the network, not after: the point is to see the announcement
+        // without one having been published, and a failed check would otherwise
+        // overwrite it with `.unknown`.
+        if let faked = Log.fakeUpdate {
+            state.updateStatus = faked
+            Log.debug("update check: faked -> \(faked)")
+            return
+        }
+
         do {
             let release = try await GitHubClient(token: token).fetchLatestRelease(repo: repo)
             let status = UpdateCheck.evaluate(current: current,
