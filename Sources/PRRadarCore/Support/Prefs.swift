@@ -40,6 +40,7 @@ public enum Prefs {
         static let reviewWorkspace = "review.workspace"
         static let reviewModel = "review.model"
         static let reviewBudget = "review.budget"
+        static let reviewMaxPerHour = "review.maxPerHour"
         static let reviewLog = "review.log"
     }
 
@@ -375,6 +376,25 @@ public enum Prefs {
             return defaults.double(forKey: Key.reviewBudget)
         }
         set { defaults.set(newValue, forKey: Key.reviewBudget) }
+    }
+
+    /// How many reviews may *start* in any rolling hour. Zero means no cap.
+    ///
+    /// Six, which is what it was when it was hardcoded — the point of surfacing
+    /// it is not a better default but a visible one. A row that says "hourly
+    /// limit reached" is naming a number, and a number nobody can see or change
+    /// reads as the feature having quietly broken.
+    ///
+    /// Counted from the moment a review *starts*, so a run that fails still
+    /// spends its slot. That is the honest accounting — a failed review costs
+    /// the same tokens as one that worked — but it does mean a broken setup
+    /// burns the hour twice as fast as it looks like it should.
+    public static var reviewMaxPerHour: Int {
+        get {
+            guard defaults.object(forKey: Key.reviewMaxPerHour) != nil else { return 6 }
+            return max(0, defaults.integer(forKey: Key.reviewMaxPerHour))
+        }
+        set { defaults.set(max(0, newValue), forKey: Key.reviewMaxPerHour) }
     }
 
     /// Every automatic review the app remembers, as one JSON blob — the same

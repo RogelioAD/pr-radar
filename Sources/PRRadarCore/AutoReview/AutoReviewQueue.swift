@@ -1,6 +1,12 @@
 import Foundation
 
-/// The knobs on automatic review that are not worth a settings row each.
+/// The knobs on automatic review.
+///
+/// Most are not worth a settings row each and stay at their defaults here.
+/// `maxPerHour` is the exception: it is the one that stops the queue outright,
+/// and a ceiling nobody can see or move is indistinguishable from the feature
+/// being broken — the row says "hourly limit reached" and, until it was
+/// settable, there was nothing on screen that could raise it.
 public struct AutoReviewPolicy: Equatable, Sendable {
     public var isEnabled = false
     /// A draft is not asking yet.
@@ -9,7 +15,8 @@ public struct AutoReviewPolicy: Equatable, Sendable {
     /// broken setup should give up, not grind.
     public var maxAttempts = 2
     public var retryAfter: TimeInterval = 3_600
-    /// A ceiling on how much this can cost while nobody is watching.
+    /// A ceiling on how much this can cost while nobody is watching. Zero
+    /// means no ceiling, which is a choice rather than a default.
     public var maxPerHour = 6
 
     public init(isEnabled: Bool = false, skipDrafts: Bool = true,
@@ -20,6 +27,20 @@ public struct AutoReviewPolicy: Equatable, Sendable {
         self.maxAttempts = maxAttempts
         self.retryAfter = retryAfter
         self.maxPerHour = maxPerHour
+    }
+
+    /// How many more reviews may start in this hour — `Int.max` when uncapped.
+    ///
+    /// A method rather than the subtraction written out at each call site,
+    /// because both edges of it are sharp. Zero means no cap, so the plain
+    /// `startedInLastHour < maxPerHour` comparison reads an uncapped setting as
+    /// a cap of none and stops the queue outright. And the difference goes
+    /// negative the moment the cap is lowered below what has already run —
+    /// which a user can now do from Settings, mid-hour — where `prefix` traps
+    /// rather than returning nothing.
+    public func remainingThisHour(started: Int) -> Int {
+        guard maxPerHour > 0 else { return .max }
+        return max(0, maxPerHour - started)
     }
 }
 
@@ -87,14 +108,15 @@ public enum AutoReviewQueue {
                                startedInLastHour: Int,
                                now: Date) -> [ReviewItem] {
         guard policy.isEnabled else { return [] }
-        guard startedInLastHour < policy.maxPerHour else { return [] }
+        let room = policy.remainingThisHour(started: startedInLastHour)
+        guard room > 0 else { return [] }
 
         return items
             .filter { skip(for: $0, log: log, viewerLogins: viewerLogins,
                            allowlist: allowlist, policy: policy,
                            startedInLastHour: startedInLastHour, now: now) == nil }
             .sorted { $0.pingedAt < $1.pingedAt }
-            .prefix(policy.maxPerHour - startedInLastHour)
+            .prefix(room)
             .map { $0 }
     }
 
@@ -185,7 +207,9 @@ public enum AutoReviewQueue {
             }
         }
 
-        guard startedInLastHour < policy.maxPerHour else { return .rateLimited }
+        guard policy.remainingThisHour(started: startedInLastHour) > 0 else {
+            return .rateLimited
+        }
         return nil
     }
 }

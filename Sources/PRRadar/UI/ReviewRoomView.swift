@@ -242,6 +242,45 @@ struct ReviewRoomView: View {
 
         Divider()
 
+        // Next to the spend limit, because they are the same question asked
+        // twice: how much of this may happen while you are not looking. This
+        // one had an answer and no row — PRs came back "hourly limit reached"
+        // with nothing on screen admitting a limit existed.
+        VStack(alignment: .leading, spacing: 4) {
+            row("Reviews per hour",
+                help: "How many reviews may start in any hour. Zero means no limit.") {
+                HStack(spacing: 4) {
+                    TextField("6", value: $state.reviewMaxPerHour, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 56)
+                        .accessibilityLabel("Reviews that may start per hour")
+                    Stepper("Reviews per hour", value: $state.reviewMaxPerHour,
+                            in: 0...50, step: 1)
+                        .labelsHidden()
+                }
+            }
+            // Which edge of it is worth saying changes with the value: at zero
+            // the thing to know is that nothing is pacing this, and otherwise
+            // it is that a review which failed still spent its slot.
+            //
+            // The non-zero line names the zero, the way the spend limit's does.
+            // Saying it only *once the value is zero* tells you what you have
+            // already done and never that you could: the escape hatch was
+            // reachable only by hovering for a tooltip, or by guessing.
+            Text(state.reviewMaxPerHour == 0
+                 ? "No limit — everything eligible is reviewed as fast as it arrives, "
+                   + "at whatever that costs."
+                 : "Counted from when a review starts, so one that fails still spends "
+                   + "its slot. PRs past the limit wait, and say so. Set it to 0 for "
+                   + "no limit.")
+                .font(.system(size: 10))
+                .foregroundStyle(state.reviewMaxPerHour == 0
+                                 ? Health.attention.tint : .init(.tertiaryLabelColor))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
+        Divider()
+
         // Posting is the irreversible half, so it gets a choice of its own
         // rather than being folded into the switch above.
         VStack(alignment: .leading, spacing: 4) {

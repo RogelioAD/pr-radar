@@ -381,6 +381,20 @@ final class AppState: ObservableObject {
         didSet { Prefs.reviewBudget = reviewBudget }
     }
 
+    /// How many reviews may start in any rolling hour. Zero means no cap.
+    ///
+    /// Surfaced for the reason the spend limit was, and after the same failure:
+    /// rows sat there saying "hourly limit reached" with nothing anywhere in
+    /// the app naming the limit, let alone offering to move it. A ceiling you
+    /// cannot see is only distinguishable from a bug by reading the source.
+    @Published var reviewMaxPerHour: Int = Prefs.reviewMaxPerHour {
+        didSet {
+            let clamped = max(0, reviewMaxPerHour)
+            if clamped != reviewMaxPerHour { reviewMaxPerHour = clamped; return }
+            Prefs.reviewMaxPerHour = clamped
+        }
+    }
+
     /// Where the clones live.
     ///
     /// Written through the moment it changes rather than buffered like the

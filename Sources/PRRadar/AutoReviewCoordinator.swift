@@ -181,7 +181,8 @@ final class AutoReviewCoordinator {
     }
 
     private func policy() -> AutoReviewPolicy {
-        AutoReviewPolicy(isEnabled: state.autoReviewEnabled && state.canAutoReview)
+        AutoReviewPolicy(isEnabled: state.autoReviewEnabled && state.canAutoReview,
+                         maxPerHour: state.reviewMaxPerHour)
     }
 
     private func startedInLastHour() -> Int {

@@ -19,8 +19,8 @@ final class AutoReviewQueueTests: XCTestCase {
                    pingedAt: now.addingTimeInterval(pingedAt), nodeID: nodeID)
     }
 
-    private func policy(_ enabled: Bool = true) -> AutoReviewPolicy {
-        AutoReviewPolicy(isEnabled: enabled)
+    private func policy(_ enabled: Bool = true, maxPerHour: Int = 6) -> AutoReviewPolicy {
+        AutoReviewPolicy(isEnabled: enabled, maxPerHour: maxPerHour)
     }
 
     private func skip(_ item: ReviewItem,
@@ -211,6 +211,41 @@ final class AutoReviewQueueTests: XCTestCase {
             items: items, log: AutoReviewLog(), viewerLogins: me,
             allowlist: allowed, policy: policy(), startedInLastHour: 4, now: now)
         XCTAssertEqual(pending.count, 2)
+    }
+
+    /// The cap is a settings row now, so its own value has to be honoured
+    /// rather than the six it used to be fixed at.
+    func testTheCapFollowsTheSetting() {
+        let items = (1...10).map { item(number: $0, pingedAt: TimeInterval($0)) }
+        let pending = AutoReviewQueue.pending(
+            items: items, log: AutoReviewLog(), viewerLogins: me, allowlist: allowed,
+            policy: policy(maxPerHour: 2), startedInLastHour: 0, now: now)
+        XCTAssertEqual(pending.count, 2)
+        XCTAssertEqual(skip(item(), policy: policy(maxPerHour: 2),
+                            startedInLastHour: 2), .rateLimited)
+    }
+
+    /// Zero is "no ceiling", the same as it means on the spend limit — and not
+    /// a ceiling of none, which is what the old `started < maxPerHour` test
+    /// would have read it as.
+    func testZeroMeansNoCapRatherThanNoReviews() {
+        let items = (1...10).map { item(number: $0, pingedAt: TimeInterval($0)) }
+        let pending = AutoReviewQueue.pending(
+            items: items, log: AutoReviewLog(), viewerLogins: me, allowlist: allowed,
+            policy: policy(maxPerHour: 0), startedInLastHour: 99, now: now)
+        XCTAssertEqual(pending.count, 10)
+        XCTAssertNil(skip(item(), policy: policy(maxPerHour: 0), startedInLastHour: 99))
+    }
+
+    /// Lowering the cap mid-hour, below what has already run, leaves the
+    /// subtraction negative. It has to read as "no room left" — `prefix` traps
+    /// on a negative length rather than handing back nothing.
+    func testACapLoweredBelowWhatHasAlreadyRunStopsTheQueue() {
+        let items = (1...10).map { item(number: $0, pingedAt: TimeInterval($0)) }
+        XCTAssertEqual(AutoReviewPolicy(maxPerHour: 2).remainingThisHour(started: 5), 0)
+        XCTAssertTrue(AutoReviewQueue.pending(
+            items: items, log: AutoReviewLog(), viewerLogins: me, allowlist: allowed,
+            policy: policy(maxPerHour: 2), startedInLastHour: 5, now: now).isEmpty)
     }
 
     // MARK: - What the row says
