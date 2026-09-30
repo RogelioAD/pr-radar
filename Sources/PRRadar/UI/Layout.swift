@@ -103,6 +103,17 @@ enum Layout {
     /// Height of the grab strip along the drawer's top edge. Generous on
     /// purpose: at 6pt the pointer missed it more often than it hit it.
     static let resizeEdge: CGFloat = 12
+    /// The capsule drawn in that strip, as wide as it looks.
+    static let resizeHandleMark: CGFloat = 36
+    /// What the strip actually answers for, centred: the capsule plus 18pt of
+    /// slop each side.
+    ///
+    /// Not the drawer's full width, which is what it used to be. The top edge
+    /// of a window is the one place a hand goes to move it, and the whole of
+    /// it resizing meant the drawer could only be moved from the bare material
+    /// beside the title — so it read as a window that could not be moved at
+    /// all. The handle keeps its column; the rest of the edge drags.
+    static let resizeHandle: CGFloat = 72
     /// Gap kept from the screen edges when placing the panel by default.
     static let screenInset: CGFloat = 24
 
@@ -123,6 +134,43 @@ enum Layout {
     /// The empty states already reserve a whole row's height for a 20pt SF
     /// Symbol, so this costs no layout at all.
     static let emptyStateMascotPoints: CGFloat = 48
+    /// The row of visitors in the seasonal banner. Small: they are there to be
+    /// recognised, not read — the character itself is one click away.
+    static let noticeMascotPoints: CGFloat = 20
+
+    /// How tall the seasonal banner is.
+    ///
+    /// One number, read by the view that draws it and by `chromeHeight`, which
+    /// makes room for it. The two disagreeing is exactly the bug — the same
+    /// one `emptyStateHeight` carries a note about.
+    static let seasonalNoticeHeight: CGFloat = 52
+
+    /// The empty mark gutter on a banner perch, in points, so the row of
+    /// faces can close it up. Derived from the same arithmetic
+    /// `SpriteLayout.blockWidth` uses rather than measured off a screenshot.
+    static func noticeMascotGutter(for mascots: [Mascot], backingScale: CGFloat) -> CGFloat {
+        guard let first = mascots.first else { return 0 }
+        let unit = CGFloat(SpriteLayout.unit(for: first))
+        return (unit + CGFloat(Mark.width) * unit)
+            * noticeMascotScale(for: mascots, backingScale: backingScale)
+    }
+
+    /// One scale for the whole row of them, taken from the tallest crop.
+    ///
+    /// Not per character, which is what every other mascot surface does and
+    /// what this tried first. A scale snapped from each character's own
+    /// `headRows` lands on a different rung for each: Rattle crops to 26 rows
+    /// and rounds up to 1×, so he came out at twice the size of the other
+    /// three and 66pt wide, which pushed the caption beside them off the end
+    /// of the strip. Elsewhere a character is alone and its own size is the
+    /// only one that matters; in a row they are being compared, and four
+    /// characters at three scales reads as a mistake because it is one.
+    static func noticeMascotScale(for mascots: [Mascot], backingScale: CGFloat) -> CGFloat {
+        SpriteScale.snapped(targetPoints: noticeMascotPoints,
+                            spriteWidth: mascots.map(\.headRows).max() ?? 48,
+                            backingScale: backingScale,
+                            minimum: 1 / max(1, backingScale))
+    }
 
     static func headerMascotScale(for mascot: Mascot, backingScale: CGFloat) -> CGFloat {
         SpriteScale.snapped(targetPoints: headerMascotPoints,
@@ -235,14 +283,22 @@ enum Layout {
     /// converted, so enlarging the art cannot quietly shrink the floor.
     private static let badgeMinimumDigitPoints: CGFloat = 10
 
+    /// `crisp` is false only while a corner is being dragged, where the badge
+    /// follows the pointer instead of the ladder. See `SpriteScale.continuous`
+    /// for why, and `PanelController.commitCornerResize` for the settle.
     static func badgeScale(tile: CGFloat, backingScale: CGFloat,
-                           mascot: Mascot) -> CGFloat {
+                           mascot: Mascot, crisp: Bool = true) -> CGFloat {
         let cells = SpriteLayout.blockHeight(for: mascot)
         let digitCells = Counter.height * SpriteLayout.unit(for: mascot)
+        let floor = badgeMinimumDigitPoints / CGFloat(digitCells)
+        guard crisp else {
+            return SpriteScale.continuous(targetPoints: tile,
+                                          spriteWidth: cells, minimum: floor)
+        }
         return SpriteScale.snapped(targetPoints: tile,
                                    spriteWidth: cells,
                                    backingScale: backingScale,
-                                   minimum: badgeMinimumDigitPoints / CGFloat(digitCells))
+                                   minimum: floor)
     }
 
     /// The tile size a snapped scale actually represents.
@@ -355,16 +411,24 @@ enum Layout {
     /// account picker is a pill inside the filter bar rather than a row of its
     /// own, so a second account costs no chrome and there is nothing here to
     /// keep in step with it.
-    static func chromeHeight(for surface: DrawerSurface) -> CGFloat {
+    ///
+    /// `notice` is the seasonal banner's height, or zero when it is not up.
+    /// Passed in rather than read from anywhere, because this is the number
+    /// the *window* is framed from: a strip drawn in the drawer that this does
+    /// not count is a strip the panel has made no room for, and what it costs
+    /// is the last row of the list. The banner draws itself at exactly
+    /// `seasonalNoticeHeight` for the same reason.
+    static func chromeHeight(for surface: DrawerSurface,
+                             notice: CGFloat = 0) -> CGFloat {
         switch surface {
         // header + tab strip + filter bar + footer, plus four dividers.
         case .reviews, .mine:
-            return headerHeight + tabStripHeight + filterBarHeight + footerHeight + 4
+            return headerHeight + tabStripHeight + filterBarHeight + footerHeight + 4 + notice
         // header + progress footer, plus two dividers. Every other room hides
         // the same two controls and carries a footer of the same height, so
         // they all come to exactly the same chrome.
         case .trophies, .settings, .review:
-            return headerHeight + footerHeight + 2
+            return headerHeight + footerHeight + 2 + notice
         }
     }
 
@@ -409,11 +473,11 @@ enum Layout {
 
     static let sizing = sizing(for: .reviews)
 
-    static func sizing(for surface: DrawerSurface) -> DrawerSizing {
+    static func sizing(for surface: DrawerSurface, notice: CGFloat = 0) -> DrawerSizing {
         DrawerSizing(
             rowSpacing: roomSpacing(for: surface) ?? rowSpacing,
             listPadding: listPadding,
-            chromeHeight: chromeHeight(for: surface),
+            chromeHeight: chromeHeight(for: surface, notice: notice),
             maxHeight: fallbackMaxHeight,
             estimatedRowHeight: estimatedRowHeight(for: surface),
             emptyHeight: emptyStateHeight
@@ -425,8 +489,9 @@ enum Layout {
                              userContentHeight: CGFloat?,
                              maxHeight: CGFloat,
                              snapping: Bool = true,
-                             surface: DrawerSurface = .reviews) -> CGFloat {
-        sizing(for: surface)
+                             surface: DrawerSurface = .reviews,
+                             notice: CGFloat = 0) -> CGFloat {
+        sizing(for: surface, notice: notice)
             .windowHeight(rowHeights: rowHeights,
                           itemCount: itemCount,
                           userContentHeight: userContentHeight,

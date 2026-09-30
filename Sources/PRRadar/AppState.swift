@@ -985,12 +985,82 @@ final class AppState: ObservableObject {
     // MARK: - Mascot
 
     /// nil means the user turned the mascot off.
+    ///
+    /// The *stored* choice, which is not always the one on screen: a seasonal
+    /// character picked in October is still recorded in November, and comes
+    /// back rather than being forgotten if the toggle below is turned on. See
+    /// `effectiveMascot`.
     @Published var mascot: MascotID? = Prefs.mascot {
         didSet {
             Prefs.mascot = mascot
             if let mascot { trophyState.record(TrophyFact.mascotSeen(mascot)) }
+            // Choosing one of the visitors *is* reading the announcement.
+            // Leaving the banner up over a drawer that is already showing the
+            // character it advertises is the app talking past the user.
+            if let mascot, mascot.season != .evergreen { dismissSeasonalNotice() }
         }
     }
+
+    /// Whether the October characters stay on all year.
+    @Published var keepSeasonalMascots: Bool = Prefs.keepSeasonalMascots {
+        didSet { Prefs.keepSeasonalMascots = keepSeasonalMascots }
+    }
+
+    /// The season whose arrival has already been announced, or nil.
+    ///
+    /// Published so dismissing the banner re-lays the drawer out: the panel is
+    /// framed from a height that counts the strip, and a dismissal the state
+    /// does not announce leaves the window 52pt taller than what is in it.
+    @Published var seenSeasonalNotice: String? = Prefs.seenSeasonalNotice {
+        didSet { Prefs.seenSeasonalNotice = seenSeasonalNotice }
+    }
+
+    /// Whether the drawer is carrying the seasonal arrival banner.
+    var showsSeasonalNotice: Bool {
+        SeasonalNotice.shouldShow(on: today, acknowledged: seenSeasonalNotice)
+    }
+
+    /// Who the banner is announcing.
+    var seasonalVisitors: [MascotID] { SeasonalNotice.visitors(on: today) }
+
+    /// Read once and kept, so the banner cannot change its mind about who is
+    /// visiting halfway through being looked at.
+    func dismissSeasonalNotice() {
+        seenSeasonalNotice = SeasonalNotice.season(on: today)
+    }
+
+    /// What day the seasonal cast thinks it is.
+    ///
+    /// One property rather than four calls to `Date()`, so the roster, the
+    /// banner and the acknowledgement it writes cannot land on different sides
+    /// of midnight — and so `PRRADAR_FAKE_DATE` moves all of them together.
+    var today: Date { Log.fakeDate ?? Date() }
+
+    /// The cast on duty today. Every surface that offers a character reads
+    /// this — the picker, the click-to-cycle, the tooltip — so none of them
+    /// can offer one the others do not have.
+    var mascotRoster: [MascotID] {
+        MascotID.onDuty(on: today, keepSeasonal: keepSeasonalMascots)
+    }
+
+    /// The character actually drawn: the stored choice while it is on duty,
+    /// and the default while it is not.
+    ///
+    /// Off stays off. An out-of-season pick falls back rather than leaving the
+    /// badge blank, because a missing mascot looks like a bug — the same
+    /// argument `Prefs.mascot` already makes about an unrecognised id.
+    var effectiveMascot: MascotID? {
+        guard let mascot else { return nil }
+        return mascotRoster.contains(mascot) ? mascot : MascotID.allCases.first
+    }
+
+    /// True only between the press and the release of a badge corner drag.
+    ///
+    /// Published because the badge draws itself: the panel and the view have
+    /// to agree about the sprite scale to the pixel, or the art and the window
+    /// that frames it come out different sizes — and the corner grips are
+    /// measured off the art.
+    @Published var isResizingBadge = false
 
     /// A transient reaction that outranks the derived mood while it lasts.
     /// Event-driven only — a review arriving. Pointer state is tracked
@@ -1035,7 +1105,7 @@ final class AppState: ObservableObject {
     /// turns pixel art into a blurry JPEG.
     @Published var backingScale: CGFloat = NSScreen.main?.backingScaleFactor ?? 2
 
-    var selectedMascot: Mascot? { mascot.map(Mascot.named) }
+    var selectedMascot: Mascot? { effectiveMascot.map(Mascot.named) }
 
     /// One derivation for every surface, so the drawer's character and the
     /// badge's can never disagree about what is going on.
@@ -1074,13 +1144,14 @@ final class AppState: ObservableObject {
     /// "Off" is a stop on the loop, not the end of it — cycling out of it has
     /// to lead back to the first character or the control dead-ends.
     func cycleMascot() {
-        mascot = MascotID.next(after: mascot)
+        mascot = MascotID.next(after: effectiveMascot, in: mascotRoster)
         mascotCycles += 1
     }
 
     /// What the next click lands on, for the tooltip.
     var nextMascotName: String? {
-        MascotID.next(after: mascot).map { Mascot.named($0).name } ?? "no mascot"
+        MascotID.next(after: effectiveMascot, in: mascotRoster)
+            .map { Mascot.named($0).name } ?? "no mascot"
     }
 
     /// One-shot reaction, used when a new review lands. Cancels any previous

@@ -48,6 +48,10 @@ struct DrawerView: View {
             grabber
             header
             Divider().opacity(0.6)
+            if state.showsSeasonalNotice {
+                seasonalNotice
+                Divider().opacity(0.6)
+            }
             // A room replaces everything below the header. Not hidden but
             // *absent*: a tab strip and a filter bar with nothing to act on
             // are two controls asking to be pressed and one band of chrome
@@ -97,6 +101,11 @@ struct DrawerView: View {
     /// itself must still agree with the geometry about where its top is — but
     /// a handle offering a drag that cannot move anything is worse than no
     /// handle at all.
+    ///
+    /// The tooltip is scoped to the handle's own columns rather than the whole
+    /// strip. Either side of it the top edge moves the window, and a band
+    /// promising "drag to resize" across all 440pt of an edge that mostly does
+    /// something else is the label lying about the control.
     @ViewBuilder
     private var grabber: some View {
         if state.activeSurface.fitsContent {
@@ -106,12 +115,94 @@ struct DrawerView: View {
         } else {
             Capsule()
                 .fill(Color.secondary.opacity(0.35))
-                .frame(width: 36, height: 4)
-                .frame(height: Layout.resizeEdge)
-                .frame(maxWidth: .infinity)
+                .frame(width: Layout.resizeHandleMark, height: 4)
+                .frame(width: Layout.resizeHandle, height: Layout.resizeEdge)
                 .contentShape(Rectangle())
                 .help("Drag to resize — snaps to whole rows")
+                .frame(maxWidth: .infinity)
         }
+    }
+
+    /// The one-off "they're here" strip, above whatever the drawer is showing.
+    ///
+    /// Above the tab strip rather than inside the list, because it is about
+    /// the app rather than about any one tab — and inside a list it would
+    /// scroll away from the thing it is announcing.
+    ///
+    /// It draws the characters rather than describing them. A line of text
+    /// saying four names is a line of text; four faces is the feature. They
+    /// are held still: this is a strip that exists to be read once and
+    /// dismissed, and four timelines animating at somebody while they try to
+    /// read past it is the opposite of what a one-off notice should do.
+    ///
+    /// Fixed to `Layout.seasonalNoticeHeight`, which is the same number
+    /// `chromeHeight` reserves. Letting it size itself is how the panel ends
+    /// up framed for a strip of one height around a strip of another.
+    private var seasonalNotice: some View {
+        let visitors = state.seasonalVisitors
+        let cast = visitors.map(Mascot.named)
+        let scale = Layout.noticeMascotScale(for: cast, backingScale: state.backingScale)
+        return HStack(spacing: 8) {
+            // Negative, and by exactly the mark gutter a perch reserves —
+            // `Mood.idle` draws no mark, so those columns are empty space
+            // between every pair of faces. Left in, four of them push the
+            // caption off the end of the strip.
+            // Bottom-aligned: they crop to different numbers of rows, and
+            // centring them leaves four characters hanging at four heights.
+            HStack(alignment: .bottom,
+                   spacing: -Layout.noticeMascotGutter(
+                    for: cast, backingScale: state.backingScale)) {
+                ForEach(cast, id: \.id) { mascot in
+                    MascotView(mascot: mascot,
+                               style: Mood.idle.style,
+                               scale: scale,
+                               crop: mascot.headRows,
+                               tempo: .still)
+                }
+            }
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("New for \(SeasonalNotice.monthName(on: state.today))")
+                    .font(.system(size: 12, weight: .semibold))
+                // Short, and it has to stay short. On a 1x display a 48-cell
+                // character cannot be drawn below 48pt, so four of them take
+                // 192pt of a 440pt strip — nearly half of it — where on a 2x
+                // display the same row is 105pt. The caption has to fit the
+                // narrow case, and the rest of what there is to say is in the
+                // tooltip and the accessibility label.
+                Text("Click the mascot to cycle.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            // Or the Spacer beside it wins the negotiation and the caption
+            // truncates with 80pt of empty strip to its right.
+            .layoutPriority(1)
+
+            Spacer(minLength: 4)
+
+            Button(action: state.dismissSeasonalNotice) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Dismiss — they stay until the end of the month either way, "
+                  + "and Settings keeps them all year")
+            .accessibilityLabel("Dismiss the seasonal characters notice")
+        }
+        .padding(.horizontal, 12)
+        .frame(height: Layout.seasonalNoticeHeight)
+        .frame(maxWidth: .infinity)
+        .background(Color.accentColor.opacity(0.08))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("New for \(SeasonalNotice.monthName(on: state.today)): "
+                            + "\(SeasonalNotice.names(visitors)). "
+                            + "Click the mascot in the header to try them.")
     }
 
     /// True when the content area is showing its own, larger mascot.
@@ -172,10 +263,11 @@ struct DrawerView: View {
 
     /// Always a button, whatever it happens to be drawing.
     ///
-    /// The cast cycles blip → scoot → wobble → bloop → off → blip, and "off" is a
-    /// stop on that loop rather than the end of it. Drawing the glyph as inert
-    /// art there is what strands somebody who cycles one past the last
-    /// character: the only way back in would be the context menu.
+    /// The cast cycles through whoever is on duty — blip → scoot → wobble →
+    /// bloop, plus the October four when they are about — then off, then round
+    /// again. "Off" is a stop on that loop rather than the end of it. Drawing
+    /// the glyph as inert art there is what strands somebody who cycles one
+    /// past the last character: the only way back in would be the context menu.
     ///
     /// Clicking has to be published as a header control or the press is taken
     /// as a window drag and never arrives — the same machinery the update chip

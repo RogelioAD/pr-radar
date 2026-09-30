@@ -58,7 +58,8 @@ final class PanelController {
         guard let mascot = state.selectedMascot else { return 1 }
         return Layout.badgeScale(tile: state.badgeTileSize,
                                  backingScale: state.backingScale,
-                                 mascot: mascot)
+                                 mascot: mascot,
+                                 crisp: !state.isResizingBadge)
     }
 
     /// The screen the panel is actually on, for anything that has to appear
@@ -120,7 +121,12 @@ final class PanelController {
     /// measured against the press rather than accumulated frame to frame — the
     /// badge is being re-framed under the pointer on every one of them, and
     /// accumulating would let rounding walk it across the desktop.
-    private var cornerDragOrigin: (tile: CGFloat, frame: NSRect)?
+    /// Where the corner drag started, and which corner it was. The corner is
+    /// kept because the settle has to re-anchor on it: letting go re-frames
+    /// the badge at the snapped size, and doing that from the bottom-right
+    /// default would slide the corner out from under the hand that just let
+    /// go of it.
+    private var cornerDragOrigin: (tile: CGFloat, frame: NSRect, corner: BadgeCorner)?
 
     var onOpen: (ReviewItem) -> Void = { _ in }
     var onOpenMyPR: (MyPullRequest) -> Void = { _ in }
@@ -222,6 +228,7 @@ final class PanelController {
 
         observeActivation()
         observeWidth()
+        observeNotice()
         applyFrame()
     }
 
@@ -247,6 +254,34 @@ final class PanelController {
         state.objectWillChange
             .sink { [weak self] _ in
                 Task { @MainActor in self?.syncWidth() }
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Re-frames the drawer when the seasonal banner comes or goes.
+    ///
+    /// Nothing else would. `syncWidth` only acts on a width that has changed,
+    /// and this changes the height: the banner is counted in `chromeHeight`,
+    /// so dismissing it leaves the window 52pt taller than what is now in it
+    /// — a band of empty material under the footer. It is the same argument
+    /// `observeWidth` makes, on the other axis.
+    ///
+    /// Two ways in, which is why this watches the state rather than hanging
+    /// off the button: the × dismisses it, and so does picking one of the
+    /// visitors, from either the header or Settings.
+    ///
+    /// Read a turn late for the same reason `syncWidth` is — `@Published`
+    /// announces the change before it has happened, and the height is a
+    /// function of the value afterwards.
+    private func observeNotice() {
+        state.$seenSeasonalNotice
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.state.expanded else { return }
+                    self.applyFrame(animated: true)
+                }
             }
             .store(in: &cancellables)
     }
@@ -432,7 +467,8 @@ final class PanelController {
                             userContentHeight: state.userContentHeight,
                             maxHeight: availableMaxHeight,
                             snapping: !isDraggingHeight,
-                            surface: state.activeSurface)
+                            surface: state.activeSurface,
+                            notice: noticeHeight)
     }
 
     /// The drawer grows up and to the left, keeping the badge's bottom-right
@@ -499,16 +535,24 @@ final class PanelController {
         })
     }
 
+    /// What the seasonal banner is costing the drawer right now, which is
+    /// nothing at all on any day it is not up.
+    private var noticeHeight: CGFloat {
+        state.showsSeasonalNotice ? Layout.seasonalNoticeHeight : 0
+    }
+
     private static let zones = DrawerZones(headerHeight: Layout.headerHeight,
-                                           resizeEdge: Layout.resizeEdge)
+                                           resizeEdge: Layout.resizeEdge,
+                                           resizeHandle: Layout.resizeHandle)
 
     /// Classifies a point for the drag handler.
     ///
     /// Collapsed, the badge resizes from any of its four corners and moves from
-    /// everywhere else. Expanded, only the drawer's top edge resizes and only
-    /// its header moves; everywhere else belongs to SwiftUI so rows, menus and
-    /// the footer buttons stay clickable. The drawer deliberately grows no
-    /// corner grips — it has its own handle, and two would disagree.
+    /// everywhere else. Expanded, the grab handle at the middle of the top edge
+    /// resizes and the rest of the header moves; everywhere else belongs to
+    /// SwiftUI so rows, menus and the footer buttons stay clickable. The drawer
+    /// deliberately grows no corner grips — it has its own handle, and two
+    /// would disagree.
     ///
     /// `NSHostingView` is flipped, so its y grows downward — the conversion to
     /// a distance-from-top is what keeps the zones the right way up.
@@ -531,6 +575,7 @@ final class PanelController {
         // strip would be an edge the pointer can pull and nothing can follow.
         return Self.zones.zone(distanceFromTop: distance,
                                distanceFromLeft: point.x,
+                               width: hostingView.bounds.width,
                                canResize: !state.activeSurface.fitsContent,
                                controls: headerControls)
     }
@@ -545,7 +590,7 @@ final class PanelController {
         }
         let height = hostingView.bounds.height
         let probes: [(String, CGFloat)] = [
-            ("grab edge (visual top)", 2),
+            ("grab handle (top centre)", 2),
             ("header", Layout.headerHeight / 2),
             ("tab strip", Layout.headerHeight + Layout.tabStripHeight / 2),
             ("first row", Layout.headerHeight + Layout.tabStripHeight + 30),
@@ -559,6 +604,14 @@ final class PanelController {
             let pointY = hostingView.isFlipped ? visualY : height - visualY
             let zone = zone(at: NSPoint(x: state.drawerWidth / 2, y: pointY))
             Log.debug("   \(label): \(zone)")
+        }
+        // Must read `move`: the top edge either side of the handle is what
+        // moves the window, and the whole of it resizing is the bug this
+        // probe exists to catch coming back.
+        let edgeY = hostingView.isFlipped ? 2 : height - 2
+        for x in [CGFloat(8), state.drawerWidth - 8] {
+            Log.debug("   top edge beside the handle (x=\(Int(x))): "
+                      + "\(zone(at: NSPoint(x: x, y: edgeY)))")
         }
         // Each header control probed through the same path a real press takes.
         // These must read `.none`: a control the drag band still owns never
@@ -670,8 +723,8 @@ final class PanelController {
         // for them put the content height 64pt — one whole row of trophies —
         // below what the window was actually showing, and the edge fought
         // the pointer all the way up.
-        let chrome = Layout.chromeHeight(for: state.activeSurface)
-        let content = Layout.sizing(for: state.activeSurface).clamp(
+        let chrome = Layout.chromeHeight(for: state.activeSurface, notice: noticeHeight)
+        let content = Layout.sizing(for: state.activeSurface, notice: noticeHeight).clamp(
             windowHeight - chrome,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
@@ -690,11 +743,12 @@ final class PanelController {
         guard let draft = resizeDraft else { return }
         resizeDraft = nil
 
-        let snapped = Layout.sizing(for: state.activeSurface).snap(
+        let snapped = Layout.sizing(for: state.activeSurface, notice: noticeHeight).snap(
             draft,
             rowHeights: state.activeRowHeights,
             itemCount: state.activeRowCount,
-            limit: availableMaxHeight - Layout.chromeHeight(for: state.activeSurface)
+            limit: availableMaxHeight
+                - Layout.chromeHeight(for: state.activeSurface, notice: noticeHeight)
         )
         state.userContentHeight = snapped
         Prefs.setDrawerContentHeight(snapped, for: state.activeSurface)
@@ -719,8 +773,12 @@ final class PanelController {
         // folds back into must not move under it.
         guard !state.expanded else { return }
 
-        let start = cornerDragOrigin ?? (tile: state.badgeTileSize, frame: badgeFrame)
+        let start = cornerDragOrigin
+            ?? (tile: state.badgeTileSize, frame: badgeFrame, corner: corner)
         cornerDragOrigin = start
+        // Off the ladder for the duration, so the badge tracks the hand rather
+        // than waiting to jump a whole rung.
+        state.isResizingBadge = true
 
         state.badgeTileSize = Layout.badgeSizing.tileSize(from: start.tile,
                                                           corner: corner,
@@ -733,26 +791,46 @@ final class PanelController {
         applyFrame()
     }
 
-    /// On release, keep the size that was actually *drawn*.
+    /// On release, settle onto the nearest size the art can actually be drawn
+    /// at, and keep *that* rather than what the hand asked for.
     ///
-    /// A mascot badge can only be crisp at whole device pixels, so the sprite
-    /// scale snaps and the drawn size lands a little either side of what the
-    /// hand asked for. Storing the asked-for number instead would let the badge
-    /// drift a few points further every time it was resized and reopened. With
-    /// the mascot off the tile scales continuously and there is nothing to
-    /// reconcile.
+    /// A mascot badge is only crisp at whole device pixels, so the drag runs
+    /// off the ladder and this puts it back on. Storing the asked-for number
+    /// instead would let the badge drift a few points further every time it
+    /// was resized and reopened. With the mascot off the tile scales
+    /// continuously and there is nothing to reconcile.
+    ///
+    /// Eased rather than set outright, for the same reason the drawer eases
+    /// onto a row boundary: the rungs are `blockHeight / backingScale` points
+    /// apart — 54 on a 1x screen — so a settle can be a long way, and
+    /// arriving at it by stepping is a jolt at the end of a smooth gesture.
     private func commitCornerResize() {
+        let start = cornerDragOrigin
         cornerDragOrigin = nil
+        // Before anything reads `badgeScale`, which answers differently now.
+        state.isResizingBadge = false
+
         if state.badgeLayout != nil, let mascot = state.selectedMascot {
             state.badgeTileSize = Layout.badgeSizing.clamp(
                 Layout.tileSize(forBadgeScale: badgeScale, mascot: mascot))
+            // Re-anchored on the corner that was dragged, not on the default
+            // bottom-right: the badge is a different size now than the one the
+            // preview left behind, and the fixed point has to stay the corner
+            // opposite the hand.
+            if let start {
+                let size = badgeSize
+                badgeFrame = clamp(NSRect(
+                    origin: BadgeSizing.origin(dragging: start.corner,
+                                               in: start.frame, newSize: size),
+                    size: size))
+            }
         }
         Prefs.badgeOrigin = badgeFrame.origin
         // The same feedback the drawer gives when its edge settles onto a row:
         // on a trackpad it makes the end of the gesture felt rather than only
         // seen.
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-        applyFrame()
+        applyFrame(animated: true, duration: 0.12)
         // The grips just moved out from under a pointer that may not have, so
         // the cursor has to be re-derived rather than waiting to be told.
         hostingView.updateTrackingAreas()

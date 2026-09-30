@@ -271,6 +271,10 @@ anything**, which is what makes it pleasant to hand to an agent:
 - `make print` proves the whole data path — auth, fetch, parse, derived state —
   with no GUI involved.
 - `make test` covers every rule worth arguing about (see below).
+- `PRRADAR_FAKE_DATE=YYYY-MM-DD` stands the app up as though it were that day.
+  The seasonal cast and the banner that announces them exist on 31 days of the
+  year; without this the other 334 have no way to look at either, and "does the
+  banner clip the list" is not a question worth waiting until October to ask.
 - `PRRADAR_DEBUG=1` prints a hit-test zone map of the real laid-out drawer, and
   of the collapsed badge's four corner grips — including a probe of the panel
   corner outside the art, which must read `move` — so drag, resize and click
@@ -323,6 +327,14 @@ a click on the header and collapsed the drawer, while the real header and
 resize edge did nothing. The rules now live in `DrawerZones` — and, for the
 badge's corner grips, `BadgeZones` — keyed off a distance-from-top the view
 computes using its own `isFlipped`.
+
+**A resize strip must not span the edge it sits on.** The drawer's top 12pt
+resized across its full width, so the one place a hand goes to move a window
+changed its height instead — leaving the bare material beside the title as the
+only way to move the drawer, which reads as a window that cannot be moved.
+`DrawerZones` takes the drawer's width now and answers `resize` only for the
+handle's own centred columns; the rest of the edge moves. `PRRADAR_DEBUG=1`
+probes both ends of that edge, which must read `move`.
 
 **`performDrag(with:)` returns immediately** rather than blocking until
 mouse-up, so comparing pointer positions around it reports every drag as a

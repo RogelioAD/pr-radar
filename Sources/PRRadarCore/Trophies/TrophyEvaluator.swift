@@ -137,9 +137,12 @@ public enum TrophyEvaluator {
 
         // MARK: The app itself
 
-        award(.meetTheCast, MascotID.allCases.allSatisfy {
-            state.has(TrophyFact.mascotSeen($0))
-        })
+        // The regular cast only. Asking for the seasonal four would make this
+        // unwinnable for eleven months of the year and then unwinnable again
+        // for anyone who never turns the toggle on — a shelf slot that is
+        // empty for reasons the shelf cannot explain.
+        award(.meetTheCast, MascotID.allCases.filter { $0.season == .evergreen }
+            .allSatisfy { state.has(TrophyFact.mascotSeen($0)) })
         // Both guarded on a real bound. An unset snapshot has the size and
         // both limits at zero, and `0 >= 0` is true — so without the guard a
         // caller that simply never mentioned the badge would be handed a

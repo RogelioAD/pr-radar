@@ -25,6 +25,10 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     var zoneAt: (NSPoint) -> Zone = { _ in .move }
     /// Thickness of the resize strip. Supplied by the owner so the cursor
     /// region and the drag region cannot drift apart.
+    ///
+    /// Thickness only, not width: the strip's *columns* are the owner's rule
+    /// and `zoneAt` already answers for them. This view tracks the whole top
+    /// edge and asks per point — see `cursorTrackingRect`.
     var resizeEdgeThickness: CGFloat = 12
     var onClick: () -> Void = {}
     /// Reports whether a press is currently being held in a tracked zone.
@@ -249,6 +253,11 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
         // The view is flipped, so the visual top is minY rather than maxY.
         let visualTopY = isFlipped ? bounds.minY + 2 : bounds.maxY - 2
         guard zoneAt(NSPoint(x: bounds.midX, y: visualTopY)) == .resize else { return nil }
+        // The whole edge, though only its middle resizes. The zone is resolved
+        // from the pointer on every move inside the area, so a wider one costs
+        // nothing and is what lets the arrows drop back to a plain cursor as
+        // the pointer leaves the handle sideways — an area clipped to the
+        // handle would stop reporting at exactly the moment the answer changes.
         let thickness = resizeEdgeThickness
         let topY = isFlipped ? bounds.minY : bounds.maxY - thickness
         return NSRect(x: bounds.minX, y: topY, width: bounds.width, height: thickness)

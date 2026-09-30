@@ -23,6 +23,8 @@ public enum Prefs {
         static let updateRepo = "update.repo"
         static let notifiedUpdate = "update.notifiedVersion"
         static let mascot = "mascot.choice"
+        static let keepSeasonalMascots = "mascot.keepSeasonal"
+        static let seenSeasonalNotice = "mascot.seenSeasonalNotice"
         static let trophies = "trophies.state"
         static let drawerRoom = "drawer.room"
         /// Superseded by `drawerRoom`. Still read once, to carry an upgrader
@@ -157,6 +159,28 @@ public enum Prefs {
     }
 
     private static let mascotOffValue = "off"
+
+    /// Whether the seasonal characters stay on outside their month.
+    ///
+    /// Off by default, which is what makes them seasonal: they turn up in
+    /// October and go away again. Stored rather than derived so the answer
+    /// does not change under somebody who has already chosen one — and the
+    /// choice itself is kept whatever this says, so turning it back on
+    /// returns the character they had rather than the first of the four.
+    /// The season whose arrival notice has already been seen, as
+    /// `SeasonalNotice`'s key — `"2026-10"`.
+    ///
+    /// The key rather than a boolean, so next October comes round as news
+    /// again instead of staying dismissed for ever.
+    public static var seenSeasonalNotice: String? {
+        get { defaults.string(forKey: Key.seenSeasonalNotice) }
+        set { defaults.set(newValue, forKey: Key.seenSeasonalNotice) }
+    }
+
+    public static var keepSeasonalMascots: Bool {
+        get { defaults.bool(forKey: Key.keepSeasonalMascots) }
+        set { defaults.set(newValue, forKey: Key.keepSeasonalMascots) }
+    }
 
     /// Whether the My PRs list is narrowed to stacks.
     ///

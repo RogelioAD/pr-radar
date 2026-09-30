@@ -100,25 +100,48 @@ final class MascotTests: XCTestCase {
         }
     }
 
-    /// Only the two with nothing under them.
+    /// Only the ones with nothing under them.
     func testTheFloatersBobFurther() {
-        XCTAssertEqual(Mascot.scoot.bobScale, 2)
-        XCTAssertEqual(Mascot.wobble.bobScale, 2)
-        XCTAssertEqual(Mascot.blip.bobScale, 1)
-        XCTAssertEqual(Mascot.bloop.bobScale, 1)
+        for mascot in [Mascot.scoot, .wobble, .boo, .flit] {
+            XCTAssertEqual(mascot.bobScale, 2, "\(mascot.name) floats")
+        }
+        for mascot in [Mascot.blip, .bloop, .gourd, .rattle] {
+            XCTAssertEqual(mascot.bobScale, 1, "\(mascot.name) stands on something")
+        }
     }
 
     // MARK: - The sweep
 
-    /// Three of them have glass for a beam to cross. The alien does not, and
-    /// pulses instead — the branch exists precisely because he is the
-    /// exception.
+    /// Three of them have glass for a beam to cross. The other five do not,
+    /// and each does something else — the branch exists precisely because
+    /// they are the exceptions.
     func testGlassIsFoundOnTheThreeThatHaveIt() {
         XCTAssertNotNil(Mascot.blip.glassBounds)
         XCTAssertNotNil(Mascot.scoot.glassBounds)
         XCTAssertNotNil(Mascot.wobble.glassBounds)
-        XCTAssertNil(Mascot.bloop.glassBounds,
-                     "the one with no visor is supposed to have no glass")
+        for mascot in [Mascot.bloop, .boo, .flit, .gourd, .rattle] {
+            XCTAssertNil(mascot.glassBounds,
+                         "\(mascot.name) has no visor and should have no glass")
+        }
+    }
+
+    /// A glass sweep on a character with no glass draws nothing at all, which
+    /// is a character that stops moving in exactly the state that is supposed
+    /// to show the app working.
+    func testNobodyWithoutGlassIsGivenAGlassSweep() {
+        for mascot in Mascot.all where mascot.glassBounds == nil {
+            XCTAssertFalse([SweepKind.visor, .hud].contains(mascot.sweep),
+                           "\(mascot.name) sweeps glass it does not have")
+        }
+    }
+
+    /// Every sweep is somebody's. One nobody uses is dead code that still has
+    /// to be kept working.
+    func testEveryCharacterSweepsAndEverySweepIsUsed() {
+        let used = Set(Mascot.all.map(\.sweep))
+        for kind in [SweepKind.visor, .hud, .beam, .psi, .wisp, .echo, .flicker, .marrow] {
+            XCTAssertTrue(used.contains(kind), "\(kind) belongs to nobody")
+        }
     }
 
     /// The test that should have existed first. Deriving the sweep axis from
@@ -157,6 +180,77 @@ final class MascotTests: XCTestCase {
         XCTAssertGreaterThan(beamRows.max() ?? 0, 40,
                              "the searchlight should reach well below the saucer")
         XCTAssertGreaterThan(travel(.wobble).x, 2, "the searchlight should swing")
+    }
+
+    /// The same question for the October four, asked of whatever the sweep
+    /// *changed* rather than of accent cells alone: three of these four are
+    /// rendered mostly in the character's own chassis tones, and an
+    /// accent-only measurement calls that nothing. This is the test that
+    /// catches two sweeps quietly becoming one.
+    func testTheOctoberSweepsAreEachTheirOwnThing() {
+        func changed(_ m: Mascot, _ frame: Int) -> [Point] {
+            let plain = m.frame(eyes: .open, frame: frame, sweeping: false)
+            let swept = m.frame(eyes: .open, frame: frame, sweeping: true)
+            return swept.litPoints.filter { swept[$0.x, $0.y] != plain[$0.x, $0.y] }
+                + plain.litPoints.filter { swept[$0.x, $0.y] != plain[$0.x, $0.y] }
+        }
+        func centres(_ m: Mascot, _ frames: Range<Int>) -> [(x: Double, y: Double)] {
+            frames.compactMap { frame in
+                let pts = changed(m, frame)
+                guard !pts.isEmpty else { return nil }
+                return (pts.reduce(0.0) { $0 + Double($1.x) } / Double(pts.count),
+                        pts.reduce(0.0) { $0 + Double($1.y) } / Double(pts.count))
+            }
+        }
+        func travel(_ m: Mascot, _ frames: Range<Int>) -> (x: Double, y: Double) {
+            let s = centres(m, frames)
+            let xs = s.map(\.x), ys = s.map(\.y)
+            return ((xs.max() ?? 0) - (xs.min() ?? 0), (ys.max() ?? 0) - (ys.min() ?? 0))
+        }
+
+        // Boo shimmers up the body: a long vertical travel, almost no lateral.
+        let boo = travel(.boo, 0..<44)
+        XCTAssertGreaterThan(boo.y, 12, "Boo's shimmer should climb him")
+        XCTAssertGreaterThan(boo.y, boo.x * 3, "Boo's shimmer should not cross him")
+
+        // Rattle steps down the same axis, which is what makes the direction
+        // the thing that tells them apart.
+        let rattle = travel(.rattle, 0..<18)
+        XCTAssertGreaterThan(rattle.y, 8, "Rattle's pulse should run down him")
+        XCTAssertGreaterThan(rattle.y, rattle.x * 3, "Rattle's pulse should not cross him")
+
+        // And they run opposite ways, which is the only thing that tells the
+        // two vertical sweeps apart. Boo is sampled from frame 3, past the
+        // point where his wrapped trail is still hanging at the far end: the
+        // wrap puts mass at both ends of him at once, and a centre measured
+        // across it describes neither band.
+        let booRun = centres(.boo, 3..<22).map(\.y)
+        let rattleRun = centres(.rattle, 0..<9).map(\.y)
+        XCTAssertGreaterThan(booRun.first ?? 0, booRun.last ?? 0, "Boo rises")
+        XCTAssertLessThan(rattleRun.first ?? 0, rattleRun.last ?? 0, "Rattle descends")
+
+        // Gourd does not travel at all: he is lit from inside, so the whole
+        // carving pulses in place. A travelling centre here would mean the
+        // candle had turned into somebody else's beam.
+        let gourd = travel(.gourd, 0..<12)
+        XCTAssertLessThan(gourd.x, 3, "the candle should not wander sideways")
+        XCTAssertLessThan(gourd.y, 3, "the candle should not wander up or down")
+
+        // Flit throws his arcs clear of the body, well below it.
+        let reach = (0..<15).flatMap { changed(.flit, $0).map(\.y) }
+        XCTAssertGreaterThan(reach.max() ?? 0, 40,
+                             "the sonar should carry past his feet")
+    }
+
+    /// Rattle's pulse stops on each bone rather than sliding past them, which
+    /// is the whole difference between his sweep and Boo's. Stated as "the
+    /// same frame comes round twice in a row", because that is what a held
+    /// stop is and a smooth slide never does it.
+    func testTheSkeletonsPulseStepsRatherThanSlides() {
+        let frames = (0..<18).map { Mascot.rattle.frame(eyes: .open, frame: $0, sweeping: true) }
+        let held = zip(frames, frames.dropFirst()).filter { $0 == $1 }.count
+        XCTAssertGreaterThan(held, 5, "the pulse is sliding, not stepping")
+        XCTAssertLessThan(held, 17, "the pulse is not moving at all")
     }
 
     /// The rings expand. Checked as growth over time rather than as a shape,
@@ -310,6 +404,70 @@ final class MascotTests: XCTestCase {
         }
     }
 
+    /// Why the corner drag does not run on the snapped ladder.
+    ///
+    /// The rungs are `cells / backingScale` points apart, so a 54-cell badge
+    /// on a 1x screen can only rest at 54 and 108 inside its own 28...128
+    /// bounds — two sizes. Dragging a corner along that does nothing and then
+    /// jumps the whole way. If this ever stops being true the drag could go
+    /// back on the ladder; while it is true, it cannot.
+    func testTheCrispLadderIsTooCoarseToDragOn() {
+        let cells = 54, floor = CGFloat(10) / 21
+        let rungs = Set(stride(from: CGFloat(28), through: 128, by: 0.5).map {
+            (CGFloat(cells) * SpriteScale.snapped(targetPoints: $0, spriteWidth: cells,
+                                                  backingScale: 1, minimum: floor)).rounded()
+        })
+        XCTAssertLessThanOrEqual(rungs.count, 3,
+                                 "the 1x ladder has \(rungs.count) rungs: \(rungs.sorted())")
+    }
+
+    /// The drag scale tracks the pointer exactly, which is the whole point of
+    /// it — a size asked for is the size drawn.
+    func testAContinuousScaleTracksWhatWasAskedFor() {
+        for points in stride(from: CGFloat(30), through: 128, by: 0.5) {
+            // Below the floor it is the floor that answers, which is the next
+            // test; this one is about what happens above it.
+            let scale = SpriteScale.continuous(targetPoints: points,
+                                               spriteWidth: 54, minimum: 0.1)
+            XCTAssertEqual(CGFloat(54) * scale, points, accuracy: 0.0001)
+        }
+    }
+
+    /// It comes off the pixel grid, not off the floor: the counter's digits
+    /// stop being a number below a certain size whether or not a drag is in
+    /// progress.
+    func testAContinuousScaleStillHonoursItsFloor() {
+        let floor: CGFloat = 0.8
+        XCTAssertEqual(SpriteScale.continuous(targetPoints: 10, spriteWidth: 54,
+                                              minimum: floor), floor)
+        XCTAssertGreaterThanOrEqual(
+            SpriteScale.continuous(targetPoints: 1, spriteWidth: 54, minimum: floor), floor)
+        XCTAssertEqual(SpriteScale.continuous(targetPoints: 100, spriteWidth: 0,
+                                              minimum: floor), floor)
+    }
+
+    /// And the two are genuinely different things: only the snapped one lands
+    /// on whole device pixels. A `continuous` that happened to snap would mean
+    /// the drag was still on the ladder and nothing had been fixed.
+    func testOnlyTheSnappedScaleLandsOnWholeDevicePixels() {
+        var offGrid = 0
+        for points in stride(from: CGFloat(30), through: 128, by: 1) {
+            for backing in [CGFloat(1), 2] {
+                let crisp = SpriteScale.snapped(targetPoints: points, spriteWidth: 54,
+                                                backingScale: backing, minimum: 0.5)
+                let devicePixels = crisp * backing
+                XCTAssertEqual(devicePixels, devicePixels.rounded(), accuracy: 0.0001,
+                               "snapped \(points) at \(backing)x")
+
+                let loose = SpriteScale.continuous(targetPoints: points, spriteWidth: 54,
+                                                   minimum: 0.5) * backing
+                if abs(loose - loose.rounded()) > 0.0001 { offGrid += 1 }
+            }
+        }
+        XCTAssertGreaterThan(offGrid, 100,
+                             "the drag scale is snapping, so the drag is still stepping")
+    }
+
     func testScaleHonoursItsFloor() {
         // The 3x5 digits stop being a number below 2x, whatever the Dock does.
         let tiny = SpriteScale.snapped(targetPoints: 28, spriteWidth: 18,
@@ -354,35 +512,111 @@ final class CounterGlyphTests: XCTestCase {
 
 final class MascotCycleTests: XCTestCase {
 
+    let everyone = MascotID.allCases
+
     /// The regression this exists for: clicking one past the last character
     /// used to land on "off" and stop, because the off state drew inert art
     /// instead of a button. Off is a stop on the loop, not the end of it.
     func testCyclingWrapsAllTheWayRound() {
         var seen: [MascotID?] = []
-        var current: MascotID? = MascotID.allCases.first
-        for _ in 0...MascotID.allCases.count {
+        var current: MascotID? = everyone.first
+        for _ in 0...everyone.count {
             seen.append(current)
-            current = MascotID.next(after: current)
+            current = MascotID.next(after: current, in: everyone)
         }
-        XCTAssertEqual(seen, MascotID.allCases.map { $0 } + [nil])
-        XCTAssertEqual(current, MascotID.allCases.first,
+        XCTAssertEqual(seen, everyone.map { $0 } + [nil])
+        XCTAssertEqual(current, everyone.first,
                        "cycling out of off has to lead back to the first character")
     }
 
     func testCyclingVisitsEveryCharacterExactlyOncePerLap() {
         var current: MascotID? = nil
         var lap: [MascotID?] = []
-        for _ in 0..<(MascotID.allCases.count + 1) {
-            current = MascotID.next(after: current)
+        for _ in 0..<(everyone.count + 1) {
+            current = MascotID.next(after: current, in: everyone)
             lap.append(current)
         }
-        XCTAssertEqual(Set(lap.compactMap { $0 }), Set(MascotID.allCases))
+        XCTAssertEqual(Set(lap.compactMap { $0 }), Set(everyone))
         XCTAssertEqual(lap.filter { $0 == nil }.count, 1, "off should come round once")
     }
 
     /// An id written by an older build must not silently turn the mascot off.
     func testUnknownIdIsNotTreatedAsOff() {
         XCTAssertNil(MascotID(rawValue: "sprocket"))
-        XCTAssertEqual(MascotID.next(after: nil), MascotID.allCases.first)
+        XCTAssertEqual(MascotID.next(after: nil, in: everyone), everyone.first)
+    }
+
+    /// Cycling out of a character who has gone off duty must not dead-end.
+    /// It can happen without anybody touching the control: the pick was made
+    /// in October and the month turned over.
+    func testCyclingOutOfAnOffDutyCharacterLandsBackOnTheRoster() {
+        let roster = MascotID.onDuty(on: july, keepSeasonal: false)
+        XCTAssertFalse(roster.contains(.boo))
+        XCTAssertEqual(MascotID.next(after: .boo, in: roster), roster.first)
+    }
+
+    /// An empty roster is "off" every time rather than a crash. Nothing
+    /// produces one today; `next` is the kind of function that gets one
+    /// eventually.
+    func testAnEmptyRosterCyclesToOff() {
+        XCTAssertNil(MascotID.next(after: nil, in: []))
+        XCTAssertNil(MascotID.next(after: .blip, in: []))
+    }
+
+    // MARK: - Who is on duty
+
+    private func date(month: Int) -> Date {
+        var parts = DateComponents()
+        parts.year = 2026; parts.month = month; parts.day = 15
+        return Calendar.current.date(from: parts)!
+    }
+    private var july: Date { date(month: 7) }
+    private var october: Date { date(month: 10) }
+
+    func testTheRegularCastIsOnDutyEveryMonth() {
+        let regulars: Set<MascotID> = [.blip, .scoot, .wobble, .bloop]
+        for month in 1...12 {
+            let roster = Set(MascotID.onDuty(on: date(month: month), keepSeasonal: false))
+            XCTAssertTrue(regulars.isSubset(of: roster), "month \(month)")
+        }
+    }
+
+    func testTheSeasonalFourTurnUpInOctoberAndGoAwayAgain() {
+        let visitors: Set<MascotID> = [.boo, .flit, .gourd, .rattle]
+        for month in 1...12 {
+            let roster = Set(MascotID.onDuty(on: date(month: month), keepSeasonal: false))
+            XCTAssertEqual(roster.isSuperset(of: visitors), month == 10, "month \(month)")
+        }
+    }
+
+    /// The toggle overrides the month in one direction only: it keeps them on,
+    /// it never sends them away during October.
+    func testKeepingThemOnWorksInEveryMonth() {
+        for month in 1...12 {
+            let roster = MascotID.onDuty(on: date(month: month), keepSeasonal: true)
+            XCTAssertEqual(Set(roster), Set(MascotID.allCases), "month \(month)")
+        }
+    }
+
+    /// The roster keeps the declared order, so the picker and the click-cycle
+    /// walk the cast the same way round.
+    func testTheRosterKeepsTheCastsOwnOrder() {
+        for keep in [true, false] {
+            for month in [7, 10] {
+                let roster = MascotID.onDuty(on: date(month: month), keepSeasonal: keep)
+                XCTAssertEqual(roster, MascotID.allCases.filter(roster.contains),
+                               "month \(month) keep \(keep)")
+            }
+        }
+    }
+
+    /// Every character says which season it belongs to, and only the four the
+    /// app shipped with are evergreen.
+    func testEverySeasonalCharacterIsAnOctoberOne() {
+        for id in MascotID.allCases where id.season != .evergreen {
+            XCTAssertEqual(id.season, .october, "\(id)")
+        }
+        XCTAssertEqual(MascotID.allCases.filter { $0.season == .evergreen },
+                       [.blip, .scoot, .wobble, .bloop])
     }
 }

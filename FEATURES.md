@@ -74,21 +74,36 @@ sizes. Below the floor the counter's 3×5 digits stop being a number; above the
 ceiling it stops reading as a Dock peer and starts reading as a window. Your
 size is remembered across restarts, like the position.
 
-With a **mascot on it moves in steps**, not smoothly. A sprite is only crisp
-when one source pixel covers a whole number of *device* pixels, so the scale
-snaps to the backing store and the badge advances a cell at a time — 18 points
-per step on a 1× display, 9 on a 2× one. It also stops shrinking at 2× however
-far you drag, which puts the real floor at 36 points with a character on; the
-plain tile goes all the way to 28 and scales continuously. On release the size
-that was *drawn* is what gets stored, so the badge cannot drift a few points
-further from your hand every time you resize it.
+**The drag follows your hand, and settles when you let go.** A sprite is only
+crisp when one source pixel covers a whole number of *device* pixels, so the
+sizes a character can actually rest at form a ladder — and that ladder is
+coarse. Its rungs are the character's cell height divided by the backing
+scale: **54 points apart on a 1× display**, 27 on a 2× one. Inside bounds of
+28 and 128 that leaves a 1× screen exactly **two** sizes to choose from.
+
+Running the drag on the ladder is what that arithmetic used to mean in the
+hand: you pulled a corner, nothing happened, and then the badge jumped the
+whole 54 points at once. So the drag runs *off* it — the badge tracks the
+pointer continuously, at the cost of a slightly soft edge while the button is
+down — and eases onto the nearest crisp rung on release, with the same haptic
+tick the drawer gives when its edge settles onto a row. The size that was
+*drawn* is what gets stored, so the badge cannot drift a few points further
+from your hand every time you resize it.
+
+It also stops shrinking once the counter's digits would stop being legible,
+which puts the real floor above 28 with a character on; the plain tile goes
+all the way down and scales continuously, having no pixel grid to honour.
+
+This got three times worse when the cast was redrawn at 48 cells and nobody
+noticed: the same ladder had been 18 points per step at 16 cells, which is
+coarse but draggable. It is the kind of regression that hides in a constant.
 
 The grips sit on the **character, not the panel behind it**. The window is
 deliberately larger than the art it carries: a widget reserves the mood-mark
 gutter whether or not a mark is showing, and keeps bob room under the
 character's feet, so with no counts up the art fills barely two thirds of the
-height. How much of its 48x48 cell each character fills differs too — Blip and
-Bloop start a column further left than Scoot and Wobble do. Anchored to the
+height. How much of its 48x48 cell each character fills differs too — Gourd
+fills his row edge to edge where Rattle leaves four columns clear each side. Anchored to the
 window, the resize cursor appeared in a different place for every character and
 came up over empty desktop; anchored to the art, it is always on the edge you
 can see. The halo and drop shadow count as art, since they are drawn.
@@ -351,16 +366,23 @@ now holds the mascot, the name and the close box, and hands back the rest.
 hidden until it has to be.
 
 - The ceiling is the **height of your screen**. Past that the list scrolls.
-- **Drag the top edge** to make it shorter — that is the useful direction now
-  that the default is "fit everything". Your chosen height is remembered per
-  tab.
+- **Drag the grab handle** — the capsule in the middle of the top edge — to
+  make it shorter, which is the useful direction now that the default is "fit
+  everything". Your chosen height is remembered per tab.
+- **The rest of that edge moves the window**, like the header below it. The
+  whole edge used to resize, which is the one place a hand goes to move a
+  window: the drawer could only be moved from the bare material beside the
+  title, and read as a window that could not be moved at all. The handle keeps
+  its own columns — 72pt of them, twice the capsule you can see, because a
+  36pt target is missed.
 - The edge **follows your pointer smoothly** while you drag, then **settles
   onto the nearest whole row** when you let go, so the drawer never ends
   halfway through an item. Snapping during the drag was tried first and felt
   like lurching; quantising every frame stops it tracking your hand.
 - The handle is **always available**, since there is always something to
-  adjust. The pointer becomes **up/down arrows** over it, and a **closed fist**
-  while you drag, so hovering and grabbing never look the same.
+  adjust. The pointer becomes **up/down arrows** over it and a plain arrow
+  either side of it, so the two halves of the edge never look the same, and a
+  **closed fist** while you drag, so hovering and grabbing do not either.
 
 Each tab sizes to its own list, and switching between them **animates** the
 difference rather than jumping.
@@ -370,21 +392,69 @@ Heights are remembered separately, since My PR rows are much taller.
 
 **Click a row** to open that PR in your browser — the title underlines on
 hover so it reads as the link it is. **Click outside** to collapse. **Drag the
-header** to move the whole thing.
+header or the top edge** to move the whole thing — everywhere in that band
+except the grab handle, the mascot and the × , each of which owns its own
+press.
 
 ---
 
 ## Mascots
 
 A small pixel-art character that keeps you company in the drawer and, by
-default, replaces the floating icon entirely. Four of them:
+default, replaces the floating icon entirely. Four all year:
 
 | | |
 |---|---|
 | **Blip** | a radar bot with a dish and a chest badge — the default |
 | **Scoot** | an astronaut; helmet lamp and chest panel take the mood colour |
 | **Wobble** | a flying saucer, six hull lights chasing round the rim |
-| **Bloop** | an alien with the biggest eyes of the four |
+| **Bloop** | an alien with the biggest eyes of the regular cast |
+
+…and four more **through October**:
+
+| | |
+|---|---|
+| **Boo** | a ghost; the mouth and the hem wisps carry the mood |
+| **Flit** | a bat, ears first — the linings take the colour |
+| **Gourd** | a jack-o'-lantern, the only one lit from inside |
+| **Rattle** | a skeleton; the nose hollow glows and a spark sits in his ribs |
+
+They turn up on 1 October and leave again on the 1st of November. **Settings ▸
+Seasonal characters** keeps them all year if you would rather.
+
+**A banner announces them, once.** The first time the drawer is opened during
+October, a strip above the list shows the four faces, says *New for October*,
+and points at the header mascot:
+
+```
+┌────────────────────────────────────────────────────┐
+│  👻 🦇 🎃 💀   New for October                   ×  │
+│                Click the mascot to cycle.           │
+└────────────────────────────────────────────────────┘
+```
+
+It draws the characters rather than listing their names, because four faces
+are the announcement and four names are a sentence to read.
+
+It goes away and stays away. Dismissing it records the *season* — `2026-10` —
+rather than a "seen" flag, so next October is news again. Picking one of the
+visitors dismisses it too: the drawer is already showing the thing the strip
+is advertising. And it is tied to **the month, not the toggle** — with
+Seasonal characters left on all year, July does not announce that the October
+cast has arrived, because you did that yourself months ago.
+
+The strip's height is counted in the drawer's chrome, so the list below it is
+never one row shorter than it should be, and dismissing it shrinks the window
+by exactly the strip.
+
+Turning them off does not forget which one you picked. A pick made in October
+falls back to Blip on screen in November and is still recorded, so flipping
+the toggle brings *your* character back rather than the first of the four. The
+picker, the click-to-cycle and the tooltip all read the same roster, so none of
+them can offer a character the others do not have.
+
+**Meet the Cast** asks only for the four regulars. Requiring the visitors would
+leave a shelf slot empty for eleven months with nothing on screen to say why.
 
 **It is a status channel, not a sticker.** The character's colour, expression
 and accessory all come from the same derivation the counts do, so it and the

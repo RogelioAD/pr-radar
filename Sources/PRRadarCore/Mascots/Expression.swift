@@ -19,6 +19,17 @@ extension Mascot {
         return (Point(minX, minY), maxX - minX + 1, maxY - minY + 1)
     }
 
+    /// The rows the character actually occupies.
+    ///
+    /// The sweeps that travel the whole body need this rather than the grid's
+    /// full height: a band walking 0..<48 spends a third of its cycle in the
+    /// empty rows above and below a character, which reads as the animation
+    /// stopping. Derived, so it cannot fall out of step with a redraw.
+    public var litRows: ClosedRange<Int> {
+        let ys = sprite.litPoints.map(\.y)
+        return (ys.min() ?? 0)...(ys.max() ?? 0)
+    }
+
     /// The character with a mood applied and one frame of its own idling.
     ///
     /// Order matters and is the argument. The tic runs first because it moves
@@ -127,6 +138,51 @@ extension Mascot {
             }
             let pulse: Slot = f % 6 < 3 ? .accent : .accentDim
             repaintAccent(&grid, x: 0..<grid.width, y: 0..<4, with: pulse)
+
+        case .boo:
+            // The hem drifts, the way a sheet does. Only the bottom eight
+            // rows move: shifting the whole of him is a slide across the
+            // badge rather than a character standing still and billowing.
+            let drift = [0, 1, 1, 0, -1, -1][f % 6]
+            if drift != 0 { shift(&grid, rows: 39..<grid.height, by: drift) }
+            repaintAccent(&grid, x: 0..<grid.width, y: 39..<grid.height,
+                          with: f % 4 < 2 ? .accent : .accentDim)
+
+        case .flit:
+            // The ears swivel, which is the one thing a bat is always doing.
+            let turn = [0, 0, 1, 1, 0, 0, -1, -1][f % 8]
+            if turn != 0 { shift(&grid, rows: 2..<11, by: turn) }
+
+        case .gourd:
+            // The candle. Never fully out and never steady: two rungs of
+            // guttering, which is what a flame behind a carving looks like.
+            let flame: Slot = [Slot.accent, .accent, .accentMid, .accent,
+                               .accentDim, .accentMid][f % 6]
+            repaintAccent(&grid, x: 0..<grid.width, y: 0..<grid.height, with: flame)
+
+        case .rattle:
+            // His jaw. Two rows, so it reads as chattering rather than as the
+            // whole skull nodding.
+            if f % 4 < 2 { shift(&grid, rows: 20..<24, by: 0, down: 1) }
+        }
+    }
+
+    /// Slides a band of rows sideways, or down, leaving what it vacates empty.
+    ///
+    /// Shared by the four idles that move a part rather than recolour one.
+    /// Each was a copy of the alien's antenna shuffle before this, and three
+    /// copies of a loop that reads a row into an array and writes it back one
+    /// place over is three chances to get the bounds wrong.
+    private func shift(_ grid: inout Sprite, rows: Range<Int>, by dx: Int, down dy: Int = 0) {
+        let band = rows.clamped(to: 0..<grid.height)
+        let source = band.map { y in (0..<grid.width).map { grid[$0, y] } }
+        for (index, y) in band.enumerated() {
+            for x in 0..<grid.width {
+                let fromX = x - dx, fromRow = index - dy
+                grid[x, y] = (fromX >= 0 && fromX < grid.width
+                              && fromRow >= 0 && fromRow < source.count)
+                    ? source[fromRow][fromX] : nil
+            }
         }
     }
 
@@ -141,10 +197,132 @@ extension Mascot {
     /// four wrap, so there is no frame without a sweep in it.
     private func sweep(_ grid: inout Sprite, frame: Int) {
         switch sweep {
-        case .visor: glassBeam(&grid, frame: frame, down: false)
-        case .hud:   glassBeam(&grid, frame: frame, down: true)
-        case .beam:  searchlight(&grid, frame: frame)
-        case .psi:   rings(&grid, frame: frame)
+        case .visor:   glassBeam(&grid, frame: frame, down: false)
+        case .hud:     glassBeam(&grid, frame: frame, down: true)
+        case .beam:    searchlight(&grid, frame: frame)
+        case .psi:     rings(&grid, frame: frame)
+        case .wisp:    shimmer(&grid, frame: frame, rising: true)
+        case .echo:    sonar(&grid, frame: frame)
+        case .flicker: candle(&grid, frame: frame)
+        case .marrow:  spine(&grid, frame: frame)
+        }
+    }
+
+    /// Boo, with nothing to put a beam on.
+    ///
+    /// A ghost is the one shape a beam cannot cross, because there is no
+    /// surface for it to cross — so the light goes *through* him instead: a
+    /// band rising up the body, brightening whatever it passes and flaring
+    /// the mouth and the hem as it reaches them.
+    ///
+    /// Confined to the rows he actually occupies. A band walking the full 48
+    /// spends a third of its cycle in empty space, which reads as the app
+    /// having stopped rather than as a ghost.
+    ///
+    /// The trail wraps rather than running off the end, the same bargain
+    /// `glassBeam` makes: his last row is the hem's outline and has nothing
+    /// on it to light, so a trail that stopped there left one frame in every
+    /// cycle with no sweep in it at all. Wrapped, the next shimmer is already
+    /// entering at the top as the last one leaves — which is what a rising
+    /// shimmer looks like anyway.
+    private func shimmer(_ grid: inout Sprite, frame: Int, rising: Bool) {
+        let rows = litRows
+        let span = max(1, rows.count)
+        let step = abs(frame) % span
+        for band in 0...3 {
+            let offset = rising ? (step - band + span) % span : (step + band) % span
+            let y = rising ? rows.upperBound - offset : rows.lowerBound + offset
+            guard rows.contains(y) else { continue }
+            paintRow(&grid, y, lead: band == 0, strength: band == 0 ? 2 : 1)
+        }
+    }
+
+    /// Flit's echolocation: three arcs thrown down and out of the muzzle, the
+    /// nearest bright and the far ones fading.
+    ///
+    /// A cone rather than a ring — a bat calls forward, and a full circle
+    /// would put the same pulse behind his own wings where it reads as a halo.
+    private func sonar(_ grid: inout Sprite, frame: Int) {
+        let apexX = Double(grid.width) / 2, apexY = 25.0
+        for index in 0..<3 {
+            let radius = (Double(abs(frame)) * 1.4 + Double(index) * 7)
+                .truncatingRemainder(dividingBy: 21) + 4
+            let tone: Slot = radius < 13 ? .accentMid : .accentDim
+            var angle = 0.45
+            while angle < 2.70 {
+                let x = Int((apexX + cos(angle) * radius * 1.3).rounded())
+                let y = Int((apexY + sin(angle) * radius).rounded())
+                if grid[x, y] == nil {
+                    grid.plot(x, y, tone)
+                } else {
+                    brighten(&grid, x, y, by: radius < 13 ? 2 : 1)
+                }
+                angle += 0.05
+            }
+        }
+    }
+
+    /// Gourd is lit from the inside, so his sweep is the candle rather than
+    /// anything crossing him: the carving pulses and the light it throws
+    /// creeps out into the rind around it.
+    ///
+    /// The spill is drawn from the *carved* cells rather than from a point,
+    /// so it comes out of the eyes and the grin — which is where the light in
+    /// a lantern actually leaves.
+    private func candle(_ grid: inout Sprite, frame: Int) {
+        let step = abs(frame) % 6
+        let carved: [Slot] = [.light, .accent, .accent, .accentMid, .accent, .light]
+        let spill = [2, 1, 1, 0, 1, 2][step]
+        let lit = grid.litPoints.filter { isTell(grid[$0.x, $0.y]) }
+        for point in lit { grid.plot(point.x, point.y, carved[step]) }
+        guard spill > 0 else { return }
+        for point in lit {
+            for dy in -spill...spill {
+                for dx in -spill...spill where abs(dx) + abs(dy) <= spill {
+                    brighten(&grid, point.x + dx, point.y + dy, by: spill)
+                }
+            }
+        }
+    }
+
+    /// Rattle, read from the top down: a pulse that stops on each rib rather
+    /// than sliding past them.
+    ///
+    /// Stepping is the whole difference between this and Boo's shimmer, which
+    /// is otherwise the same band on the same axis. A smooth one down a
+    /// skeleton reads as a photocopier; stopping at each bone reads as
+    /// something being counted.
+    private func spine(_ grid: inout Sprite, frame: Int) {
+        let rows = litRows
+        let stops = 9
+        // Held for two frames apiece, so each stop is seen rather than
+        // flicked through.
+        let at = (abs(frame) / 2) % stops
+        let head = rows.lowerBound + at * rows.count / stops
+        for band in 0..<3 {
+            let y = head + band
+            guard rows.contains(y) else { continue }
+            paintRow(&grid, y, lead: band == 0, strength: band == 0 ? 2 : 1)
+        }
+    }
+
+    /// One row of a travelling band: the tell flares, the chassis brightens,
+    /// and nothing else is touched.
+    private func paintRow(_ grid: inout Sprite, _ y: Int, lead: Bool, strength: Int) {
+        for x in 0..<grid.width {
+            guard let slot = grid[x, y] else { continue }
+            if isTell(slot) {
+                grid.plot(x, y, lead ? .light : .accent)
+            } else if slot.isChassis {
+                brighten(&grid, x, y, by: strength)
+            }
+        }
+    }
+
+    private func isTell(_ slot: Slot?) -> Bool {
+        switch slot {
+        case .accent, .accentMid, .accentDim: return true
+        default: return false
         }
     }
 

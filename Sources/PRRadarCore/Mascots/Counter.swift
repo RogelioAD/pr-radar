@@ -88,4 +88,25 @@ public enum SpriteScale {
         let snapped = (raw / step).rounded() * step
         return max(minimum, snapped)
     }
+
+    /// The same scale with the snap taken off, for the length of a gesture.
+    ///
+    /// Snapping is what keeps the art crisp, and it is also what makes a
+    /// resize handle feel broken. The ladder's rungs are `spriteWidth /
+    /// backingScale` points apart, so the bigger the art the coarser the
+    /// drag: a 54-cell badge on a 1x screen has its rungs 54 points apart and
+    /// only two of them inside the size bounds at all. Dragging a corner did
+    /// nothing, then jumped the whole way.
+    ///
+    /// So a drag runs on this and settles onto `snapped` when the hand lets
+    /// go — the same bargain the drawer's height makes with its rows, and for
+    /// the same reason: quantising every frame stops it tracking the hand.
+    /// The cost is a frame or two of softened edges while the pointer is
+    /// down, which is a cost only paid during the gesture.
+    public static func continuous(targetPoints: CGFloat,
+                                  spriteWidth: Int,
+                                  minimum: CGFloat = 1) -> CGFloat {
+        guard spriteWidth > 0 else { return minimum }
+        return max(minimum, targetPoints / CGFloat(spriteWidth))
+    }
 }

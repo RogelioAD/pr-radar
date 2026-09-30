@@ -185,6 +185,28 @@ final class SpriteLayoutTests: XCTestCase {
         }
     }
 
+    /// And so does the tell, which is the other half of the same point and was
+    /// only ever asserted in a comment.
+    ///
+    /// A header mascot cropped past the thing that takes the mood colour has
+    /// no way to show the mood at all — it is a drawing of a character rather
+    /// than a status light, which is the entire reason a tell exists. The
+    /// skeleton is the one this matters most for: the spark in his ribs is a
+    /// long way below the crop, and the glow in his nose is what carries it.
+    func testEveryCropStillCarriesATell() {
+        for mascot in Mascot.all {
+            let inEye = { (point: Point) in
+                mascot.eyes.contains { box in
+                    (box.x..<box.x + mascot.eyeSize).contains(point.x)
+                        && (box.y..<box.y + mascot.eyeSize).contains(point.y)
+                }
+            }
+            XCTAssertTrue(mascot.tell.contains { $0.y < mascot.headRows && !inEye($0) },
+                          "\(mascot.name) crops to \(mascot.headRows) rows with no tell left "
+                              + "outside its eyes, so the header cannot show a mood")
+        }
+    }
+
     func testHaloWrapsTheWholeCompositionAsOne() {
         let layout = SpriteLayout.widget(
             mascot: .wobble, style: Mood.alarmed.style, frame: 0, blink: false,
