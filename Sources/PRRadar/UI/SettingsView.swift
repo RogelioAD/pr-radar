@@ -297,9 +297,16 @@ struct SettingsView: View {
             Text("\(Int(state.badgeTileSize.rounded())) pt")
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
-                // Fixed, so the row does not twitch as the digits change
-                // width while the slider is moving.
-                .frame(width: 34, alignment: .trailing)
+                // Never wraps, and never narrower than the widest value it
+                // will ever hold. A plain fixed width was too small for
+                // "128 pt" — three digits at the top of the range — so the
+                // readout wrapped onto a second line and took the row's
+                // height with it. `fixedSize` is what actually forbids the
+                // wrap; the minimum is only there to stop the row twitching
+                // as the digits change width under a moving slider.
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(minWidth: 46, alignment: .trailing)
             Button("Reset", action: onResetBadgeSize)
                 .disabled(!state.hasCustomBadgeSize)
                 .accessibilityLabel("Reset badge size")
