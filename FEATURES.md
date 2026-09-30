@@ -11,7 +11,7 @@ drawer when clicked. Setup lives in [README.md](README.md).
 ## The badge
 
 With a mascot chosen — which is the default — the badge **is** the character:
-a 16×16 pixel-art sprite with a counter chip beneath it for each count that
+a 48×48 pixel-art sprite with a counter chip beneath it for each count that
 isn't zero. See [Mascots](#mascots) below. Turn the mascot off and you get the
 original badge, described here, unchanged.
 
@@ -87,8 +87,8 @@ The grips sit on the **character, not the panel behind it**. The window is
 deliberately larger than the art it carries: a widget reserves the mood-mark
 gutter whether or not a mark is showing, and keeps bob room under the
 character's feet, so with no counts up the art fills barely two thirds of the
-height. How much of its 16x16 cell each character fills differs too — Pip and
-Byte start a column further left than Widget and Nimbus do. Anchored to the
+height. How much of its 48x48 cell each character fills differs too — Blip and
+Bloop start a column further left than Scoot and Wobble do. Anchored to the
 window, the resize cursor appeared in a different place for every character and
 came up over empty desktop; anchored to the art, it is always on the edge you
 can see. The halo and drop shadow count as art, since they are drawn.
@@ -381,10 +381,10 @@ default, replaces the floating icon entirely. Four of them:
 
 | | |
 |---|---|
-| **Pip** | a boxy little bot with an antenna — the default |
-| **Byte** | a cat, ears tipped in the mood colour |
-| **Widget** | a CRT terminal with a face |
-| **Nimbus** | a ghost; the only one that floats rather than sits |
+| **Blip** | a radar bot with a dish and a chest badge — the default |
+| **Scoot** | an astronaut; helmet lamp and chest panel take the mood colour |
+| **Wobble** | a flying saucer, six hull lights chasing round the rim |
+| **Bloop** | an alien with the biggest eyes of the four |
 
 **It is a status channel, not a sticker.** The character's colour, expression
 and accessory all come from the same derivation the counts do, so it and the
@@ -417,7 +417,7 @@ Some details that took a while to get right, and are worth not undoing:
   it replaced, which has to guess light-or-dark from the system appearance.
 - **Counters are pixel art too.** A Dock badge would land exactly on the mood
   accessory — same pixels, not merely nearby — and an anti-aliased circle in
-  SF Pro next to a 16×16 character looks like two different apps. The chips sit
+  SF Pro next to a 48×48 character looks like two different apps. The chips sit
   below, centred on the character, and only appear when their count isn't zero.
   So inbox zero is a sleeping character and nothing else.
 - **Never drawn below 2×**, whatever your Dock is set to. The counter's 3×5
