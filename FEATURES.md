@@ -102,6 +102,12 @@ antialiased and nothing is partly transparent. The price is that cells differ
 by a device pixel here and there, which is what nearest-neighbour has always
 looked like.
 
+**Settings ▸ Appearance has a slider** for the same number. Dragging a corner
+is the direct way and stays the discoverable one; the slider is what you reach
+for when the badge is behind a window, or when you want a size rather than a
+gesture. It goes through the same path the grips do, so the badge re-frames as
+it moves rather than waiting for something else to ask for a layout.
+
 The only limit left is the **counter's digits**: below about 10 points a 3×5
 digit stops being a number, so the badge stops shrinking there whatever the
 pointer does. That is a legibility floor, not a pixel-grid one. The plain

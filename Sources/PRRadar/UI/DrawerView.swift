@@ -40,6 +40,7 @@ struct DrawerView: View {
     let onToggleThreads: (String) -> Void
     let onToggleRoom: (DrawerRoom) -> Void
     let onResetBadgeSize: () -> Void
+    let onBadgeSize: (CGFloat) -> Void
     let onHeaderControls: ([CGRect]) -> Void
 
     var body: some View {
@@ -75,6 +76,7 @@ struct DrawerView: View {
                 SettingsView(state: state,
                              onRowHeights: onRowHeights,
                              onResetBadgeSize: onResetBadgeSize,
+                             onBadgeSize: onBadgeSize,
                              onRefresh: onRefresh)
                 Divider().opacity(0.6)
                 settingsFooter

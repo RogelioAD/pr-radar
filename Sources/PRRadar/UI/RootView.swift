@@ -15,6 +15,7 @@ struct RootView: View {
     let onToggleThreads: (String) -> Void
     let onToggleRoom: (DrawerRoom) -> Void
     let onResetBadgeSize: () -> Void
+    let onBadgeSize: (CGFloat) -> Void
     let onHeaderControls: ([CGRect]) -> Void
 
     var body: some View {
@@ -32,6 +33,7 @@ struct RootView: View {
                            onToggleThreads: onToggleThreads,
                            onToggleRoom: onToggleRoom,
                            onResetBadgeSize: onResetBadgeSize,
+                           onBadgeSize: onBadgeSize,
                            onHeaderControls: onHeaderControls)
             } else {
                 BadgeView(state: state)

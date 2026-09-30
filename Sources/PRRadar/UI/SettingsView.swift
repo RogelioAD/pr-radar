@@ -36,6 +36,7 @@ struct SettingsView: View {
     @ObservedObject var state: AppState
     let onRowHeights: ([String: CGFloat]) -> Void
     let onResetBadgeSize: () -> Void
+    let onBadgeSize: (CGFloat) -> Void
     /// Changing a lead changes what every row's lead chip says, so the list has
     /// to be rebuilt — the setting is not about the app, it is about the data.
     let onRefresh: () -> Void
@@ -281,12 +282,24 @@ struct SettingsView: View {
 
         Divider()
 
-        Divider()
-
-        row("Badge size", help: "Drag any corner of the badge to resize it") {
+        // The same number the badge's corner grips set, from the other end.
+        // Dragging a corner is the direct way and stays the discoverable one;
+        // a slider is what you reach for when the badge is behind a window,
+        // or when you want a size rather than a gesture.
+        row("Badge size", help: "Drag the badge's corners, or this") {
+            Slider(value: Binding(get: { state.badgeTileSize },
+                                  set: { onBadgeSize($0) }),
+                   in: Layout.badgeSizing.minimum...Layout.badgeSizing.maximum)
+                .controlSize(.mini)
+                .frame(width: 110)
+                .accessibilityLabel("Badge size")
+                .accessibilityValue("\(Int(state.badgeTileSize.rounded())) points")
             Text("\(Int(state.badgeTileSize.rounded())) pt")
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
+                // Fixed, so the row does not twitch as the digits change
+                // width while the slider is moving.
+                .frame(width: 34, alignment: .trailing)
             Button("Reset", action: onResetBadgeSize)
                 .disabled(!state.hasCustomBadgeSize)
                 .accessibilityLabel("Reset badge size")

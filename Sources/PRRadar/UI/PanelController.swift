@@ -178,6 +178,7 @@ final class PanelController {
             onToggleThreads: { [weak self] in self?.toggleThreads($0) },
             onToggleRoom: { [weak self] in self?.toggleRoom($0) },
             onResetBadgeSize: { [weak self] in self?.resetBadgeSize() },
+            onBadgeSize: { [weak self] in self?.setBadgeSize($0) },
             onHeaderControls: { [weak self] in self?.headerControls = $0 }
         )
         hostingView = DraggableHostingView(rootView: root)
@@ -811,6 +812,21 @@ final class PanelController {
     /// Puts the badge back to the size it had before anyone dragged it: the
     /// user's Dock tile size. Reachable from the context menu, because a badge
     /// dragged down to its floor on a busy desktop is fiddly to grab again.
+    /// The settings slider's way in.
+    ///
+    /// Routed through here rather than bound straight to `state.badgeTileSize`
+    /// because setting the number is only half of it: the panel is framed from
+    /// that size and has to be re-framed, which is what `refreshBadgeSize`
+    /// does. A binding would have moved the readout and left the badge alone
+    /// until something else happened to ask for a layout.
+    func setBadgeSize(_ tile: CGFloat) {
+        let clamped = Layout.badgeSizing.clamp(tile)
+        guard abs(clamped - state.badgeTileSize) >= 0.5 else { return }
+        state.badgeTileSize = clamped
+        refreshBadgeSize()
+        hostingView.updateTrackingAreas()
+    }
+
     func resetBadgeSize() {
         state.badgeTileSize = Layout.dockTileSize
         // Cleared rather than written back as the Dock's current size: the
