@@ -183,10 +183,15 @@ struct DrawerView: View {
     private var identity: some View {
         Button { state.cycleMascot() } label: {
             if let mascot = headerMascot {
+                // Cropped to the head. The band is 48pt and a 48-cell
+                // character cannot be drawn below 48pt on a 1x display, so
+                // the full body physically will not fit here — which is what
+                // `headRows` has always been for.
                 MascotView(mascot: mascot,
                            style: state.spriteStyle,
                            scale: Layout.headerMascotScale(
-                            for: mascot, backingScale: state.backingScale))
+                            for: mascot, backingScale: state.backingScale),
+                           crop: mascot.headRows)
             } else {
                 Image(systemName: "arrow.triangle.pull")
                     .font(.system(size: 12, weight: .semibold))

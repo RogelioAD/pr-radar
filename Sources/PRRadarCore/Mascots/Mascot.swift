@@ -50,18 +50,18 @@ public struct Mascot: Identifiable, Sendable, Equatable {
     /// four poses. The tell still takes the live `Health` tint, so the mood is
     /// never competing with the body colour for the same pixels.
     public let ramp: ChassisRamp
-    /// Rows to keep for the small crop — the head, without whatever it stands on.
+    /// Rows to keep for a small perch: the head, and nothing it stands on.
+    ///
+    /// Sized so the crop still carries a tell. Cropping past the antenna
+    /// would leave a header mascot with no way to show the mood at all,
+    /// which is the whole reason a tell exists.
     public let headRows: Int
 
     /// Always drawn in the live tint, whatever the eyes are doing.
     ///
-    /// Derived from the art rather than listed by hand: the tinted cells *are*
+    /// Derived from the art rather than listed by hand: the accent cells *are*
     /// the tell, and two copies of that fact drift apart the first time a
     /// sprite is edited.
-    ///
-    /// All three strengths count. The saucer's hull lights are authored dim
-    /// because his tic lights one of the six at a time — they are still his
-    /// tell, and reading only full-strength cells would say he has none.
     public var tell: [Point] {
         sprite.litPoints.filter {
             switch sprite[$0.x, $0.y] {
@@ -133,7 +133,7 @@ extension Mascot {
         eyes: [Point(15, 19), Point(27, 19)], eyeSize: 6, eyeInk: .accent,
         ramp: ChassisRamp(deep: RGB(0.086, 0.129, 0.169), shade: RGB(0.180, 0.255, 0.314), mid: RGB(0.278, 0.376, 0.435),
                           base: RGB(0.424, 0.529, 0.592), light: RGB(0.608, 0.698, 0.753), spec: RGB(0.863, 0.918, 0.945)),
-        headRows: 40)
+        headRows: 28)
 }
 
 extension Mascot {
@@ -193,7 +193,7 @@ extension Mascot {
         eyes: [Point(15, 13), Point(27, 13)], eyeSize: 6, eyeInk: .accent,
         ramp: ChassisRamp(deep: RGB(0.137, 0.161, 0.220), shade: RGB(0.239, 0.278, 0.376), mid: RGB(0.373, 0.420, 0.533),
                           base: RGB(0.537, 0.588, 0.698), light: RGB(0.741, 0.780, 0.863), spec: RGB(0.957, 0.973, 1.000)),
-        headRows: 30)
+        headRows: 28)
 }
 
 extension Mascot {
@@ -253,7 +253,7 @@ extension Mascot {
         eyes: [Point(15, 9), Point(27, 9)], eyeSize: 6, eyeInk: .accent,
         ramp: ChassisRamp(deep: RGB(0.110, 0.090, 0.188), shade: RGB(0.200, 0.169, 0.322), mid: RGB(0.306, 0.263, 0.471),
                           base: RGB(0.447, 0.400, 0.627), light: RGB(0.655, 0.612, 0.776), spec: RGB(0.902, 0.878, 0.973)),
-        headRows: 32)
+        headRows: 31)
 }
 
 extension Mascot {
@@ -313,7 +313,7 @@ extension Mascot {
         eyes: [Point(10, 15), Point(29, 15)], eyeSize: 9, eyeInk: .accent,
         ramp: ChassisRamp(deep: RGB(0.071, 0.161, 0.102), shade: RGB(0.122, 0.271, 0.153), mid: RGB(0.192, 0.392, 0.227),
                           base: RGB(0.298, 0.545, 0.325), light: RGB(0.455, 0.714, 0.482), spec: RGB(0.784, 0.929, 0.788)),
-        headRows: 36)
+        headRows: 28)
 }
 
 extension Mascot {
