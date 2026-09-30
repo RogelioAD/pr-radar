@@ -566,6 +566,33 @@ final class MascotCycleTests: XCTestCase {
         XCTAssertTrue(Mascot.cohort(.custom).isEmpty, "this build ships nobody's fork")
     }
 
+    /// The guarantee the whole `.custom` default exists for, written as the
+    /// call a fork actually makes: the argument list this type had before the
+    /// room did, with no `cohort:` and no `bobScale:`. If this stops
+    /// compiling, so does every fork that ever added a character.
+    func testAForksCallShapeStillCompilesAndLandsOnItsOwnShelf() {
+        let theirs = Mascot(
+            id: .blip, name: "Theirs", tellName: "a lamp", blurb: "Not ours.",
+            sprite: Mascot.blip.sprite, eyes: Mascot.blip.eyes, eyeSize: 6,
+            eyeInk: .accent, sweep: .flicker, ramp: .fallback, headRows: 30)
+        XCTAssertEqual(theirs.cohort, .custom, "a fork's character has to have a home")
+        XCTAssertEqual(theirs.bobScale, 1, "and something to stand on")
+    }
+
+    /// `tic` tolerates a character it does not know, so a fork compiles — but
+    /// nobody the app ships should be relying on that. A built-in with no
+    /// idle is a character that holds perfectly still whenever the sweep is
+    /// off, which is every state except the two blue ones.
+    func testEveryBuiltInMascotHasAnIdleOfItsOwn() {
+        for mascot in Mascot.all {
+            let still = mascot.frame(eyes: .open, frame: 0, sweeping: false)
+            let moved = (1..<12).contains {
+                mascot.frame(eyes: .open, frame: $0, sweeping: false) != still
+            }
+            XCTAssertTrue(moved, "\(mascot.name) never moves with the sweep off")
+        }
+    }
+
     /// The room lays the cast out four to a row, so a shelf that is not a
     /// multiple of four leaves a ragged last line.
     func testEveryShelfFillsWholeRows() {

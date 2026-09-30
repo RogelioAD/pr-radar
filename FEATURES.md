@@ -468,13 +468,20 @@ character this build did not ship. There is nothing to register: a fork adds
 a `MascotID` case and a `Mascot`, and anything that does not claim one of the
 three built-in cohorts lands there.
 
-`cohort` **defaults to `.custom`** on purpose. A fork that added a character
+`cohort` and `bobScale` both **default** on purpose. A fork that added a character
 before the room existed is calling `Mascot(…)` with the old argument list, so
 defaulting means `git pull && make install` keeps building for them and their
 character turns up in their own row without them touching anything. The cost
 is that a *built-in* one could forget to say where it goes and end up in
 somebody's personal row, so that is pinned by a test instead of by the
 compiler.
+
+`bobScale` learned the same lesson the hard way. It was a `switch id` with no
+default for one release, which meant a fork stopped compiling the moment it
+pulled — on a line about how far a character bobs, which is nothing it had
+asked for. The idle animation is the same: a character the build does not
+know keeps its bob and its sweep and simply has no idle of its own, which is
+something to add rather than a reason not to build.
 
 The shelf is hidden when it is empty. A section titled with your own name
 holding nothing reads as something being broken.

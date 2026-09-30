@@ -205,6 +205,13 @@ extension Mascot {
         case .nimbus:
             repaintAccent(&grid, x: 0..<grid.width, y: 23..<28,
                           with: f % 10 < 5 ? .accent : .accentDim)
+
+        default:
+            // A character this build does not know — a fork's own. It keeps
+            // its bob and its sweep and simply has no idle of its own, which
+            // is a thing to add rather than a reason not to compile. Every
+            // built-in having one is pinned by a test.
+            break
         }
     }
 

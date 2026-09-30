@@ -58,9 +58,16 @@ struct MascotRoomView: View {
                                    scale: scale,
                                    onPick: { onPick(mascot.id) })
                     }
-                    // Left-aligned rather than spread: a short last row
-                    // spaced out to the full width reads as a different grid.
-                    if row.count < MascotGrid.columns { Spacer(minLength: 0) }
+                    // Empty slots rather than one Spacer. Every cell takes
+                    // an equal share of the row, so a shelf holding fewer
+                    // than four — which is exactly what a fork's own shelf
+                    // usually is — stretched its characters across the whole
+                    // drawer instead of leaving them in their columns.
+                    if row.count < MascotGrid.columns {
+                        ForEach(row.count..<MascotGrid.columns, id: \.self) { _ in
+                            Color.clear.frame(maxWidth: .infinity)
+                        }
+                    }
                 }
             }
         }

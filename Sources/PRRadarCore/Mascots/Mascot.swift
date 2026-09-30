@@ -147,6 +147,16 @@ public struct Mascot: Identifiable, Sendable, Equatable {
     public let ramp: ChassisRamp
     /// Which shelf of the mascot room this one sits on.
     public let cohort: MascotCohort
+    /// How far this one bobs: two for the ones with nothing under them, one
+    /// for the ones standing on something.
+    ///
+    /// Stored with a default, for the same reason `cohort` is, and after the
+    /// same mistake. This was a `switch id` with no default for one release —
+    /// which meant a fork that had added its own character stopped compiling
+    /// the moment it pulled, on a line that had nothing to do with anything
+    /// it had asked for. The compile-time nudge is not worth that; a test
+    /// keeps the built-in cast honest instead.
+    public let bobScale: Int
     /// Rows to keep for a small perch: the head, and nothing it stands on.
     ///
     /// Sized so the crop still carries a tell. Cropping past the antenna
@@ -160,7 +170,7 @@ public struct Mascot: Identifiable, Sendable, Equatable {
     public init(id: MascotID, name: String, tellName: String, blurb: String,
                 sprite: Sprite, eyes: [Point], eyeSize: Int, eyeInk: Slot,
                 sweep: SweepKind, ramp: ChassisRamp, headRows: Int,
-                cohort: MascotCohort = .custom) {
+                cohort: MascotCohort = .custom, bobScale: Int = 1) {
         self.id = id
         self.name = name
         self.tellName = tellName
@@ -173,6 +183,7 @@ public struct Mascot: Identifiable, Sendable, Equatable {
         self.ramp = ramp
         self.headRows = headRows
         self.cohort = cohort
+        self.bobScale = bobScale
     }
 
     /// Always drawn in the live tint, whatever the eyes are doing.
@@ -189,18 +200,6 @@ public struct Mascot: Identifiable, Sendable, Equatable {
         }
     }
 
-    /// Whether this character bobs further than the others. The ones with
-    /// nothing under them do.
-    ///
-    /// A switch rather than a test against two ids: exhaustive, so adding a
-    /// character is a decision about whether it is standing on anything rather
-    /// than a default it inherits by not being named.
-    public var bobScale: Int {
-        switch id {
-        case .scoot, .wobble, .boo, .flit, .nimbus: return 2
-        case .blip, .bloop, .gourd, .rattle, .pip, .byte, .widget: return 1
-        }
-    }
 }
 
 
@@ -338,7 +337,7 @@ extension Mascot {
         sweep: .wisp,
         ramp: ChassisRamp(deep: RGB(0.298, 0.310, 0.337), shade: RGB(0.451, 0.467, 0.494), mid: RGB(0.616, 0.631, 0.659),
                           base: RGB(0.788, 0.800, 0.824), light: RGB(0.914, 0.922, 0.937), spec: RGB(1.000, 1.000, 1.000)),
-        headRows: 33, cohort: .og)
+        headRows: 33, cohort: .og, bobScale: 2)
 }
 
 extension Mascot {
@@ -458,7 +457,7 @@ extension Mascot {
         eyes: [Point(15, 13), Point(27, 13)], eyeSize: 6, eyeInk: .accent, sweep: .hud,
         ramp: ChassisRamp(deep: RGB(0.137, 0.161, 0.220), shade: RGB(0.239, 0.278, 0.376), mid: RGB(0.373, 0.420, 0.533),
                           base: RGB(0.537, 0.588, 0.698), light: RGB(0.741, 0.780, 0.863), spec: RGB(0.957, 0.973, 1.000)),
-        headRows: 28, cohort: .space)
+        headRows: 28, cohort: .space, bobScale: 2)
 }
 
 extension Mascot {
@@ -518,7 +517,7 @@ extension Mascot {
         eyes: [Point(15, 9), Point(27, 9)], eyeSize: 6, eyeInk: .accent, sweep: .beam,
         ramp: ChassisRamp(deep: RGB(0.110, 0.090, 0.188), shade: RGB(0.200, 0.169, 0.322), mid: RGB(0.306, 0.263, 0.471),
                           base: RGB(0.447, 0.400, 0.627), light: RGB(0.655, 0.612, 0.776), spec: RGB(0.902, 0.878, 0.973)),
-        headRows: 31, cohort: .space)
+        headRows: 31, cohort: .space, bobScale: 2)
 }
 
 extension Mascot {
@@ -638,7 +637,7 @@ extension Mascot {
         eyes: [Point(12, 17), Point(29, 17)], eyeSize: 7, eyeInk: .accent, sweep: .wisp,
         ramp: ChassisRamp(deep: RGB(0.137, 0.184, 0.204), shade: RGB(0.235, 0.318, 0.341), mid: RGB(0.361, 0.471, 0.490),
                           base: RGB(0.529, 0.659, 0.671), light: RGB(0.729, 0.847, 0.851), spec: RGB(0.925, 0.980, 0.980)),
-        headRows: 32, cohort: .october2026)
+        headRows: 32, cohort: .october2026, bobScale: 2)
 }
 
 extension Mascot {
@@ -698,7 +697,7 @@ extension Mascot {
         eyes: [Point(13, 16), Point(28, 16)], eyeSize: 7, eyeInk: .accent, sweep: .echo,
         ramp: ChassisRamp(deep: RGB(0.106, 0.071, 0.063), shade: RGB(0.196, 0.133, 0.114), mid: RGB(0.298, 0.208, 0.176),
                           base: RGB(0.447, 0.325, 0.271), light: RGB(0.639, 0.518, 0.443), spec: RGB(0.906, 0.843, 0.788)),
-        headRows: 30, cohort: .october2026)
+        headRows: 30, cohort: .october2026, bobScale: 2)
 }
 
 extension Mascot {
