@@ -186,6 +186,14 @@ final class PanelController {
             guard let self, !self.state.expanded else { return nil }
             return self.badgeArtRect
         }
+        // A hand on the panel outranks whatever the queue is doing. Only
+        // while the badge is collapsed: the expanded drawer's header is a
+        // window handle, and startling the character every time the drawer is
+        // nudged reads as a glitch rather than a response.
+        hostingView.onPressChanged = { [weak self] pressed in
+            guard let self else { return }
+            self.state.isPressingBadge = pressed && !self.state.expanded
+        }
         hostingView.onClick = { [weak self] in
             guard let self else { return }
             // A press on the resize edge that never moved: clear the drag flag

@@ -27,6 +27,10 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     /// region and the drag region cannot drift apart.
     var resizeEdgeThickness: CGFloat = 12
     var onClick: () -> Void = {}
+    /// Reports whether a press is currently being held in a tracked zone.
+    /// Fires on the press rather than once it becomes a drag, so the character
+    /// reacts to the hand landing on it, not to it travelling four points.
+    var onPressChanged: (Bool) -> Void = { _ in }
     var onMoveFinished: () -> Void = {}
     /// Reports the window height the user is dragging towards.
     var onResize: (CGFloat) -> Void = { _ in }
@@ -84,6 +88,7 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
             super.mouseDown(with: event)
             return
         }
+        onPressChanged(true)
         mouseDownLocation = NSEvent.mouseLocation
         initialWindowFrame = window?.frame ?? .zero
     }
@@ -125,6 +130,9 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     override func mouseUp(with event: NSEvent) {
         draggingHandle = nil
         applyCursor()
+        // Unconditional: a press that ends outside a tracked zone still has to
+        // let go, or the character stays wide-eyed until the next one.
+        onPressChanged(false)
         switch tracker.end() {
         case .ignored:
             super.mouseUp(with: event)

@@ -241,3 +241,46 @@ final class BlinkTests: XCTestCase {
         XCTAssertFalse(Blink.isBlinking(frame: 3, fps: 0), "a stopped clock never blinks")
     }
 }
+
+// MARK: - Reaction ranking
+
+final class ReactionRankingTests: XCTestCase {
+
+    func testAHandOnTheBadgeOutranksEverythingElse() {
+        XCTAssertEqual(Reaction.resolve(pressed: true, event: .startled, hovering: true), .held)
+        XCTAssertEqual(Reaction.resolve(pressed: true, event: nil, hovering: false), .held)
+    }
+
+    func testAReviewLandingOutranksAMerePointer() {
+        XCTAssertEqual(Reaction.resolve(pressed: false, event: .startled, hovering: true), .startled)
+    }
+
+    func testHoverIsTheFallbackNotTheDefault() {
+        XCTAssertEqual(Reaction.resolve(pressed: false, event: nil, hovering: true), .waking)
+        XCTAssertNil(Reaction.resolve(pressed: false, event: nil, hovering: false))
+    }
+
+    /// The bug the ranking exists to prevent: letting go of a drag while the
+    /// pointer is still on the badge must fall back to the hover, not to
+    /// nothing.
+    func testReleasingADragWhileStillHoveringFallsBackToWaking() {
+        XCTAssertEqual(Reaction.resolve(pressed: true, event: nil, hovering: true), .held)
+        XCTAssertEqual(Reaction.resolve(pressed: false, event: nil, hovering: true), .waking)
+    }
+
+    /// And the other direction: the pointer leaving mid-drag must not cancel
+    /// the press.
+    func testHoverLeavingMidDragDoesNotCancelThepress() {
+        XCTAssertEqual(Reaction.resolve(pressed: true, event: nil, hovering: false), .held)
+    }
+
+    func testEveryReactionIsReachable() {
+        let reached: Set<Reaction> = [
+            Reaction.resolve(pressed: true, event: nil, hovering: false),
+            Reaction.resolve(pressed: false, event: .startled, hovering: false),
+            Reaction.resolve(pressed: false, event: nil, hovering: true),
+        ].compactMap { $0 }.reduce(into: Set()) { $0.insert($1) }
+        XCTAssertEqual(reached, Set(Reaction.allCases),
+                       "a reaction with no path to the screen is dead art")
+    }
+}

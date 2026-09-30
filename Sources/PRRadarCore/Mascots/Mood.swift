@@ -137,6 +137,25 @@ public enum Mood: String, CaseIterable, Sendable {
 public enum Reaction: String, CaseIterable, Sendable {
     case waking, held, startled
 
+    /// Which reaction wins, given everything happening to the panel at once.
+    ///
+    /// Pure, so the truth table is pinned without a window — and a function
+    /// rather than three writers racing for one property. Hover, press and
+    /// events arrive independently, so last-write-wins loses in both
+    /// directions: a release while the pointer is still over the badge would
+    /// clear the hover, and a hover-out mid-drag would cancel the press.
+    ///
+    /// Order is the argument. A hand on the badge is the most immediate thing
+    /// happening to it, so it outranks a review landing; a review landing is
+    /// news, so it outranks a pointer merely resting there.
+    public static func resolve(pressed: Bool,
+                               event: Reaction?,
+                               hovering: Bool) -> Reaction? {
+        if pressed { return .held }
+        if let event { return event }
+        return hovering ? .waking : nil
+    }
+
     public func style(tint: Health) -> SpriteStyle {
         switch self {
         case .waking:
