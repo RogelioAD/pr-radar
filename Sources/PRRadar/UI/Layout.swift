@@ -283,22 +283,26 @@ enum Layout {
     /// converted, so enlarging the art cannot quietly shrink the floor.
     private static let badgeMinimumDigitPoints: CGFloat = 10
 
-    /// `crisp` is false only while a corner is being dragged, where the badge
-    /// follows the pointer instead of the ladder. See `SpriteScale.continuous`
-    /// for why, and `PanelController.commitCornerResize` for the settle.
+    /// The scale a mascot badge is drawn at: exactly the size it was dragged
+    /// to, whatever that does to the pixel grid.
+    ///
+    /// This used to snap to whole device pixels, and everything else here
+    /// still does — the header, the room, the banner. The badge is the one
+    /// surface somebody *aims* at a size, and the ladder it had to land on
+    /// was brutal: its rungs are the character's cell height over the backing
+    /// scale, which on a 1x screen is 54 points, leaving two reachable sizes
+    /// inside bounds of 28 and 128. A drag that answers a different question
+    /// from the one the hand asked is worse than a soft edge, and the soft
+    /// edge only appears at all between two rungs.
+    ///
+    /// The floor stays: below it the counter's 3x5 digits stop being a
+    /// number, which is a legibility limit rather than a pixel-grid one.
     static func badgeScale(tile: CGFloat, backingScale: CGFloat,
-                           mascot: Mascot, crisp: Bool = true) -> CGFloat {
+                           mascot: Mascot) -> CGFloat {
         let cells = SpriteLayout.blockHeight(for: mascot)
         let digitCells = Counter.height * SpriteLayout.unit(for: mascot)
-        let floor = badgeMinimumDigitPoints / CGFloat(digitCells)
-        guard crisp else {
-            return SpriteScale.continuous(targetPoints: tile,
-                                          spriteWidth: cells, minimum: floor)
-        }
-        return SpriteScale.snapped(targetPoints: tile,
-                                   spriteWidth: cells,
-                                   backingScale: backingScale,
-                                   minimum: floor)
+        return SpriteScale.continuous(targetPoints: tile, spriteWidth: cells,
+                                      minimum: badgeMinimumDigitPoints / CGFloat(digitCells))
     }
 
     /// The tile size a snapped scale actually represents.
@@ -307,28 +311,6 @@ enum Layout {
     /// size lands between two of them. Storing what was *drawn* rather than
     /// what was asked for is what stops the badge drifting a few points every
     /// time it is resized and reopened.
-    /// The smallest and largest size the badge can actually be dragged to,
-    /// which is what the "biggest"/"smallest" trophies have to be measured
-    /// against — see `BadgeSizing.reachableRange`.
-    static func reachableBadgeTileRange(mascot: Mascot?,
-                                        backingScale: CGFloat) -> (minimum: CGFloat,
-                                                                   maximum: CGFloat) {
-        guard let mascot else {
-            return badgeSizing.reachableRange(spriteWidth: nil,
-                                              backingScale: backingScale,
-                                              minimumScale: 1)
-        }
-        let digitCells = Counter.height * SpriteLayout.unit(for: mascot)
-        return badgeSizing.reachableRange(
-            spriteWidth: SpriteLayout.blockHeight(for: mascot),
-            backingScale: backingScale,
-            minimumScale: badgeMinimumDigitPoints / CGFloat(digitCells))
-    }
-
-    static func tileSize(forBadgeScale scale: CGFloat, mascot: Mascot) -> CGFloat {
-        CGFloat(SpriteLayout.blockHeight(for: mascot)) * scale
-    }
-
     /// Padding `SpriteCanvas` adds around a haloed, shadowed composition:
     /// one cell of halo on the leading edge, one of halo plus one of shadow on
     /// the trailing one.

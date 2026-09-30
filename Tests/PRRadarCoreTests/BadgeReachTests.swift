@@ -1,98 +1,43 @@
 import XCTest
 @testable import PRRadarCore
 
-/// What the badge can actually be dragged to, which is what the "biggest" and
-/// "smallest" trophies have to be measured against.
+/// Whether a badge can actually be dragged to the sizes its bounds name.
+///
+/// It could not, for one release. A mascot badge was drawn at a snapped
+/// scale, so its size was the character's cell height times a whole number of
+/// device pixels — 54 and 108 on a 1x screen, inside bounds of 28 and 128.
+/// Both ends were unreachable, which made the badge-size trophies unwinnable
+/// and the drag itself feel broken. The badge rests where it is let go now.
 final class BadgeReachTests: XCTestCase {
 
-    private let sizing = BadgeSizing(minimum: 28, maximum: 128)
-    /// The badge's character is 18 cells wide and never drawn below 2x — the
-    /// same two numbers `Layout` uses.
-    private let cells = 18
-    private let minimumScale: CGFloat = 2
+    /// A 48-cell character in its widget block.
+    private let cells = 54
+    /// Below this the counter's digits stop being a number.
+    private let floor = CGFloat(10) / 21
 
-    /// The bug this exists for: on a 1x screen an 18-cell character settles on
-    /// 36 and 126, so a badge dragged hard against either stop never reports
-    /// the 28 or 128 the bounds name — and a trophy asking for those was
-    /// asking for a size that cannot occur.
-    func testACharacterStopsShortOfBothBounds() {
-        let reach = sizing.reachableRange(spriteWidth: cells,
-                                          backingScale: 1,
-                                          minimumScale: minimumScale)
-        XCTAssertEqual(reach.minimum, 36)
-        XCTAssertEqual(reach.maximum, 126)
-        XCTAssertGreaterThan(reach.minimum, sizing.minimum)
-        XCTAssertLessThan(reach.maximum, sizing.maximum)
+    private func tile(_ points: CGFloat) -> CGFloat {
+        CGFloat(cells) * SpriteScale.continuous(targetPoints: points,
+                                                spriteWidth: cells, minimum: floor)
     }
 
-    /// A Retina screen snaps in half steps, so it gets closer — and still does
-    /// not land on either bound.
-    func testRetinaSnapsFinerAndStillStopsShort() {
-        let reach = sizing.reachableRange(spriteWidth: cells,
-                                          backingScale: 2,
-                                          minimumScale: minimumScale)
-        XCTAssertEqual(reach.minimum, 36)
-        XCTAssertEqual(reach.maximum, 126)
-        XCTAssertLessThan(reach.maximum, sizing.maximum)
+    func testBothBoundsAreReachableExactly() {
+        let sizing = BadgeSizing(minimum: 28, maximum: 128)
+        XCTAssertEqual(tile(sizing.minimum), sizing.minimum, accuracy: 0.001)
+        XCTAssertEqual(tile(sizing.maximum), sizing.maximum, accuracy: 0.001)
     }
 
-    /// With the character off the badge is a plain tile, snapped to nothing, so
-    /// both bounds are reachable exactly.
-    func testAPlainTileReachesBothBounds() {
-        let reach = sizing.reachableRange(spriteWidth: nil,
-                                          backingScale: 1,
-                                          minimumScale: minimumScale)
-        XCTAssertEqual(reach.minimum, sizing.minimum)
-        XCTAssertEqual(reach.maximum, sizing.maximum)
-    }
-
-    /// The range is never inverted or outside the bounds, whatever it is asked.
-    func testTheRangeStaysInsideTheBounds() {
-        for scale in [CGFloat(1), 2, 3] {
-            let reach = sizing.reachableRange(spriteWidth: cells,
-                                              backingScale: scale,
-                                              minimumScale: minimumScale)
-            XCTAssertLessThanOrEqual(reach.minimum, reach.maximum, "backing \(scale)")
-            XCTAssertGreaterThanOrEqual(reach.minimum, sizing.minimum, "backing \(scale)")
-            XCTAssertLessThanOrEqual(reach.maximum, sizing.maximum, "backing \(scale)")
+    /// And so is everything between them, which is the whole point: a drag
+    /// that can only stop at two places is not a drag.
+    func testEverySizeBetweenTheBoundsIsReachable() {
+        for points in stride(from: CGFloat(28), through: 128, by: 0.5) {
+            XCTAssertEqual(tile(points), points, accuracy: 0.001, "\(points)")
         }
     }
 
-    /// A shelf that has already been established, so a rule that matches
-    /// unlocks rather than being backfilled in silence.
-    private var settled: TrophyState {
-        var state = TrophyState()
-        state.established = true
-        return state
-    }
-
-    private func unlocks(tile: CGFloat, in reach: (minimum: CGFloat, maximum: CGFloat))
-        -> Set<TrophyID> {
-        var snapshot = TrophySnapshot()
-        snapshot.badgeMinimum = reach.minimum
-        snapshot.badgeMaximum = reach.maximum
-        snapshot.badgeTileSize = tile
-        return Set(TrophyEvaluator.evaluate(snapshot, state: settled).unlocked)
-    }
-
-    /// The whole point: dragged as far as it goes, with a character on, both
-    /// trophies are now actually awarded.
-    func testTheTrophiesAreReachableWithACharacterOn() {
-        let reach = sizing.reachableRange(spriteWidth: cells,
-                                          backingScale: 1,
-                                          minimumScale: minimumScale)
-        XCTAssertTrue(unlocks(tile: reach.maximum, in: reach).contains(.bigBadge))
-        XCTAssertTrue(unlocks(tile: reach.minimum, in: reach).contains(.tinyBadge))
-    }
-
-    /// And measured against the raw bounds, as it was, neither is — which is
-    /// the bug, stated as a test so it cannot come back.
-    func testNeitherIsReachableWhenMeasuredAgainstTheBounds() {
-        let bounds = (minimum: sizing.minimum, maximum: sizing.maximum)
-        let reach = sizing.reachableRange(spriteWidth: cells,
-                                          backingScale: 1,
-                                          minimumScale: minimumScale)
-        XCTAssertFalse(unlocks(tile: reach.maximum, in: bounds).contains(.bigBadge))
-        XCTAssertFalse(unlocks(tile: reach.minimum, in: bounds).contains(.tinyBadge))
+    /// The one limit that survives, and it is a legibility limit rather than
+    /// a pixel-grid one.
+    func testTheDigitFloorStillHolds() {
+        XCTAssertEqual(SpriteScale.continuous(targetPoints: 4, spriteWidth: cells,
+                                              minimum: floor), floor)
     }
 }

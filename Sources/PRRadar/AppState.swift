@@ -1038,14 +1038,6 @@ final class AppState: ObservableObject {
         seenCastNotice = NewCastNotice.acknowledgement
     }
 
-    /// True only between the press and the release of a badge corner drag.
-    ///
-    /// Published because the badge draws itself: the panel and the view have
-    /// to agree about the sprite scale to the pixel, or the art and the window
-    /// that frames it come out different sizes — and the corner grips are
-    /// measured off the art.
-    @Published var isResizingBadge = false
-
     /// A transient reaction that outranks the derived mood while it lasts.
     /// Event-driven only — a review arriving. Pointer state is tracked
     /// separately below.

@@ -74,29 +74,28 @@ sizes. Below the floor the counter's 3×5 digits stop being a number; above the
 ceiling it stops reading as a Dock peer and starts reading as a window. Your
 size is remembered across restarts, like the position.
 
-**The drag follows your hand, and settles when you let go.** A sprite is only
-crisp when one source pixel covers a whole number of *device* pixels, so the
-sizes a character can actually rest at form a ladder — and that ladder is
-coarse. Its rungs are the character's cell height divided by the backing
-scale: **54 points apart on a 1× display**, 27 on a 2× one. Inside bounds of
-28 and 128 that leaves a 1× screen exactly **two** sizes to choose from.
+**The badge rests exactly where you let go.** Nothing snaps.
 
-Running the drag on the ladder is what that arithmetic used to mean in the
-hand: you pulled a corner, nothing happened, and then the badge jumped the
-whole 54 points at once. So the drag runs *off* it — the badge tracks the
-pointer continuously, at the cost of a slightly soft edge while the button is
-down — and eases onto the nearest crisp rung on release, with the same haptic
-tick the drawer gives when its edge settles onto a row. The size that was
-*drawn* is what gets stored, so the badge cannot drift a few points further
-from your hand every time you resize it.
+That is a deliberate reversal. A sprite is only crisp when one source pixel
+covers a whole number of *device* pixels, and everywhere else in the app —
+the header, the room, the banner — still obeys that. The badge used to as
+well, and it made the drag unusable: the sizes a character can be drawn
+crisply at are its cell height over the backing scale apart, which is **54
+points on a 1× display**, leaving exactly **two** reachable sizes inside
+bounds of 28 and 128. You pulled a corner, nothing happened, and then the
+badge jumped the whole way — and letting go could move it half a badge again
+from where the pointer was.
 
-It also stops shrinking once the counter's digits would stop being legible,
-which puts the real floor above 28 with a character on; the plain tile goes
-all the way down and scales continuously, having no pixel grid to honour.
+So the badge is the one surface that comes off the pixel grid, because it is
+the one surface you *aim* at a size. Between two crisp sizes the edges soften
+slightly; at the sizes that do land on whole pixels it is as sharp as it ever
+was. A drag that answers a different question from the one your hand asked is
+the worse bargain.
 
-This got three times worse when the cast was redrawn at 48 cells and nobody
-noticed: the same ladder had been 18 points per step at 16 cells, which is
-coarse but draggable. It is the kind of regression that hides in a constant.
+The only limit left is the **counter's digits**: below about 10 points a 3×5
+digit stops being a number, so the badge stops shrinking there whatever the
+pointer does. That is a legibility floor, not a pixel-grid one. The plain
+tile has no art to keep crisp and never had either constraint.
 
 The grips sit on the **character, not the panel behind it**. The window is
 deliberately larger than the art it carries: a widget reserves the mood-mark

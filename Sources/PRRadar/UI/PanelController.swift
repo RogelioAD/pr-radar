@@ -58,8 +58,7 @@ final class PanelController {
         guard let mascot = state.selectedMascot else { return 1 }
         return Layout.badgeScale(tile: state.badgeTileSize,
                                  backingScale: state.backingScale,
-                                 mascot: mascot,
-                                 crisp: !state.isResizingBadge)
+                                 mascot: mascot)
     }
 
     /// The screen the panel is actually on, for anything that has to appear
@@ -776,10 +775,6 @@ final class PanelController {
         let start = cornerDragOrigin
             ?? (tile: state.badgeTileSize, frame: badgeFrame, corner: corner)
         cornerDragOrigin = start
-        // Off the ladder for the duration, so the badge tracks the hand rather
-        // than waiting to jump a whole rung.
-        state.isResizingBadge = true
-
         state.badgeTileSize = Layout.badgeSizing.tileSize(from: start.tile,
                                                           corner: corner,
                                                           delta: delta)
@@ -791,46 +786,22 @@ final class PanelController {
         applyFrame()
     }
 
-    /// On release, settle onto the nearest size the art can actually be drawn
-    /// at, and keep *that* rather than what the hand asked for.
+    /// On release, keep exactly the size the hand let go at.
     ///
-    /// A mascot badge is only crisp at whole device pixels, so the drag runs
-    /// off the ladder and this puts it back on. Storing the asked-for number
-    /// instead would let the badge drift a few points further every time it
-    /// was resized and reopened. With the mascot off the tile scales
-    /// continuously and there is nothing to reconcile.
-    ///
-    /// Eased rather than set outright, for the same reason the drawer eases
-    /// onto a row boundary: the rungs are `blockHeight / backingScale` points
-    /// apart — 54 on a 1x screen — so a settle can be a long way, and
-    /// arriving at it by stepping is a jolt at the end of a smooth gesture.
+    /// There used to be a settle here, onto the nearest size the art could be
+    /// drawn crisply at. It was the wrong trade for this surface: the rungs
+    /// are 54 points apart on a 1x screen, so letting go asked a question and
+    /// got a different answer back — sometimes half the badge away from where
+    /// the pointer was. The drag is the instruction now, and the cost is a
+    /// softened edge at sizes between two rungs.
     private func commitCornerResize() {
-        let start = cornerDragOrigin
         cornerDragOrigin = nil
-        // Before anything reads `badgeScale`, which answers differently now.
-        state.isResizingBadge = false
-
-        if state.badgeLayout != nil, let mascot = state.selectedMascot {
-            state.badgeTileSize = Layout.badgeSizing.clamp(
-                Layout.tileSize(forBadgeScale: badgeScale, mascot: mascot))
-            // Re-anchored on the corner that was dragged, not on the default
-            // bottom-right: the badge is a different size now than the one the
-            // preview left behind, and the fixed point has to stay the corner
-            // opposite the hand.
-            if let start {
-                let size = badgeSize
-                badgeFrame = clamp(NSRect(
-                    origin: BadgeSizing.origin(dragging: start.corner,
-                                               in: start.frame, newSize: size),
-                    size: size))
-            }
-        }
         Prefs.badgeOrigin = badgeFrame.origin
-        // The same feedback the drawer gives when its edge settles onto a row:
-        // on a trackpad it makes the end of the gesture felt rather than only
-        // seen.
-        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-        applyFrame(animated: true, duration: 0.12)
+        // No haptic and no animation: `.alignment` announces a snap, and
+        // easing towards a target is only worth it when the target is not
+        // already where the pointer is. Both were feedback for a settle that
+        // no longer happens.
+        applyFrame()
         // The grips just moved out from under a pointer that may not have, so
         // the cursor has to be re-derived rather than waiting to be told.
         hostingView.updateTrackingAreas()

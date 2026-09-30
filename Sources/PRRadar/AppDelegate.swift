@@ -517,14 +517,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         snapshot.previousScopedReviewCount = lastReviewCount
         snapshot.mergedLifetime = mergedLifetime
         snapshot.badgeTileSize = state.badgeTileSize
-        // The reachable extremes, not the bounds. With a character drawn the
-        // badge settles on whole device pixels and stops short of both — so
-        // measured against the bounds, a badge dragged as far as it goes has
-        // never once been at its largest or smallest.
-        let reach = Layout.reachableBadgeTileRange(mascot: state.selectedMascot,
-                                                   backingScale: state.backingScale)
-        snapshot.badgeMinimum = reach.minimum
-        snapshot.badgeMaximum = reach.maximum
+        // The bounds, plainly. These used to be the *reachable* extremes,
+        // narrower than the bounds whenever a character was drawn, because a
+        // snapped scale could not land on either end — so a trophy asking for
+        // the largest badge would have waited for ever. Nothing snaps now and
+        // both ends are reachable exactly.
+        snapshot.badgeMinimum = Layout.badgeSizing.minimum
+        snapshot.badgeMaximum = Layout.badgeSizing.maximum
         snapshot.mascotCyclesThisSession = state.mascotCycles
         snapshot.now = Date()
         // From the same pref the update check watches, so a fork rewards
