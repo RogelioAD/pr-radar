@@ -454,28 +454,33 @@ enum Layout {
 
     // MARK: - Mascot room
 
-    /// One character's cell in the room. Big enough to tell two apart at a
-    /// glance, which is the whole job of the screen.
-    static let mascotRoomPoints: CGFloat = 44
+    /// One character's cell in the room, whole rather than cropped to its
+    /// head. Big enough to tell two apart at a glance, which is the whole job
+    /// of the screen — and a room is the one place there is space to show a
+    /// character in full, so cropping it here was just the header's habit
+    /// carried somewhere it does not apply.
+    static let mascotRoomPoints: CGFloat = 54
     /// Gap between cells, and between one shelf and the next.
     static let mascotGridSpacing: CGFloat = 10
 
     static func mascotRoomScale(backingScale: CGFloat) -> CGFloat {
-        // One scale for the whole room, off the tallest crop in the cast, for
-        // the same reason the banner uses one: a grid where characters are
-        // sized individually is a grid of different-sized characters.
+        // One scale for the whole room, off the full block every character
+        // occupies rather than each one's own crop. Two reasons, and the
+        // second is the one that bit: a grid where characters are sized
+        // individually is a grid of different-sized characters, and the crop
+        // heights differ by eight rows across the cast — so scaling by them
+        // made Rattle noticeably smaller than Gourd for no reason a reader
+        // could see. `blockHeight` is the same for all of them.
         SpriteScale.snapped(targetPoints: mascotRoomPoints,
-                            spriteWidth: Mascot.all.map(\.headRows).max() ?? 48,
+                            spriteWidth: SpriteLayout.blockHeight(for: Mascot.blip),
                             backingScale: backingScale,
                             minimum: 1 / max(1, backingScale))
     }
 
-    /// What one shelf occupies: its heading, and one row of characters.
-    ///
-    /// An estimate only in the sense that the cells are measured from the art
-    /// rather than from the screen — every shelf in the cast is exactly one
-    /// row, so this is the real height rather than a guess at one.
-    static var mascotShelfHeight: CGFloat { mascotRoomPoints + 18 + mascotGridSpacing }
+    /// What one shelf occupies: its heading, and one row of whole characters
+    /// with their names under them. Used for the single frame before the
+    /// shelves report their own measurements.
+    static var mascotShelfHeight: CGFloat { mascotRoomPoints + 46 }
 
     /// The "no mascot" line under the shelves.
     ///

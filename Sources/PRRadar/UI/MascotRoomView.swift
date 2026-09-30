@@ -104,14 +104,23 @@ private struct MascotCell: View {
     var body: some View {
         Button(action: onPick) {
             VStack(spacing: 3) {
-                // Idle and still. Twelve timelines animating at once is a
-                // screen that will not sit still long enough to be read, and
-                // the badge is where a character is supposed to move.
+                // Whole, not cropped to the head: a room is the one surface
+                // with the space for it, and half a character is a poor way
+                // to be asked to choose between twelve.
+                //
+                // Framed to the character's *own* columns rather than the
+                // perch's. A perch reserves a mood-mark gutter on its right
+                // — 18 of its 66 cells — and `Mood.idle` draws no mark, so
+                // that is dead space the layout was still counting. Centring
+                // a name under it put every label a third of a gutter left
+                // of the character it belongs to.
                 MascotView(mascot: mascot,
                            style: Mood.idle.style,
                            scale: scale,
-                           crop: mascot.headRows,
                            tempo: .still)
+                    .frame(width: CGFloat(mascot.sprite.width) * scale,
+                           alignment: .leading)
+                    .clipped()
                 Text(mascot.name)
                     .font(.system(size: 9.5, weight: chosen ? .semibold : .regular))
                     .foregroundStyle(chosen ? Color.accentColor : .secondary)

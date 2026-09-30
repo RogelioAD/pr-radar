@@ -415,7 +415,7 @@ redrawn, because redrawing them would make them different characters.
 | **Widget** | a screen on a collar — mouth bar and a power LED |
 | **Nimbus** | the first floater, and the reason the bob has two speeds |
 
-**Out There** — the 48-cell redraw.
+**Out of this World** — the 48-cell redraw.
 
 | | |
 |---|---|
@@ -449,7 +449,15 @@ for anyone who already knows which one they want. Each cell's tooltip carries
 the blurb and what the character's tell is, which is the one place either is
 still said.
 
-The cells are **held still**. Twelve timelines animating at once is a screen
+Characters are drawn **whole** here, not cropped to the head the way the
+drawer's header lockup is. A room is the one surface with space for it, and
+half a character is a poor way to be asked to choose between twelve. Each is
+framed to its own columns rather than the perch's, which reserves a mood-mark
+gutter on the right that `idle` never draws into — centring a name under the
+perch put every label a third of a gutter left of the character it belonged
+to.
+
+They are also **held still**. Twelve timelines animating at once is a screen
 that will not sit still long enough to be read, and the badge is where a
 character is supposed to move.
 

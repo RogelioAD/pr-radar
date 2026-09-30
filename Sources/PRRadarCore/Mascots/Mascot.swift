@@ -81,7 +81,7 @@ public enum MascotCohort: String, CaseIterable, Sendable {
     public var title: String? {
         switch self {
         case .og:          return "OG Mascots"
-        case .space:       return "Out There"
+        case .space:       return "Out of this World"
         case .october2026: return "October 2026"
         case .custom:      return nil
         }
