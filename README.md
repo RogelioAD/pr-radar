@@ -271,6 +271,11 @@ anything**, which is what makes it pleasant to hand to an agent:
 - `make print` proves the whole data path — auth, fetch, parse, derived state —
   with no GUI involved.
 - `make test` covers every rule worth arguing about (see below).
+- `python3 Scripts/mascot.py --demo --png /tmp/look.png` draws a mascot. You
+  author 48 rows of *24* — the left half — and it mirrors, outlines and shades
+  them into a Swift literal, then writes a PNG to look at. Authoring a 48x48
+  sprite by hand and getting it symmetric to the pixel is not realistic; the
+  script is also where the non-obvious rules are written down.
 - `PRRADAR_DEBUG=1` prints a hit-test zone map of the real laid-out drawer, and
   of the collapsed badge's four corner grips — including a probe of the panel
   corner outside the art, which must read `move` — so drag, resize and click
