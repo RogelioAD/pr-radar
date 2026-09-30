@@ -4,6 +4,23 @@
 
 import Foundation
 
+/// How a character sweeps while the app is looking.
+///
+/// Declared per character rather than worked out from the art. Three of the
+/// four have a visor wider than it is tall, so deriving the axis from the
+/// glass gave a helmet that should scan downward and a saucer that should
+/// swing a searchlight the same beam going across.
+public enum SweepKind: Sendable {
+    /// A beam across the glass, trailing, wrapping round the lens.
+    case visor
+    /// The same beam, scanning down the inside of a helmet instead.
+    case hud
+    /// A searchlight swinging through an arc under the hull.
+    case beam
+    /// Rings rippling outward, for the one with no glass to sweep.
+    case psi
+}
+
 public enum MascotID: String, CaseIterable, Sendable {
     case blip, scoot, wobble, bloop
 
@@ -45,6 +62,9 @@ public struct Mascot: Identifiable, Sendable, Equatable {
     public let eyeSize: Int
     /// What a lit eye pixel is drawn in.
     public let eyeInk: Slot
+    /// How this one sweeps. Declared, not derived: deriving the axis from the
+    /// shape of the glass collapsed three different sweeps into one beam.
+    public let sweep: SweepKind
     /// This character's six chassis rungs. Per-character rather than one
     /// shared greyscale: four machines in the same grey read as one machine in
     /// four poses. The tell still takes the live `Health` tint, so the mood is
@@ -130,7 +150,7 @@ extension Mascot {
             "...........kSDDDDDDDDk....kSDDDDDDDDk...........",
             "...........kkkkkkkkkkk....kkkkkkkkkkk...........",
         ]),
-        eyes: [Point(15, 19), Point(27, 19)], eyeSize: 6, eyeInk: .accent,
+        eyes: [Point(15, 19), Point(27, 19)], eyeSize: 6, eyeInk: .accent, sweep: .visor,
         ramp: ChassisRamp(deep: RGB(0.086, 0.129, 0.169), shade: RGB(0.180, 0.255, 0.314), mid: RGB(0.278, 0.376, 0.435),
                           base: RGB(0.424, 0.529, 0.592), light: RGB(0.608, 0.698, 0.753), spec: RGB(0.863, 0.918, 0.945)),
         headRows: 28)
@@ -190,7 +210,7 @@ extension Mascot {
             "............kSSDDDDDk......kBSDDDDDk............",
             "............kkkkkkkkk......kkkkkkkkk............",
         ]),
-        eyes: [Point(15, 13), Point(27, 13)], eyeSize: 6, eyeInk: .accent,
+        eyes: [Point(15, 13), Point(27, 13)], eyeSize: 6, eyeInk: .accent, sweep: .hud,
         ramp: ChassisRamp(deep: RGB(0.137, 0.161, 0.220), shade: RGB(0.239, 0.278, 0.376), mid: RGB(0.373, 0.420, 0.533),
                           base: RGB(0.537, 0.588, 0.698), light: RGB(0.741, 0.780, 0.863), spec: RGB(0.957, 0.973, 1.000)),
         headRows: 28)
@@ -250,7 +270,7 @@ extension Mascot {
             "................................................",
             "................................................",
         ]),
-        eyes: [Point(15, 9), Point(27, 9)], eyeSize: 6, eyeInk: .accent,
+        eyes: [Point(15, 9), Point(27, 9)], eyeSize: 6, eyeInk: .accent, sweep: .beam,
         ramp: ChassisRamp(deep: RGB(0.110, 0.090, 0.188), shade: RGB(0.200, 0.169, 0.322), mid: RGB(0.306, 0.263, 0.471),
                           base: RGB(0.447, 0.400, 0.627), light: RGB(0.655, 0.612, 0.776), spec: RGB(0.902, 0.878, 0.973)),
         headRows: 31)
@@ -310,7 +330,7 @@ extension Mascot {
             "..............kDDDk..........kDDDk..............",
             ".............kkkkkkk........kkkkkkk.............",
         ]),
-        eyes: [Point(10, 15), Point(29, 15)], eyeSize: 9, eyeInk: .accent,
+        eyes: [Point(10, 15), Point(29, 15)], eyeSize: 9, eyeInk: .accent, sweep: .psi,
         ramp: ChassisRamp(deep: RGB(0.071, 0.161, 0.102), shade: RGB(0.122, 0.271, 0.153), mid: RGB(0.192, 0.392, 0.227),
                           base: RGB(0.298, 0.545, 0.325), light: RGB(0.455, 0.714, 0.482), spec: RGB(0.784, 0.929, 0.788)),
         headRows: 28)

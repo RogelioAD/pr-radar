@@ -130,50 +130,115 @@ extension Mascot {
         }
     }
 
-    /// Idle, and the reason the app is called what it is.
+    /// Four sweeps, one per character, and each one is theirs.
     ///
-    /// A real beam turns one way and never stops, so this wraps rather than
-    /// bouncing: the trail is still leaving one edge as the head re-enters the
-    /// other, and there is no frame without a sweep in it.
+    /// Deriving the axis from the shape of the glass was the mistake: it
+    /// collapsed a helmet scanning downward and a saucer's searchlight into
+    /// the same beam going across, because all three happen to have a visor
+    /// wider than it is tall. The kind is declared on the character now.
+    ///
+    /// What they share is that a real beam turns one way and never stops. All
+    /// four wrap, so there is no frame without a sweep in it.
     private func sweep(_ grid: inout Sprite, frame: Int) {
-        let f = abs(frame)
-        guard let glass = glassBounds else {
-            // The one with no glass pulses instead: a wave climbing him, and
-            // the bulbs firing when it arrives.
-            let py = grid.height - (f % 26) * 54 / 26
-            for r in 0..<4 {
-                let y = py + r
-                guard y >= 0, y < grid.height else { continue }
-                for x in 0..<grid.width { brighten(&grid, x, y, by: r == 1 || r == 2 ? 2 : 1) }
-            }
-            if py < 7 { repaintAccent(&grid, x: 0..<grid.width, y: 0..<4, with: .accent) }
-            return
+        switch sweep {
+        case .visor: glassBeam(&grid, frame: frame, down: false)
+        case .hud:   glassBeam(&grid, frame: frame, down: true)
+        case .beam:  searchlight(&grid, frame: frame)
+        case .psi:   rings(&grid, frame: frame)
         }
-        // Across a wide visor, down a tall one. Same beam either way — the
-        // axis is a property of the glass, not of the character.
-        let wide = glass.width >= glass.height
-        let span = wide ? glass.width : glass.height
-        let head = (f % 18) * span / 18
-        for band in stride(from: 2, through: 0, by: -1) {
+    }
+
+    /// Blip across his HUD, Scoot down the inside of his helmet. The same
+    /// beam on two axes, each with four steps of trail behind the head, and
+    /// each drawn after the eyes so it passes *over* them and flares one as
+    /// it crosses rather than sliding underneath it.
+    private func glassBeam(_ grid: inout Sprite, frame: Int, down: Bool) {
+        guard let glass = glassBounds else { return }
+        let span = down ? glass.height : glass.width
+        let head = (abs(frame) % 18) * span / 18
+        for band in stride(from: 4, through: 0, by: -1) {
             let at = ((head - band) % span + span) % span
-            let lead = band == 0
-            if wide {
-                for y in glass.origin.y..<(glass.origin.y + glass.height) {
-                    beam(&grid, glass.origin.x + at, y, lead: lead)
+            let tone: Slot = band == 0 ? .accentMid : .accentDim
+            if down {
+                let y = glass.origin.y + at
+                for x in glass.origin.x..<(glass.origin.x + glass.width) {
+                    lightGlass(&grid, x, y, tone: tone, lead: band == 0)
                 }
             } else {
-                for x in glass.origin.x..<(glass.origin.x + glass.width) {
-                    beam(&grid, x, glass.origin.y + at, lead: lead)
+                let x = glass.origin.x + at
+                for y in glass.origin.y..<(glass.origin.y + glass.height) {
+                    lightGlass(&grid, x, y, tone: tone, lead: band == 0)
                 }
             }
         }
     }
 
-    private func beam(_ grid: inout Sprite, _ x: Int, _ y: Int, lead: Bool) {
+    /// Wobble's tractor beam, swinging through an arc under the hull like a
+    /// searchlight rather than hanging straight down.
+    ///
+    /// Drawn inside the sprite: the saucer stops at row 30 and the rows below
+    /// it were left empty for exactly this, so the beam costs no extra room
+    /// in the badge.
+    private func searchlight(_ grid: inout Sprite, frame: Int) {
+        let apexX = Double(grid.width) / 2, apexY = 31
+        let angle = -0.55 + Double(abs(frame) % 30) / 30 * 1.1
+        for depth in 1..<(grid.height - apexY) {
+            let centre = apexX + sin(angle) * Double(depth)
+            let half = 1 + depth / 5
+            for offset in -half...half where grid[Int(centre) + offset, apexY + depth] == nil {
+                grid.plot(Int(centre) + offset,
+                          apexY + depth,
+                          abs(offset) == half ? .accentDim : .accentMid)
+            }
+        }
+    }
+
+    /// Bloop has no glass to sweep, so he does the alien thing instead: three
+    /// rings rippling off his head at once, and the eyes flashing as each one
+    /// launches.
+    ///
+    /// In the design these expanded into the space around him. He fills his
+    /// own 48 cells almost edge to edge, so rings confined to empty pixels
+    /// were invisible for most of their life — a ring of radius 16 is still
+    /// entirely inside his head. They ripple *through* him instead: empty
+    /// cells take the accent, and his own surface brightens a step as the
+    /// ring crosses it. Same expanding rings, rendered in whatever they pass
+    /// over, which on a filled silhouette reads better than the original did.
+    private func rings(_ grid: inout Sprite, frame: Int) {
+        let cx = Double(grid.width) / 2, cy = 21.0
+        for index in 0..<3 {
+            let radius = (Double(abs(frame)) * 1.3 + Double(index) * 8).truncatingRemainder(dividingBy: 24)
+            if radius < 3 { continue }
+            let tone: Slot = radius < 11 ? .accentMid : .accentDim
+            var step = 0.0
+            while step < 6.2832 {
+                let x = Int((cx + cos(step) * radius).rounded())
+                let y = Int((cy + sin(step) * radius * 0.62).rounded())
+                if grid[x, y] == nil {
+                    grid.plot(x, y, tone)
+                } else {
+                    // Never over the tell or the eyes: the mood has to stay
+                    // readable through the ripple.
+                    brighten(&grid, x, y, by: radius < 11 ? 2 : 1)
+                }
+                step += 0.05
+            }
+        }
+        // The flash on launch. Reads as the pulse leaving him, not as a blink.
+        if (Double(abs(frame)) * 1.3).truncatingRemainder(dividingBy: 24) < 3 {
+            for y in 0..<grid.height {
+                for x in 0..<grid.width where grid[x, y] == .accent {
+                    grid.plot(x, y, .light)
+                }
+            }
+        }
+    }
+
+    private func lightGlass(_ grid: inout Sprite, _ x: Int, _ y: Int, tone: Slot, lead: Bool) {
         switch grid[x, y] {
-        case .accent where lead:            grid.plot(x, y, .light)   // an eye flares
-        case .visor, .visorLit:             grid.plot(x, y, lead ? .accentMid : .accentDim)
-        default:                            break
+        case .accent where lead: grid.plot(x, y, .light)   // an eye flares
+        case .visor, .visorLit:  grid.plot(x, y, tone)
+        default:                 break
         }
     }
 

@@ -121,18 +121,93 @@ final class MascotTests: XCTestCase {
                      "the one with no visor is supposed to have no glass")
     }
 
+    /// The test that should have existed first. Deriving the sweep axis from
+    /// the glass collapsed Scoot's downward helmet scan and Wobble's
+    /// searchlight into Blip's beam-across, because all three have a visor
+    /// wider than it is tall — and nothing failed, because "a sweep happened"
+    /// was all anything checked.
+    func testEachCharacterSweepsOnItsOwnAxis() {
+        func litCentre(_ m: Mascot, _ frame: Int) -> (x: Double, y: Double)? {
+            let g = m.frame(eyes: .open, frame: frame, sweeping: true)
+            let pts = g.litPoints.filter {
+                let s = g[$0.x, $0.y]
+                return s == .accentMid || s == .accentDim
+            }
+            guard !pts.isEmpty else { return nil }
+            return (pts.reduce(0.0) { $0 + Double($1.x) } / Double(pts.count),
+                    pts.reduce(0.0) { $0 + Double($1.y) } / Double(pts.count))
+        }
+        func travel(_ m: Mascot) -> (x: Double, y: Double) {
+            let samples = (0..<18).compactMap { litCentre(m, $0) }
+            let xs = samples.map(\.x), ys = samples.map(\.y)
+            return ((xs.max() ?? 0) - (xs.min() ?? 0), (ys.max() ?? 0) - (ys.min() ?? 0))
+        }
+        let blip = travel(.blip)
+        XCTAssertGreaterThan(blip.x, blip.y * 2, "Blip's beam should cross, not descend")
+
+        let scoot = travel(.scoot)
+        XCTAssertGreaterThan(scoot.y, scoot.x * 2, "Scoot's beam should descend, not cross")
+
+        // The searchlight swings, so its centre moves sideways well below the
+        // hull rather than inside the canopy.
+        let wobbleFrames = (0..<30).map { Mascot.wobble.frame(eyes: .open, frame: $0, sweeping: true) }
+        let beamRows = wobbleFrames.flatMap { g in
+            g.litPoints.filter { g[$0.x, $0.y] == .accentMid || g[$0.x, $0.y] == .accentDim }.map(\.y)
+        }
+        XCTAssertGreaterThan(beamRows.max() ?? 0, 40,
+                             "the searchlight should reach well below the saucer")
+        XCTAssertGreaterThan(travel(.wobble).x, 2, "the searchlight should swing")
+    }
+
+    /// The rings expand. Checked as growth over time rather than as a shape,
+    /// because he fills his own silhouette and most of a ring is rendered in
+    /// his surface rather than in empty space.
+    func testTheAlienRingsExpand() {
+        func spread(_ frame: Int) -> Int {
+            let plain = Mascot.bloop.frame(eyes: .open, frame: frame, sweeping: false)
+            let swept = Mascot.bloop.frame(eyes: .open, frame: frame, sweeping: true)
+            var touched: [Int] = []
+            for y in 0..<swept.height {
+                for x in 0..<swept.width where swept[x, y] != plain[x, y] {
+                    touched.append(abs(x - swept.width / 2))
+                }
+            }
+            return touched.max() ?? 0
+        }
+        let reach = (0..<26).map(spread)
+        XCTAssertGreaterThan(reach.max() ?? 0, 18, "the rings never get far from him")
+        XCTAssertNotEqual(reach.min(), reach.max(), "the rings are not expanding at all")
+    }
+
+    /// The mood has to survive the ripple: it may brighten his chassis, but
+    /// it must never bury the tell that carries the tint.
+    func testTheRippleNeverBuriesTheTell() {
+        for frame in 0..<26 {
+            let swept = Mascot.bloop.frame(eyes: .open, frame: frame, sweeping: true)
+            let tinted = swept.litPoints.filter {
+                switch swept[$0.x, $0.y] {
+                case .accent, .accentMid, .accentDim, .light: return true
+                default: return false
+                }
+            }
+            XCTAssertFalse(tinted.isEmpty, "frame \(frame) has no tell left")
+        }
+    }
+
     /// A real radar beam turns one way and never stops. The first version of
     /// this wrapped badly and left a four-frame hole at the end of every
     /// cycle, which reads as the app having died rather than as it watching.
-    func testTheSweepNeverLeavesAFrameWithoutABeam() {
-        for mascot in [Mascot.blip, .scoot, .wobble] {
+    ///
+    /// Stated as "the sweep changed something" rather than "an accent pixel
+    /// exists": the alien's ripple is rendered in his own chassis tones for
+    /// most of its life, and an accent-only check called that nothing.
+    func testTheSweepNeverLeavesAFrameWithoutMotion() {
+        for mascot in Mascot.all {
             for frame in 0..<60 {
-                let lit = mascot.frame(eyes: .open, frame: frame, sweeping: true)
-                let beamed = lit.litPoints.contains {
-                    let slot = lit[$0.x, $0.y]
-                    return slot == .accentMid || slot == .accentDim
-                }
-                XCTAssertTrue(beamed, "\(mascot.name) has no beam on frame \(frame)")
+                let plain = mascot.frame(eyes: .open, frame: frame, sweeping: false)
+                let swept = mascot.frame(eyes: .open, frame: frame, sweeping: true)
+                XCTAssertNotEqual(plain, swept,
+                                  "\(mascot.name) is not sweeping on frame \(frame)")
             }
         }
     }
