@@ -5,52 +5,52 @@ import XCTest
 /// at a screenshot.
 final class MascotTests: XCTestCase {
 
-    func testEverySpriteIsSixteenSquare() {
+    func testEverySpriteIsFortyEightSquare() {
         for mascot in Mascot.all {
-            XCTAssertEqual(mascot.sprite.width, 16, "\(mascot.name) width")
-            XCTAssertEqual(mascot.sprite.height, 16, "\(mascot.name) height")
+            XCTAssertEqual(mascot.sprite.width, 48, "\(mascot.name) width")
+            XCTAssertEqual(mascot.sprite.height, 48, "\(mascot.name) height")
         }
     }
 
-    /// The reason a swap never shifts the layout around it.
-    func testBustsShareAnIdenticalCollar() {
-        let collar = Sprite(Mascot.collar)
-        for mascot in [Mascot.pip, .byte, .widget] {
-            for y in 0..<collar.height {
-                for x in 0..<collar.width {
-                    XCTAssertEqual(mascot.sprite[x, mascot.sprite.height - 4 + y],
-                                   collar[x, y],
-                                   "\(mascot.name) collar at (\(x), \(y))")
+    /// Every character is authored as 48 rows of 24 and mirrored, so the
+    /// silhouette has to come back symmetric to the pixel. The *colours* do
+    /// not: the shading pass lights from the upper left, which is the whole
+    /// point of it.
+    func testEverySilhouetteIsMirrorSymmetric() {
+        for mascot in Mascot.all {
+            let art = mascot.sprite
+            for y in 0..<art.height {
+                for x in 0..<(art.width / 2) {
+                    XCTAssertEqual(art[x, y] == nil,
+                                   art[art.width - 1 - x, y] == nil,
+                                   "\(mascot.name) silhouette at (\(x), \(y))")
                 }
             }
         }
     }
 
-    /// The floater is the deliberate exception — no collar, so it can bob
-    /// further and sit higher.
-    func testFloaterHasNoCollarAndNoCrop() {
-        XCTAssertEqual(Mascot.nimbus.headRows, Mascot.nimbus.sprite.height)
-        XCTAssertEqual(Mascot.nimbus.bobScale, 2)
-        let collar = Sprite(Mascot.collar)
-        let bottomFour = (0..<collar.height).map { y in
-            (0..<collar.width).map { x in Mascot.nimbus.sprite[x, 12 + y] }
+    /// The shading pass may not invent a specular highlight — one it decides
+    /// on its own turns a soft edge into a hard white rim, which is exactly
+    /// what happened to the first floater.
+    func testSpecularIsRareEnoughToBeDeliberate() {
+        for mascot in Mascot.all {
+            let spec = mascot.sprite.litPoints.filter { mascot.sprite[$0.x, $0.y] == .chassisSpec }
+            let lit = mascot.sprite.litPoints.count
+            XCTAssertLessThan(Double(spec.count) / Double(lit), 0.05,
+                              "\(mascot.name) is \(spec.count)/\(lit) specular — that is a rim, not a highlight")
         }
-        let collarRows = (0..<collar.height).map { y in
-            (0..<collar.width).map { x in collar[x, y] }
-        }
-        XCTAssertNotEqual(bottomFour, collarRows,
-                          "the floater is supposed to be the one without a collar")
     }
 
     func testEyeBoxesAreInBoundsAndOnSkin() {
         for mascot in Mascot.all {
             for box in mascot.eyes {
+                let n = mascot.eyeSize
                 XCTAssertTrue(box.x >= 0 && box.y >= 0
-                              && box.x + 2 <= mascot.sprite.width
-                              && box.y + 2 <= mascot.sprite.height,
+                              && box.x + n <= mascot.sprite.width
+                              && box.y + n <= mascot.sprite.height,
                               "\(mascot.name) eye box \(box) out of bounds")
-                for dy in 0..<2 {
-                    for dx in 0..<2 {
+                for dy in 0..<n {
+                    for dx in 0..<n {
                         XCTAssertNotNil(mascot.sprite[box.x + dx, box.y + dy],
                                         "\(mascot.name) eye on a transparent pixel")
                     }
@@ -59,34 +59,94 @@ final class MascotTests: XCTestCase {
         }
     }
 
+    /// Eyes have to sit symmetrically about the centre line, or a face reads
+    /// as a pixel off even though every feature is where it was drawn.
+    func testEyesArePlacedSymmetricallyAboutTheCentre() {
+        for mascot in Mascot.all {
+            XCTAssertEqual(mascot.eyes.count, 2, "\(mascot.name)")
+            let left = mascot.eyes[0], right = mascot.eyes[1]
+            let n = mascot.eyeSize, w = mascot.sprite.width
+            XCTAssertEqual(left.x + n - 1, w - 1 - right.x,
+                           "\(mascot.name) eyes are off-centre")
+            XCTAssertEqual(left.y, right.y, "\(mascot.name) eyes are not level")
+        }
+    }
+
     /// A dark-eyed mascot loses the mood colour entirely without one, which is
-    /// how two of these four ended up reading identically in the first pass.
+    /// how two of the previous four ended up reading identically.
     func testEveryMascotHasATellOutsideItsEyes() {
         for mascot in Mascot.all {
             XCTAssertFalse(mascot.tell.isEmpty, "\(mascot.name) has no tell")
+            let n = mascot.eyeSize
             let inEye = { (point: Point) in
                 mascot.eyes.contains { box in
-                    (box.x..<box.x + 2).contains(point.x) && (box.y..<box.y + 2).contains(point.y)
+                    (box.x..<box.x + n).contains(point.x) && (box.y..<box.y + n).contains(point.y)
                 }
             }
             XCTAssertTrue(mascot.tell.contains { !inEye($0) },
                           "\(mascot.name)'s tell is entirely inside its eyes")
-            for point in mascot.tell {
-                XCTAssertNotNil(mascot.sprite[point.x, point.y],
-                                "\(mascot.name) tell on a transparent pixel")
+        }
+    }
+
+    func testApplyingAMoodLightsTheTellAndDrawsTheEyes() {
+        for mascot in Mascot.all {
+            let shut = mascot.frame(eyes: .shut)
+            let open = mascot.frame(eyes: .open)
+            XCTAssertNotEqual(shut, open, "\(mascot.name) looks the same shut as open")
+            let box = mascot.eyes[0]
+            XCTAssertEqual(open[box.x + mascot.eyeSize / 2, box.y + mascot.eyeSize / 2],
+                           mascot.eyeInk,
+                           "\(mascot.name) open eye has no ink in the middle of it")
+        }
+    }
+
+    /// Only the two with nothing under them.
+    func testTheFloatersBobFurther() {
+        XCTAssertEqual(Mascot.scoot.bobScale, 2)
+        XCTAssertEqual(Mascot.wobble.bobScale, 2)
+        XCTAssertEqual(Mascot.blip.bobScale, 1)
+        XCTAssertEqual(Mascot.bloop.bobScale, 1)
+    }
+
+    // MARK: - The sweep
+
+    /// Three of them have glass for a beam to cross. The alien does not, and
+    /// pulses instead — the branch exists precisely because he is the
+    /// exception.
+    func testGlassIsFoundOnTheThreeThatHaveIt() {
+        XCTAssertNotNil(Mascot.blip.glassBounds)
+        XCTAssertNotNil(Mascot.scoot.glassBounds)
+        XCTAssertNotNil(Mascot.wobble.glassBounds)
+        XCTAssertNil(Mascot.bloop.glassBounds,
+                     "the one with no visor is supposed to have no glass")
+    }
+
+    /// A real radar beam turns one way and never stops. The first version of
+    /// this wrapped badly and left a four-frame hole at the end of every
+    /// cycle, which reads as the app having died rather than as it watching.
+    func testTheSweepNeverLeavesAFrameWithoutABeam() {
+        for mascot in [Mascot.blip, .scoot, .wobble] {
+            for frame in 0..<60 {
+                let lit = mascot.frame(eyes: .open, frame: frame, sweeping: true)
+                let beamed = lit.litPoints.contains {
+                    let slot = lit[$0.x, $0.y]
+                    return slot == .accentMid || slot == .accentDim
+                }
+                XCTAssertTrue(beamed, "\(mascot.name) has no beam on frame \(frame)")
             }
         }
     }
 
-    func testApplyingAMoodLightsTheTellAndRepaintsTheEyes() {
-        let frame = Mascot.pip.frame(eyes: .shut)
-        for point in Mascot.pip.tell {
-            XCTAssertEqual(frame[point.x, point.y], .accent)
+    /// And the sweep is idle-only: it says "nothing to report", so running it
+    /// while something is wrong would make the state you must notice look
+    /// like the one you can ignore.
+    func testOnlyIdleSweeps() {
+        for mood in Mood.allCases {
+            XCTAssertEqual(mood.style.sweeps, mood == .idle, "\(mood)")
         }
-        let box = Mascot.pip.eyes[0]
-        XCTAssertEqual(frame[box.x, box.y], Mascot.pip.eyeOff,      // shut: top row dark
-                       "shut eyes should clear the top row")
-        XCTAssertEqual(frame[box.x, box.y + 1], Mascot.pip.eyeInk)
+        for reaction in Reaction.allCases {
+            XCTAssertFalse(reaction.style(tint: .good).sweeps, "\(reaction)")
+        }
     }
 
     // MARK: - Halo

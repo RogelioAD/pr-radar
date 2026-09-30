@@ -66,14 +66,26 @@ struct SpriteCanvas: View {
             if halo {
                 for point in layout.halo() { fill(point.x, point.y, Self.haloColor) }
             }
+            let dark = colorScheme == .dark
             for layer in layout.layers {
-                let accent = locked
-                    ? Color(SpritePalette.locked(layer.accent.rgb))
-                    : layer.accent.tint
+                let tint = layer.accent.rgb
                 for point in layer.sprite.litPoints {
                     guard let slot = layer.sprite[point.x, point.y] else { continue }
+                    // A layer carrying a ramp is a character, and its chassis
+                    // and accent strengths resolve against that. Everything
+                    // else — marks, chips, pancakes, trophies — comes from the
+                    // one shared palette, as it always did.
+                    let rgb: RGB
+                    if let ramp = layer.ramp {
+                        rgb = SpritePalette.mascotColor(for: slot, ramp: ramp,
+                                                        tint: tint, dark: dark)
+                    } else if slot == .accent {
+                        rgb = tint
+                    } else {
+                        rgb = SpritePalette.color(for: slot, dark: dark)
+                    }
                     fill(layer.origin.x + point.x, layer.origin.y + point.y,
-                         slot == .accent ? accent : color(for: slot))
+                         Color(locked ? SpritePalette.locked(rgb) : rgb))
                 }
             }
         }

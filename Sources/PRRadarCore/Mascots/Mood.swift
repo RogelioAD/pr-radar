@@ -49,14 +49,23 @@ public struct SpriteStyle: Sendable {
     /// Cycled one per animation frame.
     public let marks: [Mark]
     public let health: Health
-    /// Vertical offset per animation frame, in sprite pixels.
+    /// Vertical offset per animation frame, in units.
     public let bob: [Int]
+    /// Whether the character runs its sweep in this state.
+    ///
+    /// Idling only, and on purpose. A sweep is the app saying "I am watching
+    /// and there is nothing to report"; running it while something is wrong
+    /// would make the one state you need to notice look like the one you can
+    /// ignore.
+    public let sweeps: Bool
 
-    public init(eyes: EyePattern, marks: [Mark], health: Health, bob: [Int]) {
+    public init(eyes: EyePattern, marks: [Mark], health: Health,
+                bob: [Int], sweeps: Bool = false) {
         self.eyes = eyes
         self.marks = marks
         self.health = health
         self.bob = bob
+        self.sweeps = sweeps
     }
 
     public func mark(frame: Int) -> Mark { marks[abs(frame) % marks.count] }
@@ -97,8 +106,13 @@ public enum Mood: String, CaseIterable, Sendable {
             return SpriteStyle(eyes: .shut, marks: [.zzz, .zzz, .zzz, .none],
                                health: .good, bob: [0, 0, 0, 1, 1, 1])
         case .idle:
+            // The one mood with a longer cycle than it strictly needs: the
+            // sweep runs off the frame counter, so a one-frame bob would hold
+            // the body still while the beam crossed it.
             return SpriteStyle(eyes: .open, marks: [.none],
-                               health: .running, bob: [0])
+                               health: .running,
+                               bob: [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0],
+                               sweeps: true)
         case .nudging:
             return SpriteStyle(eyes: .glance, marks: [.bang, .bang, .none],
                                health: .attention, bob: [0, 0, 1, 1])

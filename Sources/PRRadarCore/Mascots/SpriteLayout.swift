@@ -12,6 +12,18 @@ public struct SpriteLayout: Sendable {
         public let origin: Point
         /// What this layer's `.accent` cells resolve to.
         public let accent: Health
+        /// The character's chassis ramp, for layers that are a character.
+        /// nil on marks, chips and pancakes, which are drawn from the shared
+        /// palette and the accent alone.
+        public let ramp: ChassisRamp?
+
+        public init(sprite: Sprite, origin: Point, accent: Health,
+                    ramp: ChassisRamp? = nil) {
+            self.sprite = sprite
+            self.origin = origin
+            self.accent = accent
+            self.ramp = ramp
+        }
     }
 
     public let layers: [Layer]
@@ -19,12 +31,19 @@ public struct SpriteLayout: Sendable {
     public let height: Int
 
     // Geometry shared by every composition.
-    public static let characterSize = 16
-    /// The mark sits in a gutter to the character's right.
-    public static let markOrigin = 16
-    public static let blockWidth = markOrigin + Mark.width
-    /// Gap between the character's feet and the chip row.
-    public static let chipGap = 2
+    //
+    // Derived from the art rather than fixed. The cast was 16 cells and is now
+    // 48, and a constant here is a constant that has to be found and changed
+    // in step with every drawing — the kind of pair that silently drifts. One
+    // unit is a sixteenth of the character's width, so the furniture around it
+    // keeps its old proportions whatever the cast is drawn at.
+    public static func unit(for mascot: Mascot) -> Int {
+        max(1, mascot.sprite.width / 16)
+    }
+    /// Gap between the character's feet and the chip row, in units.
+    public static let chipGapUnits = 2
+    /// Room kept below a sprite so a bobbing character is never clipped.
+    static let maxBobUnits = 2
 
     public func isLit(x: Int, y: Int) -> Bool {
         layers.contains { $0.sprite[x - $0.origin.x, y - $0.origin.y] != nil }
@@ -75,25 +94,45 @@ extension SpriteLayout {
                              frame: Int,
                              blink: Bool,
                              crop: Int? = nil) -> SpriteLayout {
+        let unit = unit(for: mascot)
         let rows = min(crop ?? mascot.sprite.height, mascot.sprite.height)
-        let bob = min(2, style.offset(frame: frame) * mascot.bobScale)
-        let character = cropped(mascot.frame(eyes: blink ? .shut : style.eyes), rows: rows)
+        let bob = min(2, style.offset(frame: frame) * mascot.bobScale) * unit
+        let character = cropped(mascot.frame(eyes: blink ? .shut : style.eyes,
+                                             frame: frame,
+                                             sweeping: style.sweeps),
+                                rows: rows)
 
-        var layers = [Layer(sprite: character, origin: Point(0, bob), accent: style.health)]
+        var layers = [Layer(sprite: character, origin: Point(0, bob),
+                            accent: style.health, ramp: mascot.ramp)]
         let mark = style.mark(frame: frame)
         if mark != .none {
-            layers.append(Layer(sprite: mark.sprite,
-                                origin: Point(markOrigin, bob), accent: style.health))
+            layers.append(Layer(sprite: furniture(mark.sprite, unit: unit),
+                                origin: Point(mascot.sprite.width + unit, bob),
+                                accent: style.health, ramp: nil))
         }
         return SpriteLayout(layers: layers,
-                            width: blockWidth,
-                            height: rows + maxBobRoom)
+                            width: blockWidth(for: mascot),
+                            height: rows + maxBobUnits * unit)
+    }
+
+    /// The character's own columns plus the mark gutter beside them.
+    public static func blockWidth(for mascot: Mascot) -> Int {
+        let unit = unit(for: mascot)
+        return mascot.sprite.width + unit + Mark.width * unit
+    }
+
+    /// Marks and counter chips are authored at the old scale and enlarged to
+    /// match the character, rather than redrawn — `scaled3x` rounds a glyph's
+    /// corners on the way up, so an enlarged exclamation mark is still the
+    /// same exclamation mark.
+    private static func furniture(_ sprite: Sprite, unit: Int) -> Sprite {
+        unit == 3 ? sprite.scaled3x() : sprite
     }
 
     /// The whole floating widget: character, mark, and a chip per non-zero
     /// count beneath.
     ///
-    /// Chips centre on the **character's** sixteen columns, not on the 21-wide
+    /// Chips centre on the **character's** own columns, not on the whole
     /// block — that block carries the mark gutter on its right, and centring
     /// against it pushes the chips off to the same side.
     public static func widget(mascot: Mascot,
@@ -111,43 +150,45 @@ extension SpriteLayout {
             chips.append((Counter.chip(Counter.text(for: readyToMerge)), .good))
         }
 
+        let unit = unit(for: mascot)
+        chips = chips.map { (furniture($0.sprite, unit: unit), $0.accent) }
         let chipsWidth = chips.isEmpty
             ? 0
-            : chips.reduce(0) { $0 + $1.sprite.width } + (chips.count - 1)
+            : chips.reduce(0) { $0 + $1.sprite.width } + (chips.count - 1) * unit
 
-        let centre = characterSize / 2
+        let centre = mascot.sprite.width / 2
         // A wide chip row can reach further left than the character does; the
         // whole composition shifts right by that much rather than clipping.
         let leftOverhang = max(0, Int((Double(chipsWidth) / 2).rounded(.up)) - centre)
-        let rightExtent = max(blockWidth, centre + chipsWidth / 2)
+        let rightExtent = max(blockWidth(for: mascot), centre + chipsWidth / 2)
         let characterX = leftOverhang
 
-        let bob = min(2, style.offset(frame: frame) * mascot.bobScale)
-        var layers = [Layer(sprite: mascot.frame(eyes: blink ? .shut : style.eyes),
-                            origin: Point(characterX, bob), accent: style.health)]
+        let bob = min(2, style.offset(frame: frame) * mascot.bobScale) * unit
+        var layers = [Layer(sprite: mascot.frame(eyes: blink ? .shut : style.eyes,
+                                                 frame: frame,
+                                                 sweeping: style.sweeps),
+                            origin: Point(characterX, bob),
+                            accent: style.health, ramp: mascot.ramp)]
         let mark = style.mark(frame: frame)
         if mark != .none {
-            layers.append(Layer(sprite: mark.sprite,
-                                origin: Point(characterX + markOrigin, bob),
-                                accent: style.health))
+            layers.append(Layer(sprite: furniture(mark.sprite, unit: unit),
+                                origin: Point(characterX + mascot.sprite.width + unit, bob),
+                                accent: style.health, ramp: nil))
         }
 
         var x = characterX + centre - chipsWidth / 2
-        let chipY = characterSize + maxBobRoom + chipGap
+        let chipY = mascot.sprite.height + (maxBobUnits + chipGapUnits) * unit
         for chip in chips {
             layers.append(Layer(sprite: chip.sprite, origin: Point(x, chipY),
-                                accent: chip.accent))
-            x += chip.sprite.width + 1
+                                accent: chip.accent, ramp: nil))
+            x += chip.sprite.width + unit
         }
 
         return SpriteLayout(
             layers: layers,
             width: leftOverhang + rightExtent,
-            height: chipY + (chips.isEmpty ? 0 : Counter.height))
+            height: chipY + (chips.isEmpty ? 0 : Counter.height * unit))
     }
-
-    /// Room kept below a sprite so a bobbing character is never clipped.
-    static let maxBobRoom = 2
 
     private static func cropped(_ sprite: Sprite, rows: Int) -> Sprite {
         guard rows < sprite.height else { return sprite }

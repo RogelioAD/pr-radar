@@ -67,6 +67,21 @@ public enum SpritePalette {
 
         // Never drawn from here: the accent is Health.tint, resolved per layer.
         case .accent:  return RGB(white: 0.5)
+
+        // The 48-cell cast. A character's own ramp answers for these — see
+        // `mascotColor` — so reaching them here means something drew a mascot
+        // slot without saying which character it belonged to. Falling back to
+        // a neutral ramp keeps that visible as grey rather than as a crash.
+        case .chassisDeep:  return ChassisRamp.fallback.deep
+        case .chassisShade: return ChassisRamp.fallback.shade
+        case .chassisMid:   return ChassisRamp.fallback.mid
+        case .chassisBase:  return ChassisRamp.fallback.base
+        case .chassisLight: return ChassisRamp.fallback.light
+        case .chassisSpec:  return ChassisRamp.fallback.spec
+        case .visor, .visorLit, .cheek:
+            return glass(for: slot, dark: dark) ?? RGB(white: 0.5)
+        case .accentMid: return accent(RGB(white: 0.5), strength: 0.72)
+        case .accentDim: return accent(RGB(white: 0.5), strength: 0.42)
         }
     }
 
@@ -141,5 +156,83 @@ public enum IconArt {
     /// for separation — the same bargain the old tile made with its outline.
     public static func color(for slot: Slot, accent: Health) -> RGB {
         slot == .accent ? accent.rgb : SpritePalette.color(for: slot, dark: true)
+    }
+}
+
+/// One character's six chassis rungs, darkest to brightest.
+///
+/// Per-character rather than a single shared greyscale. The old cast was grey
+/// on purpose — it left `accent` as the only colour, so the mood tint could
+/// never be argued with. That still holds here: the ramp only ever paints
+/// chassis, and the tell is the one thing on a character that takes the live
+/// tint. What the ramp buys is that a saucer and an alien no longer have to be
+/// told apart by silhouette alone at 20 points.
+public struct ChassisRamp: Sendable, Hashable {
+    public let deep, shade, mid, base, light, spec: RGB
+
+    public init(deep: RGB, shade: RGB, mid: RGB, base: RGB, light: RGB, spec: RGB) {
+        self.deep = deep; self.shade = shade; self.mid = mid
+        self.base = base; self.light = light; self.spec = spec
+    }
+
+    /// Neutral steel, for anything that draws a chassis slot without naming a
+    /// character.
+    public static let fallback = ChassisRamp(
+        deep:  RGB(0.086, 0.129, 0.169), shade: RGB(0.180, 0.255, 0.314),
+        mid:   RGB(0.278, 0.376, 0.435), base:  RGB(0.424, 0.529, 0.592),
+        light: RGB(0.608, 0.698, 0.753), spec:  RGB(0.863, 0.918, 0.945))
+
+    public func color(for slot: Slot) -> RGB? {
+        switch slot {
+        case .chassisDeep:  return deep
+        case .chassisShade: return shade
+        case .chassisMid:   return mid
+        case .chassisBase:  return base
+        case .chassisLight: return light
+        case .chassisSpec:  return spec
+        default:            return nil
+        }
+    }
+}
+
+extension SpritePalette {
+    /// Glass, and the cheek blush. Fixed in both appearances: a visor is a
+    /// hole in a lit object either way round, and lightening it in Light mode
+    /// makes a face look like it is switched off.
+    public static func glass(for slot: Slot, dark: Bool) -> RGB? {
+        switch slot {
+        case .visor:    return RGB(0.020, 0.035, 0.075)
+        case .visorLit: return RGB(0.071, 0.125, 0.235)
+        case .cheek:    return RGB(0.878, 0.561, 0.659)
+        default:        return nil
+        }
+    }
+
+    /// The accent at reduced strength, blended toward the dark behind the
+    /// glass rather than toward grey — a trailing beam is the same light,
+    /// further away, not a different colour.
+    public static func accent(_ tint: RGB, strength: Double) -> RGB {
+        let floor = RGB(0.024, 0.035, 0.078)
+        return RGB(tint.red   * strength + floor.red   * (1 - strength),
+                   tint.green * strength + floor.green * (1 - strength),
+                   tint.blue  * strength + floor.blue  * (1 - strength),
+                   alpha: tint.alpha)
+    }
+
+    /// What a mascot slot resolves to, given the character's ramp and the live
+    /// tint. One function so the drawer, the badge and the headless icon
+    /// generator can never disagree about a colour.
+    public static func mascotColor(for slot: Slot,
+                                   ramp: ChassisRamp,
+                                   tint: RGB,
+                                   dark: Bool) -> RGB {
+        if let c = ramp.color(for: slot) { return c }
+        if let c = glass(for: slot, dark: dark) { return c }
+        switch slot {
+        case .accent:    return tint
+        case .accentMid: return accent(tint, strength: 0.72)
+        case .accentDim: return accent(tint, strength: 0.42)
+        default:         return color(for: slot, dark: dark)
+        }
     }
 }

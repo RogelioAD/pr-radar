@@ -103,11 +103,11 @@ final class SpriteLayoutTests: XCTestCase {
         for reviews in [0, 7, 12, 100] {
             for ready in [0, 2, 40] {
                 let layout = SpriteLayout.widget(
-                    mascot: .pip, style: Mood.alarmed.style, frame: 0, blink: false,
+                    mascot: .blip, style: Mood.alarmed.style, frame: 0, blink: false,
                     reviews: reviews, reviewHealth: .bad, readyToMerge: ready)
 
                 let character = layout.layers[0]
-                let characterCentre = Double(character.origin.x + SpriteLayout.characterSize / 2)
+                let characterCentre = Double(character.origin.x + Mascot.blip.sprite.width / 2)
 
                 let chips = layout.layers.filter { $0.sprite.height == Counter.height }
                 guard let first = chips.first, let last = chips.last else { continue }
@@ -143,7 +143,7 @@ final class SpriteLayoutTests: XCTestCase {
     /// stale badge.
     func testZeroCountsDrawNoChips() {
         let layout = SpriteLayout.widget(
-            mascot: .pip, style: Mood.asleep.style, frame: 0, blink: false,
+            mascot: .blip, style: Mood.asleep.style, frame: 0, blink: false,
             reviews: 0, reviewHealth: .good, readyToMerge: 0)
         XCTAssertFalse(layout.layers.contains { $0.sprite.height == Counter.height })
     }
@@ -166,22 +166,28 @@ final class SpriteLayoutTests: XCTestCase {
         }
     }
 
-    func testPerchCropTrimsTheCollarButKeepsTheHead() {
-        let full = SpriteLayout.perch(mascot: .pip, style: Mood.idle.style,
+    func testPerchCropTrimsTheBodyButKeepsTheHead() {
+        let full = SpriteLayout.perch(mascot: .blip, style: Mood.idle.style,
                                       frame: 0, blink: false)
-        let head = SpriteLayout.perch(mascot: .pip, style: Mood.idle.style,
-                                      frame: 0, blink: false, crop: Mascot.pip.headRows)
-        XCTAssertEqual(head.layers[0].sprite.height, 12)
-        XCTAssertEqual(full.layers[0].sprite.height, 16)
-        // The eyes survive the crop; that is the whole point of it.
-        for box in Mascot.pip.eyes {
-            XCTAssertLessThan(box.y + 1, Mascot.pip.headRows)
+        let head = SpriteLayout.perch(mascot: .blip, style: Mood.idle.style,
+                                      frame: 0, blink: false, crop: Mascot.blip.headRows)
+        XCTAssertEqual(head.layers[0].sprite.height, Mascot.blip.headRows)
+        XCTAssertEqual(full.layers[0].sprite.height, Mascot.blip.sprite.height)
+        XCTAssertLessThan(Mascot.blip.headRows, Mascot.blip.sprite.height,
+                          "a crop that trims nothing is not a crop")
+        // The eyes survive the crop on every character; that is the whole
+        // point of it.
+        for mascot in Mascot.all {
+            for box in mascot.eyes {
+                XCTAssertLessThan(box.y + mascot.eyeSize, mascot.headRows,
+                                  "\(mascot.name) loses an eye to its own crop")
+            }
         }
     }
 
     func testHaloWrapsTheWholeCompositionAsOne() {
         let layout = SpriteLayout.widget(
-            mascot: .widget, style: Mood.alarmed.style, frame: 0, blink: false,
+            mascot: .wobble, style: Mood.alarmed.style, frame: 0, blink: false,
             reviews: 7, reviewHealth: .bad, readyToMerge: 2)
         let halo = layout.halo()
         XCTAssertFalse(halo.isEmpty)
