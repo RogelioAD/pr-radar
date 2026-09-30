@@ -137,16 +137,23 @@ final class MascotTests: XCTestCase {
         }
     }
 
-    /// And the sweep is idle-only: it says "nothing to report", so running it
-    /// while something is wrong would make the state you must notice look
-    /// like the one you can ignore.
-    func testOnlyIdleSweeps() {
+    /// The sweep belongs to the blue states and nothing else: blue is the app
+    /// looking, and green, amber and red are all outcomes. A beam crossing a
+    /// character that is trying to report a problem makes the state you must
+    /// notice look like the one you can ignore.
+    func testOnlyTheBlueStatesSweep() {
         for mood in Mood.allCases {
-            XCTAssertEqual(mood.style.sweeps, mood == .idle, "\(mood)")
+            XCTAssertEqual(mood.style.sweeps, mood.style.health == .running, "\(mood)")
         }
-        for reaction in Reaction.allCases {
-            XCTAssertFalse(reaction.style(tint: .good).sweeps, "\(reaction)")
+        XCTAssertTrue(Mood.idle.style.sweeps, "watching a clear queue is a sweep")
+        XCTAssertTrue(Mood.working.style.sweeps, "a refresh is literally a scan")
+        for mood in [Mood.asleep, .nudging, .alarmed, .proud, .lost] {
+            XCTAssertFalse(mood.style.sweeps, "\(mood) is an outcome, not a look")
         }
+        // A reaction borrows the mood's tint, so a hand on a badge mid-refresh
+        // keeps sweeping and one on an alarmed badge does not.
+        XCTAssertTrue(Reaction.held.style(tint: .running).sweeps)
+        XCTAssertFalse(Reaction.held.style(tint: .bad).sweeps)
     }
 
     // MARK: - Halo
