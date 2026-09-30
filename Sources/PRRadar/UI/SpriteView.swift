@@ -30,6 +30,9 @@ struct SpriteCanvas: View {
     var locked = false
 
     @Environment(\.colorScheme) private var colorScheme
+    /// The backing scale, for snapping cell edges to device pixels. See
+    /// `fill` inside `body`.
+    @Environment(\.displayScale) private var displayScale
 
     private static let haloColor = Color(SpritePalette.halo)
 
@@ -45,11 +48,31 @@ struct SpriteCanvas: View {
         let grid = cells
         Canvas(rendersAsynchronously: false) { context, _ in
             let origin = CGFloat(leadingPad)
+            let device = max(1, displayScale)
+            // Every cell is drawn from one device-pixel boundary to the next,
+            // rather than as `scale` wide starting wherever `x * scale` lands.
+            //
+            // At a whole scale these are the same rectangle. At a fractional
+            // one — which the badge is now allowed to rest at, so that it
+            // stays the size it was dragged to — they are emphatically not.
+            // A rect with fractional edges is antialiased, and two neighbours
+            // sharing a boundary each cover part of the same device pixel:
+            // compositing two half-covers gives three quarters, not one. Over
+            // 48 cells that is a grid of translucent seams, and the badge
+            // reads as see-through rather than as soft.
+            //
+            // Snapping the edges makes adjacent cells share one exactly, so
+            // nothing is antialiased and nothing is partly transparent. The
+            // price is that cells differ by a device pixel here and there,
+            // which is what nearest-neighbour has always looked like.
+            func edge(_ cell: CGFloat) -> CGFloat {
+                ((cell + origin) * scale * device).rounded() / device
+            }
             func fill(_ x: Int, _ y: Int, _ color: Color) {
+                let x0 = edge(CGFloat(x)), x1 = edge(CGFloat(x) + 1)
+                let y0 = edge(CGFloat(y)), y1 = edge(CGFloat(y) + 1)
                 context.fill(
-                    Path(CGRect(x: (CGFloat(x) + origin) * scale,
-                                y: (CGFloat(y) + origin) * scale,
-                                width: scale, height: scale)),
+                    Path(CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)),
                     with: .color(color))
             }
 

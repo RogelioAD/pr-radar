@@ -87,10 +87,20 @@ badge jumped the whole way — and letting go could move it half a badge again
 from where the pointer was.
 
 So the badge is the one surface that comes off the pixel grid, because it is
-the one surface you *aim* at a size. Between two crisp sizes the edges soften
-slightly; at the sizes that do land on whole pixels it is as sharp as it ever
-was. A drag that answers a different question from the one your hand asked is
-the worse bargain.
+the one surface you *aim* at a size. A drag that answers a different question
+from the one your hand asked is the worse bargain.
+
+Every cell is drawn from one **device-pixel boundary to the next** rather
+than as `scale` wide from wherever it lands. At a whole scale those are the
+same rectangle; at a fractional one they are not, and the difference is the
+whole thing. A rect with fractional edges is antialiased, and two neighbours
+sharing a boundary each cover part of the same device pixel — compositing two
+half-covers gives three quarters, not one. Over 48 cells that is a grid of
+translucent seams, and the badge reads as *see-through* rather than as soft.
+Snapping the edges makes adjacent cells share one exactly, so nothing is
+antialiased and nothing is partly transparent. The price is that cells differ
+by a device pixel here and there, which is what nearest-neighbour has always
+looked like.
 
 The only limit left is the **counter's digits**: below about 10 points a 3×5
 digit stops being a number, so the badge stops shrinking there whatever the
