@@ -172,7 +172,7 @@ struct DrawerView: View {
 
     /// Always a button, whatever it happens to be drawing.
     ///
-    /// The cast cycles pip → byte → widget → nimbus → off → pip, and "off" is a
+    /// The cast cycles blip → scoot → wobble → bloop → off → blip, and "off" is a
     /// stop on that loop rather than the end of it. Drawing the glyph as inert
     /// art there is what strands somebody who cycles one past the last
     /// character: the only way back in would be the context menu.
@@ -183,9 +183,15 @@ struct DrawerView: View {
     private var identity: some View {
         Button { state.cycleMascot() } label: {
             if let mascot = headerMascot {
+                // Cropped to the head. The band is 48pt and a 48-cell
+                // character cannot be drawn below 48pt on a 1x display, so
+                // the full body physically will not fit here — which is what
+                // `headRows` has always been for.
                 MascotView(mascot: mascot,
                            style: state.spriteStyle,
-                           scale: Layout.headerMascotScale)
+                           scale: Layout.headerMascotScale(
+                            for: mascot, backingScale: state.backingScale),
+                           crop: mascot.headRows)
             } else {
                 Image(systemName: "arrow.triangle.pull")
                     .font(.system(size: 12, weight: .semibold))
@@ -601,7 +607,8 @@ struct DrawerView: View {
             if let mascot = state.selectedMascot {
                 MascotView(mascot: mascot,
                            style: state.spriteStyle,
-                           scale: Layout.emptyStateMascotScale)
+                           scale: Layout.emptyStateMascotScale(
+                            for: mascot, backingScale: state.backingScale))
             } else {
                 Image(systemName: symbol).font(.system(size: 20)).foregroundStyle(.tertiary)
             }

@@ -19,9 +19,14 @@ import Foundation
 /// rather than two unrelated pictures of success.
 public enum TrophyArt {
 
-    /// Cells square. Four times a mascot's pixel budget, and the reason a
-    /// trophy can carry a readable picture inside a readable frame.
+    /// Cells square, as authored. Frames and motifs are still drawn at this
+    /// size by hand — it is a comfortable grid to draw a cup on.
     public static let size = 32
+    /// Cells square, as drawn. The cast is 48 cells and renders at half a
+    /// point each; a trophy still at 32 would have pixels four times the area
+    /// of the character standing next to it, which is what makes two pieces of
+    /// art look like they came from different games.
+    public static let drawnSize = size * 3
     /// The engraving field a motif is stamped into.
     public static let motifSize = 12
 

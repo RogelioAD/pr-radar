@@ -35,12 +35,13 @@ struct BadgeView: View {
     /// flight, or a reaction to being touched. Those are the moments where a
     /// slow clock reads as lag rather than calm.
     private var tempo: MascotView.Tempo {
-        state.reaction != nil || state.isRefreshing ? .lively : .resting
+        state.activeReaction != nil || state.isRefreshing ? .lively : .resting
     }
 
     private func mascotWidget(_ mascot: Mascot, layout: SpriteLayout) -> some View {
         let scale = Layout.badgeScale(tile: state.badgeTileSize,
-                                     backingScale: state.backingScale)
+                                     backingScale: state.backingScale,
+                                     mascot: mascot)
         let size = Layout.badgeSize(for: layout, scale: scale)
         return MascotView(mascot: mascot,
                           style: state.spriteStyle,
@@ -55,8 +56,11 @@ struct BadgeView: View {
                           shadow: true)
             .frame(width: size.width, height: size.height, alignment: .topLeading)
             .onHover { hovering in
-                // Cheap: a bounded reaction, not a clock.
-                state.reaction = hovering ? .waking : nil
+                // Cheap: a bounded reaction, not a clock. Recorded as a fact
+                // rather than assigned to `reaction`, so a press happening at
+                // the same time can outrank it without either clobbering the
+                // other — see `AppState.activeReaction`.
+                state.isHoveringBadge = hovering
             }
     }
 

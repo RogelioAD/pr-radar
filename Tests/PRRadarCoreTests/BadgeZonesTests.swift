@@ -57,10 +57,10 @@ final class BadgeZonesTests: XCTestCase {
     /// Two mascots whose art starts at a different column must each put their
     /// grip on their own edge, not on a shared panel edge.
     func testGripFollowsWhereTheArtActuallyStarts() {
-        let inset = CGRect(x: 10, y: 0, width: 100, height: 90)   // Widget / Nimbus
+        let inset = CGRect(x: 10, y: 0, width: 100, height: 90)   // a character whose art starts further in
         XCTAssertNil(zones.corner(at: CGPoint(x: 7, y: 3), art: inset,
                                   viewHeight: panelHeight, isFlipped: true),
-                     "7pt is inside Pip's art but outside this one's")
+                     "7pt is inside a full-width character's art but outside this one's")
         XCTAssertEqual(zones.corner(at: CGPoint(x: 13, y: 3), art: inset,
                                     viewHeight: panelHeight, isFlipped: true),
                        .topLeft)

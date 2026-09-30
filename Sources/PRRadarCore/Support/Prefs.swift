@@ -149,9 +149,9 @@ public enum Prefs {
     /// one looks like a choice.
     public static var mascot: MascotID? {
         get {
-            guard let raw = defaults.string(forKey: Key.mascot) else { return .pip }
+            guard let raw = defaults.string(forKey: Key.mascot) else { return .blip }
             if raw == mascotOffValue { return nil }
-            return MascotID(rawValue: raw) ?? .pip
+            return MascotID(rawValue: raw) ?? .blip
         }
         set { defaults.set(newValue?.rawValue ?? mascotOffValue, forKey: Key.mascot) }
     }

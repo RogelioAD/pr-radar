@@ -13,11 +13,23 @@ final class TrophyArtTests: XCTestCase {
 
     // MARK: - The frame
 
-    func testEveryTrophyIsTheDeclaredSize() {
+    /// Authored at 32, drawn at 96. Both halves matter: a trophy that skipped
+    /// the enlargement would be a quarter of the area of its neighbours, and
+    /// one enlarged twice would be nine times it.
+    func testEveryTrophyIsTheDrawnSize() {
         for trophy in Trophy.all {
-            XCTAssertEqual(trophy.art.width, TrophyArt.size, "\(trophy.id) width")
-            XCTAssertEqual(trophy.art.height, TrophyArt.size, "\(trophy.id) height")
+            XCTAssertEqual(trophy.art.width, TrophyArt.drawnSize, "\(trophy.id) width")
+            XCTAssertEqual(trophy.art.height, TrophyArt.drawnSize, "\(trophy.id) height")
         }
+        XCTAssertEqual(TrophyArt.drawnSize, TrophyArt.size * 3)
+    }
+
+    /// The cast and the shelf have to share a pixel size, or they read as two
+    /// different games. A 48-cell character at half a point and a 96-cell
+    /// trophy at half a point agree; the trophy at its authored 32 would not.
+    func testATrophyPixelIsTheSameSizeAsAMascotPixel() {
+        XCTAssertEqual(TrophyArt.drawnSize / Mascot.blip.sprite.width, 2,
+                       "a trophy is two characters wide, so their cells match")
     }
 
     func testEveryTrophyActuallyDrawsSomething() {
@@ -30,7 +42,7 @@ final class TrophyArtTests: XCTestCase {
     /// Nothing should fill its whole frame: a trophy that reaches every edge
     /// has no silhouette, and the grid would read as thirty rectangles.
     func testNoTrophyFillsItsEntireFrame() {
-        let cells = TrophyArt.size * TrophyArt.size
+        let cells = TrophyArt.drawnSize * TrophyArt.drawnSize
         for trophy in Trophy.all {
             XCTAssertLessThan(trophy.art.litPoints.count, cells,
                               "\(trophy.id) has no silhouette")

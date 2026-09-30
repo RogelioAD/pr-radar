@@ -103,11 +103,11 @@ final class SpriteLayoutTests: XCTestCase {
         for reviews in [0, 7, 12, 100] {
             for ready in [0, 2, 40] {
                 let layout = SpriteLayout.widget(
-                    mascot: .pip, style: Mood.alarmed.style, frame: 0, blink: false,
+                    mascot: .blip, style: Mood.alarmed.style, frame: 0, blink: false,
                     reviews: reviews, reviewHealth: .bad, readyToMerge: ready)
 
                 let character = layout.layers[0]
-                let characterCentre = Double(character.origin.x + SpriteLayout.characterSize / 2)
+                let characterCentre = Double(character.origin.x + Mascot.blip.sprite.width / 2)
 
                 let chips = layout.layers.filter { $0.sprite.height == Counter.height }
                 guard let first = chips.first, let last = chips.last else { continue }
@@ -143,7 +143,7 @@ final class SpriteLayoutTests: XCTestCase {
     /// stale badge.
     func testZeroCountsDrawNoChips() {
         let layout = SpriteLayout.widget(
-            mascot: .pip, style: Mood.asleep.style, frame: 0, blink: false,
+            mascot: .blip, style: Mood.asleep.style, frame: 0, blink: false,
             reviews: 0, reviewHealth: .good, readyToMerge: 0)
         XCTAssertFalse(layout.layers.contains { $0.sprite.height == Counter.height })
     }
@@ -166,22 +166,28 @@ final class SpriteLayoutTests: XCTestCase {
         }
     }
 
-    func testPerchCropTrimsTheCollarButKeepsTheHead() {
-        let full = SpriteLayout.perch(mascot: .pip, style: Mood.idle.style,
+    func testPerchCropTrimsTheBodyButKeepsTheHead() {
+        let full = SpriteLayout.perch(mascot: .blip, style: Mood.idle.style,
                                       frame: 0, blink: false)
-        let head = SpriteLayout.perch(mascot: .pip, style: Mood.idle.style,
-                                      frame: 0, blink: false, crop: Mascot.pip.headRows)
-        XCTAssertEqual(head.layers[0].sprite.height, 12)
-        XCTAssertEqual(full.layers[0].sprite.height, 16)
-        // The eyes survive the crop; that is the whole point of it.
-        for box in Mascot.pip.eyes {
-            XCTAssertLessThan(box.y + 1, Mascot.pip.headRows)
+        let head = SpriteLayout.perch(mascot: .blip, style: Mood.idle.style,
+                                      frame: 0, blink: false, crop: Mascot.blip.headRows)
+        XCTAssertEqual(head.layers[0].sprite.height, Mascot.blip.headRows)
+        XCTAssertEqual(full.layers[0].sprite.height, Mascot.blip.sprite.height)
+        XCTAssertLessThan(Mascot.blip.headRows, Mascot.blip.sprite.height,
+                          "a crop that trims nothing is not a crop")
+        // The eyes survive the crop on every character; that is the whole
+        // point of it.
+        for mascot in Mascot.all {
+            for box in mascot.eyes {
+                XCTAssertLessThan(box.y + mascot.eyeSize, mascot.headRows,
+                                  "\(mascot.name) loses an eye to its own crop")
+            }
         }
     }
 
     func testHaloWrapsTheWholeCompositionAsOne() {
         let layout = SpriteLayout.widget(
-            mascot: .widget, style: Mood.alarmed.style, frame: 0, blink: false,
+            mascot: .wobble, style: Mood.alarmed.style, frame: 0, blink: false,
             reviews: 7, reviewHealth: .bad, readyToMerge: 2)
         let halo = layout.halo()
         XCTAssertFalse(halo.isEmpty)
@@ -239,5 +245,48 @@ final class BlinkTests: XCTestCase {
             XCTAssertNoThrow(Blink.isBlinking(frame: Int.min + 1, fps: fps))
         }
         XCTAssertFalse(Blink.isBlinking(frame: 3, fps: 0), "a stopped clock never blinks")
+    }
+}
+
+// MARK: - Reaction ranking
+
+final class ReactionRankingTests: XCTestCase {
+
+    func testAHandOnTheBadgeOutranksEverythingElse() {
+        XCTAssertEqual(Reaction.resolve(pressed: true, event: .startled, hovering: true), .held)
+        XCTAssertEqual(Reaction.resolve(pressed: true, event: nil, hovering: false), .held)
+    }
+
+    func testAReviewLandingOutranksAMerePointer() {
+        XCTAssertEqual(Reaction.resolve(pressed: false, event: .startled, hovering: true), .startled)
+    }
+
+    func testHoverIsTheFallbackNotTheDefault() {
+        XCTAssertEqual(Reaction.resolve(pressed: false, event: nil, hovering: true), .waking)
+        XCTAssertNil(Reaction.resolve(pressed: false, event: nil, hovering: false))
+    }
+
+    /// The bug the ranking exists to prevent: letting go of a drag while the
+    /// pointer is still on the badge must fall back to the hover, not to
+    /// nothing.
+    func testReleasingADragWhileStillHoveringFallsBackToWaking() {
+        XCTAssertEqual(Reaction.resolve(pressed: true, event: nil, hovering: true), .held)
+        XCTAssertEqual(Reaction.resolve(pressed: false, event: nil, hovering: true), .waking)
+    }
+
+    /// And the other direction: the pointer leaving mid-drag must not cancel
+    /// the press.
+    func testHoverLeavingMidDragDoesNotCancelThepress() {
+        XCTAssertEqual(Reaction.resolve(pressed: true, event: nil, hovering: false), .held)
+    }
+
+    func testEveryReactionIsReachable() {
+        let reached: Set<Reaction> = [
+            Reaction.resolve(pressed: true, event: nil, hovering: false),
+            Reaction.resolve(pressed: false, event: .startled, hovering: false),
+            Reaction.resolve(pressed: false, event: nil, hovering: true),
+        ].compactMap { $0 }.reduce(into: Set()) { $0.insert($1) }
+        XCTAssertEqual(reached, Set(Reaction.allCases),
+                       "a reaction with no path to the screen is dead art")
     }
 }

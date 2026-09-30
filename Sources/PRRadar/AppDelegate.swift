@@ -521,7 +521,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // badge settles on whole device pixels and stops short of both — so
         // measured against the bounds, a badge dragged as far as it goes has
         // never once been at its largest or smallest.
-        let reach = Layout.reachableBadgeTileRange(hasMascot: state.selectedMascot != nil,
+        let reach = Layout.reachableBadgeTileRange(mascot: state.selectedMascot,
                                                    backingScale: state.backingScale)
         snapshot.badgeMinimum = reach.minimum
         snapshot.badgeMaximum = reach.maximum

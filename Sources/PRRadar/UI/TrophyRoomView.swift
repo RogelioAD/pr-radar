@@ -14,6 +14,9 @@ struct TrophyRoomView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Layout.trophyGridSpacing) {
+                // Remove this one line and the view below to take the curator
+                // back out; nothing else refers to either.
+                TrophyCurator(state: state)
                 ForEach(Array(state.trophyRows.enumerated()), id: \.offset) { index, row in
                     shelf(row)
                         .background(
@@ -49,6 +52,58 @@ struct TrophyRoomView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The character, standing in their own trophy room.
+///
+/// An experiment. The room is thirty-six drawings and nobody to show them
+/// off, and the cast already knows how to look pleased — `proud` is a mood
+/// the app derives every day and this is the one screen where it is about
+/// something you did rather than about the queue.
+///
+/// Deliberately self-contained: one view, one call site, no state of its own.
+struct TrophyCurator: View {
+    @ObservedObject var state: AppState
+
+    private var earned: Int {
+        Trophy.all.filter { state.trophyState.isUnlocked($0.id) }.count
+    }
+
+    var body: some View {
+        if let mascot = state.selectedMascot {
+            HStack(spacing: 10) {
+                MascotView(mascot: mascot,
+                           style: mood.style,
+                           scale: Layout.emptyStateMascotScale(
+                            for: mascot, backingScale: state.backingScale))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(earned) of \(Trophy.all.count)")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(caption)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, Layout.trophyGridSpacing)
+        }
+    }
+
+    /// The room's own mood, not the queue's. A shelf full of trophies should
+    /// not look alarmed because three reviews went stale.
+    private var mood: Mood {
+        if earned == Trophy.all.count { return .proud }
+        return earned == 0 ? .asleep : .idle
+    }
+
+    private var caption: String {
+        switch earned {
+        case 0: return "nothing on the shelf yet"
+        case Trophy.all.count: return "the whole shelf"
+        default: return "keep going"
+        }
     }
 }
 

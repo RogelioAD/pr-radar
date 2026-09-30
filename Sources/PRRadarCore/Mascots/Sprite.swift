@@ -51,6 +51,46 @@ public enum Slot: Character, CaseIterable, Sendable {
     /// appearance; this one is `Health.tint`, which is what keeps a mascot and
     /// the count it sits next to from ever disagreeing.
     case accent  = "a"
+
+    // MARK: - The 48-cell cast
+    //
+    // A second family, uppercase so a mascot literal is never read against a
+    // trophy's. Six chassis rungs rather than the old three: at 48 cells a
+    // surface is lit on one side and shaded on the other, and two tones
+    // cannot carry that. These resolve against the *character's* own
+    // `ChassisRamp` rather than the shared greyscale, which is what lets four
+    // of them stand next to each other and not read as one machine in four
+    // poses.
+    case chassisDeep  = "D"
+    case chassisShade = "S"
+    case chassisMid   = "B"
+    case chassisBase  = "H"
+    case chassisLight = "W"
+    /// Specular. Hand-placed only — the shading pass that bakes the other five
+    /// is forbidden from inventing this one, because a highlight it decides on
+    /// its own turns a soft edge into a hard white rim.
+    case chassisSpec  = "X"
+
+    case visor    = "V"
+    /// Glass catching the light: bevels, glare, and whatever a beam is
+    /// crossing right now.
+    case visorLit = "U"
+    case cheek    = "P"
+
+    /// The accent at two lower strengths, for a trailing beam or a lamp
+    /// between pulses. Blends of `Health.tint` rather than fixed colours, so a
+    /// dimmed tell is still the same hue as the count beside it.
+    case accentMid = "N"
+    case accentDim = "M"
+
+    /// True of the six rungs that a character's own ramp answers for.
+    public var isChassis: Bool {
+        switch self {
+        case .chassisDeep, .chassisShade, .chassisMid,
+             .chassisBase, .chassisLight, .chassisSpec: return true
+        default: return false
+        }
+    }
 }
 
 public struct Point: Hashable, Sendable {
@@ -106,6 +146,14 @@ public struct Sprite: Equatable, Sendable {
                          "write out of bounds at (\(x), \(y))")
             cells[y * width + x] = newValue
         }
+    }
+
+    /// Write that shrugs off the edges, for drawing code that works in the
+    /// character's coordinates rather than the grid's — an eight-wide startled
+    /// eye on a six-wide box legitimately reaches past it.
+    public mutating func plot(_ x: Int, _ y: Int, _ slot: Slot) {
+        guard x >= 0, y >= 0, x < width, y < height else { return }
+        self[x, y] = slot
     }
 
     public var litPoints: [Point] {

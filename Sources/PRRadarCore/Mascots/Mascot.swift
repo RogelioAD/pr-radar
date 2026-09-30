@@ -1,10 +1,31 @@
+// Generated from the design pipeline — see the mascot preview artifact.
+// Edited by regenerating, not by hand: the art is mirrored and shaded by a
+// build step, and a hand edit here is a pixel the shading pass never saw.
+
 import Foundation
 
-public enum MascotID: String, CaseIterable, Sendable {
-    case pip, byte, widget, nimbus
+/// How a character sweeps while the app is looking.
+///
+/// Declared per character rather than worked out from the art. Three of the
+/// four have a visor wider than it is tall, so deriving the axis from the
+/// glass gave a helmet that should scan downward and a saucer that should
+/// swing a searchlight the same beam going across.
+public enum SweepKind: Sendable {
+    /// A beam across the glass, trailing, wrapping round the lens.
+    case visor
+    /// The same beam, scanning down the inside of a helmet instead.
+    case hud
+    /// A searchlight swinging through an arc under the hull.
+    case beam
+    /// Rings rippling outward, for the one with no glass to sweep.
+    case psi
+}
 
-    /// The picker, for anyone who finds it by clicking: each character in turn,
-    /// then off, then round again.
+public enum MascotID: String, CaseIterable, Sendable {
+    case blip, scoot, wobble, bloop
+
+    /// The picker, for anyone who finds it by clicking: each character in
+    /// turn, then off, then round again.
     ///
     /// `nil` is a stop on the loop rather than the end of it. Treating it as a
     /// terminus is what strands someone who clicks one past the last character
@@ -17,153 +38,308 @@ public enum MascotID: String, CaseIterable, Sendable {
     }
 }
 
-/// One character: a 16×16 grid, where its eyes are, and the one element that
-/// always takes the mood colour.
+/// One character: a 48×48 grid, where its eyes are, and its own chassis ramp.
 ///
-/// That last part is not decoration. A mascot with dark eyes loses the accent
-/// entirely — the first pass had two of these four reading identically across
-/// all seven moods — so every character declares a `tell` wide enough to be
-/// seen at the smallest size it is ever drawn.
-public struct Mascot: Identifiable, Sendable {
+/// Forty-eight rather than sixteen because the face had run out of room. A 2×2
+/// eye gives about five distinguishable expressions and no more; at this size
+/// an eye is a lens with a catchlight, a beam can cross a visor, and a surface
+/// can be lit on one side and shaded on the other.
+///
+/// Every sprite is authored as 48 rows of 24 and mirrored, so a chassis is
+/// symmetric to the pixel and only half of it is drawn by hand.
+public struct Mascot: Identifiable, Sendable, Equatable {
     public let id: MascotID
     public let name: String
     /// What the tell is, for the picker's help text.
     public let tellName: String
+    /// One line for the picker.
+    public let blurb: String
     public let sprite: Sprite
-    /// Top-left of each 2×2 eye box.
+    /// Top-left of each eye box.
     public let eyes: [Point]
-    /// What a lit eye pixel is drawn in. Glowing for the machines, outline for
-    /// the animals — which is why those two need a wider tell.
+    /// Eye boxes are square and this is their side. The alien's is half again
+    /// the others — the whole joke of him is the eyes.
+    public let eyeSize: Int
+    /// What a lit eye pixel is drawn in.
     public let eyeInk: Slot
-    /// What an unlit eye pixel reverts to.
-    public let eyeOff: Slot
-    /// Always drawn in the accent, whatever the eyes are doing.
-    public let tell: [Point]
-    /// Rows to keep for the small crop. Three of the four are busts whose
-    /// bottom four rows are a shared collar; cropping those off is what makes
-    /// a 16 pt perch read as a head rather than a smudge.
+    /// How this one sweeps. Declared, not derived: deriving the axis from the
+    /// shape of the glass collapsed three different sweeps into one beam.
+    public let sweep: SweepKind
+    /// This character's six chassis rungs. Per-character rather than one
+    /// shared greyscale: four machines in the same grey read as one machine in
+    /// four poses. The tell still takes the live `Health` tint, so the mood is
+    /// never competing with the body colour for the same pixels.
+    public let ramp: ChassisRamp
+    /// Rows to keep for a small perch: the head, and nothing it stands on.
+    ///
+    /// Sized so the crop still carries a tell. Cropping past the antenna
+    /// would leave a header mascot with no way to show the mood at all,
+    /// which is the whole reason a tell exists.
     public let headRows: Int
 
-    /// The character with a mood applied: eyes repainted, tell lit.
-    public func frame(eyes pattern: EyePattern) -> Sprite {
-        var grid = sprite
-        for box in eyes {
-            for dy in 0..<2 {
-                for dx in 0..<2 {
-                    grid[box.x + dx, box.y + dy] =
-                        pattern.isLit(dx: dx, dy: dy) ? eyeInk : eyeOff
-                }
+    /// Always drawn in the live tint, whatever the eyes are doing.
+    ///
+    /// Derived from the art rather than listed by hand: the accent cells *are*
+    /// the tell, and two copies of that fact drift apart the first time a
+    /// sprite is edited.
+    public var tell: [Point] {
+        sprite.litPoints.filter {
+            switch sprite[$0.x, $0.y] {
+            case .accent, .accentMid, .accentDim: return true
+            default: return false
             }
         }
-        for point in tell { grid[point.x, point.y] = .accent }
-        return grid
     }
+
+    /// Whether this character bobs further than the others. The two with
+    /// nothing under them do.
+    public var bobScale: Int { id == .scoot || id == .wobble ? 2 : 1 }
 }
 
 extension Mascot {
-    /// Rows 12–15 of every bust. Identical by construction, so swapping
-    /// characters can never shift the layout around them.
-    public static let collar = [
-        ".....kggggk.....",
-        "..kkggggggggkk..",
-        "..kgggggggggdk..",
-        "..kkkkkkkkkkkk..",
-    ]
-
-    public static let pip = Mascot(
-        id: .pip, name: "Pip", tellName: "antenna",
+    public static let blip = Mascot(
+        id: .blip, name: "Blip", tellName: "antenna lamp and chest badge",
+        blurb: "Radar bot, and the one the app opens on.",
         sprite: Sprite([
-            ".......aa.......",
-            ".......kk.......",
-            "....kkkkkkkk....",
-            "..kkggggggggkk..",
-            "..kgggggggggdk..",
-            "..kgvvvvvvvvgk..",
-            ".kkgvaavvaavgkk.",
-            ".kdgvaavvaavgdk.",
-            "..kgvvvvvvvvgk..",
-            "..kggdddddddgk..",
-            "..kkggggggggkk..",
-            "....kkkkkkkk....",
-        ] + collar),
-        eyes: [Point(5, 6), Point(9, 6)], eyeInk: .accent, eyeOff: .glass,
-        tell: [Point(7, 0), Point(8, 0)], headRows: 12)
-
-    public static let byte = Mascot(
-        id: .byte, name: "Byte", tellName: "ear tips and collar",
-        sprite: Sprite([
-            "..k..........k..",
-            "..kk........kk..",
-            "..kak......kak..",
-            "..kkkkkkkkkkkk..",
-            ".kggggggggggggk.",
-            ".kgwkggggggwkgk.",
-            ".kgkkggggggkkgk.",
-            ".kggggkkkkggggk.",
-            ".kgggkpppkgggdk.",
-            ".kdggkkkkkggddk.",
-            "..kddddddddddk..",
-            "...kkkkkkkkkk...",
-        ] + collar),
-        eyes: [Point(3, 5), Point(11, 5)], eyeInk: .outline, eyeOff: .body,
-        // Dark eyes, so the tell has to do all of it: ear tips plus a band
-        // across the collar.
-        tell: [Point(3, 2), Point(12, 2),
-               Point(5, 14), Point(6, 14), Point(7, 14),
-               Point(8, 14), Point(9, 14), Point(10, 14)],
-        headRows: 12)
-
-    public static let widget = Mascot(
-        id: .widget, name: "Widget", tellName: "mouth bar and power LED",
-        sprite: Sprite([
-            "................",
-            "...kkkkkkkkkk...",
-            "..kddddddddddk..",
-            "..kdvvvvvvvvdk..",
-            "..kdvaavvaavdk..",
-            "..kdvaavvaavdk..",
-            "..kdvvvvvvvvdk..",
-            "..kdvvaaaavvdk..",
-            "..kdvvvvvvvvdk..",
-            "..kddddddddadk..",
-            "...kkkkkkkkkk...",
-            ".....kkkkkk.....",
-        ] + collar),
-        eyes: [Point(5, 4), Point(9, 4)], eyeInk: .accent, eyeOff: .glass,
-        tell: [Point(12, 9)], headRows: 12)
-
-    /// The one floater. No collar, so it bobs twice as far and there is nothing
-    /// to crop — its head crop is the whole sprite.
-    public static let nimbus = Mascot(
-        id: .nimbus, name: "Nimbus", tellName: "glowing eyes",
-        sprite: Sprite([
-            "......kkkk......",
-            "....kkwwwwkk....",
-            "...kwwwwwwwwk...",
-            "..kwwwwwwwwwwk..",
-            "..kwwwwwwwwwwk..",
-            "..kwwkkwwkkwwk..",
-            "..kwwkkwwkkwwk..",
-            "..kwwwwwwwwwwk..",
-            "..kwpwwwwwwpwk..",
-            "..kwwwwwwwwwwk..",
-            "..kwwwwwwwwwwk..",
-            "..kwwwwwwwwwwk..",
-            "..kwwwwwwwwwwk..",
-            "..kwwkwwwwkwwk..",
-            "..kwwkwwwwkwwk..",
-            "..kkk.kkkk.kkk..",
+            ".....................kkkkkk.....................",
+            "....................kaaaaaak....................",
+            "...................kaaaaaaaak...................",
+            "...................kaaaaaaaak...................",
+            "....................kaaaaaak....................",
+            ".....................kaaaak.....................",
+            "......................kSDk......................",
+            "......................kHDk......................",
+            "......................kBSk......................",
+            "..............kkkkkkkkkkkkkkkkkkkk..............",
+            "...........kkkWWWWWWWWWWWWWWWWWWWWkkk...........",
+            ".........kkWHWWWWWWWWWWWWWWWWWWWWWWHBkk.........",
+            "........kHWWWXWWWWWWWWWWWWWHWWWWWWWWWBBk........",
+            ".......kHHWWXWHWHWHWHWHWHWHWHWHHHWHWHWSSk.......",
+            ".......kHWWXWHWHWHHHHHHHHHHHHHHHHHHHHHHDk.......",
+            ".......kHWHWBHHHHHHHHHHHHHHHHHHHHBHHHHBDk.......",
+            "...kWWBkHWWBHkVUUUUUUUUUUUUUUUUUUVkHHHHDkBHHk...",
+            "..kWHWSkBWHHkVUUVVUUVVVVVVVVVVVVVVVkBHBDkBHBSk..",
+            "..kWHHDkBHHkVUUVVVVVVVVVVVVVVVVVVVVVkHHDkSHBSk..",
+            "..kWHD.kBHHkUUVVVVVVVVVVVVVVVVVVVVVVkWBDk.SHDk..",
+            "..kHHD.kBHHkUVVVVVVVVVVVVVVVVVVVVVVVkHHDk.BBSk..",
+            "..kHHD.kBHBkVVVVVVVVVVVVVVVVVVVVVVVVkWHDk.SBDk..",
+            "...kHD.kBHHkVVVVVVVVVVVVVVVVVVVVVVVVkHHDk.BSk...",
+            "...kHD.kBHBkVVVVVVVVVVVVVVVVVVVVVVVVkHHDk.SSk...",
+            "...kHS.kBWBkVVVVVVVVVVVVVVVVVVVVVVVVkHHDk.BSk...",
+            "...kHS.kBWHkVVVVVVVVVVVVVVVVVVVVVVVVkWHDk.SSk...",
+            "...kHD.kBHWHkVVVVVVUUVVUUVVUUVVVVVVkWHHDk.BSk...",
+            "...kHS.kBWHHHkVVVVVVVVVVVVVVVVVVVVkWWHBDk.BBk...",
+            "..kWHD.kBWWHHHWHHHHHHHHHHHHBHHHHHHHWHHBDk.BBSk..",
+            "..kWHS.kBSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSDk.BHSk..",
+            ".kWHHD.kBHWHHHHHHBkSaaaaaaaaSkHHHHHHHBBDk.BHBSk.",
+            ".kHBHD.kBWHSHHHHBBkaaaakkaaaakWHHHHHSBBDk.SHSDk.",
+            ".kHBBD.kBWWHHHHHHBkaaakaakaaakWHHHHHHBBDk.SBSDk.",
+            ".kBDDD.kBWHSHHHHHHkSakaaaakaSkWHHHBHSBBDk.DDDDk.",
+            ".kkkkk.kBHHHHBHBHBHHHHHBHBHBHHHHHHHBHBBDk.kkkkk.",
+            ".......kSSSSDDDSDDDDDSDDDDDSDSDSDSDDDDDDk.......",
+            "........kDSDDDSDDDDDDDDDDDDDDDDDDDDDDDDk........",
+            "..........kDDDDDDDDDDDDDDDDDDDDDDDDDDk..........",
+            "..........kkkkkkkkkkkkkkkkkkkkkkkkkkkk..........",
+            ".............kBBSSDk........kBSSSDk.............",
+            ".............kBSSDDk........kBBSDDk.............",
+            ".............kBBSDDk........kHSSDDk.............",
+            ".............kHBSDDk........kBBSSDk.............",
+            ".............kBSSDDk........kBSSDDk.............",
+            "...........kWHHBBSSSSk....kHHHBSSSSSk...........",
+            "...........kBSDDDDDDDk....kBSSDDDDDDk...........",
+            "...........kSDDDDDDDDk....kSDDDDDDDDk...........",
+            "...........kkkkkkkkkkk....kkkkkkkkkkk...........",
         ]),
-        eyes: [Point(5, 5), Point(9, 5)], eyeInk: .accent, eyeOff: .light,
-        tell: [Point(4, 8), Point(11, 8)], headRows: 16)
+        eyes: [Point(15, 19), Point(27, 19)], eyeSize: 6, eyeInk: .accent, sweep: .visor,
+        ramp: ChassisRamp(deep: RGB(0.086, 0.129, 0.169), shade: RGB(0.180, 0.255, 0.314), mid: RGB(0.278, 0.376, 0.435),
+                          base: RGB(0.424, 0.529, 0.592), light: RGB(0.608, 0.698, 0.753), spec: RGB(0.863, 0.918, 0.945)),
+        headRows: 28)
+}
 
-    public static let all: [Mascot] = [pip, byte, widget, nimbus]
+extension Mascot {
+    public static let scoot = Mascot(
+        id: .scoot, name: "Scoot", tellName: "helmet lamp and chest panel",
+        blurb: "The astronaut. Nothing under him, so he never quite lands.",
+        sprite: Sprite([
+            ".....................kaaaak.....................",
+            ".............kkkkkkkkkkkkkkkkkkkkkk.............",
+            "..........kkkWWWWWWWWWWWWWWWWWWWWWWkkk..........",
+            "........kkWWWWWWWWWWWWWWWWWWWWWWWWWWWWkk........",
+            ".......kWWWWWWWWXXWWWWWWWWWWWWWWWWWWWWWWk.......",
+            "......kWWWWWWWWXHWHWHWHWHWHWHWHWHWHWHWHHHk......",
+            "......kWWWWWWHWHWHWHWHWHWHWHWHWHWHHHWHHHHk......",
+            ".....kWWWHHWHWHHHHHHHHHHHHHHHHHHHHHHBHHHBBk.....",
+            ".....kWWWHkVVVVVVVVVVVVVVVVVVVVVVVVVVkHHHBk.....",
+            ".....kWWHkVVVVVVVVVVVVVVVVVVVVVVVVVVVVkHHBk.....",
+            "....kWWWHkVVUUUUUUUUUUUUUUUUUUUUUUUUVVkWHBBk....",
+            "....kWWWHkVVVUUVVUUVVVVVVVVVVVVVVVVVVVkWHBBk....",
+            "....kWWHHkVVUUVVVVVVVVVVVVVVVVVVVVVVVVkWHHBk....",
+            "....kWWHBkVUUVVVVVVVVVVVVVVVVVVVVVVVVVkWHHSk....",
+            "....kWWHHkVUVVVVVVVVVVVVVVVVVVVVVVVVVVkWHBBk....",
+            "....kWWHBkVVVVVVVVVVVVVVVVVVVVVVVVVVVVkWHHSk....",
+            "....kWWHHkVVVVVVVVVVVVVVVVVVVVVVVVVVVVkWHBBk....",
+            "....kWHHBkVVVVVVVVVVVVVVVVVVVVVVVVVVVVkWHHSk....",
+            "....kWWHHkVVVVVVVVVVVVVVVVVVVVVVVVVVVVkWHBBk....",
+            "....kWWWBkVVVVVVVVVVVVVVVVVVVVVVVVVVVVkWHBSk....",
+            "....kWWHHkVVVVVVVVVVVVVVVVVVVVVVVVVVVVkHHBSk....",
+            "....kWWWHWkVVVVVVVVVVVVVVVVVVVVVVVVVVkHHBBSk....",
+            ".....kWHHHHkVVVVVVVVVVVVVVVVVVVVVVVVkHWBHSk.....",
+            ".....kWWHHHHWkVVVVVVVVVVVVVVVVVVVVkHHWHHSSk.....",
+            "......kWWBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBSk......",
+            "......kWHBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBSk......",
+            ".......kHBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBSk.......",
+            "........kkHHHHHHHHHHHHHHHHHHHHHHHHHHBBkk........",
+            "......kWWWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHk......",
+            "....kkWWWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHkk....",
+            "...kWWWWWHHHSHHHHHHHHHHHHHHBHBHHHHHSHHHHHHHHk...",
+            "...kWWWWHHHHSHHHBBBHHHHHHHBHBBHHHHHSHHHHHHBBk...",
+            "...kWWWHHHHHSHHBHBkaaaaaaaaaakHHHHHSHHHHHBBSk...",
+            "...kWWHHHHHHSHHHBBkakkaaaakkakWHHHHSHHHHBBBSk...",
+            "...kWWWHHHHHSHHHHBkaaaaaaaaaakWHHHHSHHHHHBBSk...",
+            "...kWWHHHHHHSHHHBHkaaaaaaaaaakHHHHHSHHHHBBBSk...",
+            "...kWWHHHHHHSHHHHHHHHHHHHHHHHHWHHHHSHHHHHBBSk...",
+            "...kWWHHHHHHSHHHHHHHHHHHHHHHHHHHHHHSHHHHBBBSk...",
+            "...kWHHHHHHHSHHHHHHHHHHHHHHHHHHHHHHSHHHBBBBSk...",
+            "...kWWHHHHHHSHHHHHHHHHHHHHHHHHHHHHHSHHBHBBSSk...",
+            "...kWHHHHBHBSHHBHHHBHBHBHHHBHHHBHHHSHBBBBBSDk...",
+            "....kHHHBBBHBHHHBBBBBBBBBHBHBHBBBBBBBBBBBSDk....",
+            ".....kHBBBBBHBHHBBBBBBBBBBBBHBHBBBBBBBBSSDk.....",
+            "......kDDDDDDDDSDDDDDDDDDDDDDDDSDDDDDDDDDk......",
+            ".............kSDDDDk........kSSDDDk.............",
+            ".............kSDDDDk........kSDDDDk.............",
+            "............kSSDDDDDk......kBSDDDDDk............",
+            "............kkkkkkkkk......kkkkkkkkk............",
+        ]),
+        eyes: [Point(15, 13), Point(27, 13)], eyeSize: 6, eyeInk: .accent, sweep: .hud,
+        ramp: ChassisRamp(deep: RGB(0.137, 0.161, 0.220), shade: RGB(0.239, 0.278, 0.376), mid: RGB(0.373, 0.420, 0.533),
+                          base: RGB(0.537, 0.588, 0.698), light: RGB(0.741, 0.780, 0.863), spec: RGB(0.957, 0.973, 1.000)),
+        headRows: 28)
+}
+
+extension Mascot {
+    public static let wobble = Mascot(
+        id: .wobble, name: "Wobble", tellName: "six rim lights",
+        blurb: "The saucer. Hovers, never walks.",
+        sprite: Sprite([
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "...............kkkkkkkkkkkkkkkkkk...............",
+            ".............kkVVVVVVVVVVVVVVVVVVkk.............",
+            "...........kkVXXVVVVVVVVVVVVVVVVVVVkk...........",
+            "..........kVVXVVVVVVVVVVVVVVVVVVVVVVVk..........",
+            ".........kUUUUUUUUUUUUUUUUUUUUUUUUUUUUk.........",
+            ".........kVVUUVVUVVVVVVVVVVVVVVVVVVVVVk.........",
+            "........kVVUUVVVVVVVVVVVVVVVVVVVVVVVVVVk........",
+            "........kVVUVVVVVVVVVVVVVVVVVVVVVVVVVVVk........",
+            "........kVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVk........",
+            "........kVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVk........",
+            "........kVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVk........",
+            "........kVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVk........",
+            "........kVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVk........",
+            "........kVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVk........",
+            "....kWWWWWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHWWWk....",
+            "..kkWWWWWWWWHHHHHHHHHHHHHHHHHHHHHHHHHHHWHWHWkk..",
+            "kkWWWWWHWHWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHWHWWkk",
+            "kWWWWWHWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHBk",
+            "kWSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSBk",
+            "kWMMMBBBBMMMBBBBMMMBBBBBBBBBBMMMBBBBMMMBBBSMMMDk",
+            "kHMMMBBBBMMMBBBBMMMBBBBBBBBBBMMMBBBBMMMBBBBMMMDk",
+            ".kMMMBBBBMMMBBBBMMMBBBBBBBBBBMMMBBBBMMMBSSSMMMk.",
+            "..kSSSBBBSBBBBBBBBBBBBBBBBBBBBBBBBBSBSBSSSDDDk..",
+            "....kDDDDDDSDDDSDDDSDDDSDDDSDDDSDDDSDDDDDDDk....",
+            "......kDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDk......",
+            ".........kDDDDDDDDDDDDDDDDDDDDDDDDDDDDk.........",
+            "............kkkkkkkkkkkkkkkkkkkkkkkk............",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+            "................................................",
+        ]),
+        eyes: [Point(15, 9), Point(27, 9)], eyeSize: 6, eyeInk: .accent, sweep: .beam,
+        ramp: ChassisRamp(deep: RGB(0.110, 0.090, 0.188), shade: RGB(0.200, 0.169, 0.322), mid: RGB(0.306, 0.263, 0.471),
+                          base: RGB(0.447, 0.400, 0.627), light: RGB(0.655, 0.612, 0.776), spec: RGB(0.902, 0.878, 0.973)),
+        headRows: 31)
+}
+
+extension Mascot {
+    public static let bloop = Mascot(
+        id: .bloop, name: "Bloop", tellName: "antenna bulbs",
+        blurb: "The alien. Biggest eyes of the four, by a long way.",
+        sprite: Sprite([
+            "......kkkk............................kkkk......",
+            ".....kaaaak..........................kaaaak.....",
+            ".....kaaaak..........................kaaaak.....",
+            "......kkkk............................kkkk......",
+            ".......kk..............................kk.......",
+            "........kk............................kk........",
+            ".........kk..........................kk.........",
+            "..........kk........................kk..........",
+            "...........kk......................kk...........",
+            "............kkkkkkkkkkkkkkkkkkkkkkkk............",
+            ".........kkkWWWWWWWWWWWWWWWWWWWWWWWWkkk.........",
+            ".......kkWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWkk.......",
+            ".....kkWWWWWWWXXWWWWWWWWWWWWWWWWWWWWWWWWWkk.....",
+            "....kWWWWWWWHXHWHWHWHWHWHWHWHWHWHWHWHWHWHWWk....",
+            "...kWWWWWHWWWHWHHHHHHHHHHHHHHHHHHHHHHHHHHHHBk...",
+            "...kWWWWHWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHBBk...",
+            "...kWWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHBSk...",
+            "...kWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHBSk...",
+            "...kWWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHBBSk...",
+            "...kWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHBSk...",
+            "...kWWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHBSk...",
+            "...kWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHBSk...",
+            "...kWWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHBBSk...",
+            "...kWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHBSk...",
+            "...kWWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHBBSk...",
+            "...kWWHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHBHBSk...",
+            "...kWWWHPPPPPHHHHHHHHHHHHHHHHHHHHHHPPPPPHBBSk...",
+            "...kWHHHPPPPPHHHHHHHHkHHHHkHHHHHHHHPPPPPBBSSk...",
+            "....kHHHPPPPPHHHHHHHHHkkkkHHHHHHHHHPPPPPBSSk....",
+            ".....kBBBHHHHHHHHHHHHHHHHHHHHHHHHHBHBBBSSSk.....",
+            ".......kBBHHHHHHHHHHHHHHHHHHHHHBHBBBBSSDk.......",
+            ".........kBBHHHHHHHHHHHHHHHHHHBHBBBSSSk.........",
+            "...........kBHHHHHHHHHHHHHHHHHHBBSSDk...........",
+            ".............kHHHHHHHHHHHHHHHHHHBSk.............",
+            "..............kSSSSSSSSSSSSSSSSDDk..............",
+            "............kWWWHHHHHHHHHHHHHHHHBBBk............",
+            "...........kWWWHHHHHHHHHHHHHHHHHHBBBk...........",
+            "...........kWWHHHHHHWWWWWWWWHHHHBHBSk...........",
+            "...........kWWHHHHHWWWWWWWWWWHHHHBBSk...........",
+            "...........kWWHHHHHWWWWWWWWWWHHHBBBSk...........",
+            "...........kWHHHHBHWWWWWWWWWWBHBHBBSk...........",
+            "...........kWHHHBBBHWWWWWWWWHBBBBBSSk...........",
+            "...........kWHHBBBBBBBBBBBBBBBBBBSBDk...........",
+            "...........kSDDDDDDDDDDDDDDDDDDDDDDDk...........",
+            "............kkkkkkkkkkkkkkkkkkkkkkkk............",
+            "..............kSDDk..........kSSDk..............",
+            "..............kDDDk..........kDDDk..............",
+            ".............kkkkkkk........kkkkkkk.............",
+        ]),
+        eyes: [Point(10, 15), Point(29, 15)], eyeSize: 9, eyeInk: .accent, sweep: .psi,
+        ramp: ChassisRamp(deep: RGB(0.071, 0.161, 0.102), shade: RGB(0.122, 0.271, 0.153), mid: RGB(0.192, 0.392, 0.227),
+                          base: RGB(0.298, 0.545, 0.325), light: RGB(0.455, 0.714, 0.482), spec: RGB(0.784, 0.929, 0.788)),
+        headRows: 28)
+}
+
+extension Mascot {
+    public static let all: [Mascot] = [blip, scoot, wobble, bloop]
 
     public static func named(_ id: MascotID) -> Mascot {
-        all.first { $0.id == id } ?? pip
+        all.first { $0.id == id } ?? blip
     }
-
-    /// Whether this character bobs further than the busts. Only the floater
-    /// does; the others are anchored by the collar.
-    public var bobScale: Int { id == .nimbus ? 2 : 1 }
 }

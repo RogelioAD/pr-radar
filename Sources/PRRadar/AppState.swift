@@ -992,9 +992,29 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// A transient reaction that outranks the derived mood while it lasts:
-    /// being hovered, being dragged, or a review arriving.
+    /// A transient reaction that outranks the derived mood while it lasts.
+    /// Event-driven only — a review arriving. Pointer state is tracked
+    /// separately below.
     @Published var reaction: Reaction?
+
+    /// Pointer state, kept as facts rather than written straight into
+    /// `reaction`.
+    ///
+    /// Hover and press arrive as independent events, so last-write-wins gets
+    /// it wrong in both directions: releasing a drag while the pointer is
+    /// still over the badge would clear the hover too, and a hover-out
+    /// arriving mid-drag would cancel the press. Holding both and ranking
+    /// them means neither event has to know what the other is doing.
+    @Published var isHoveringBadge = false
+    @Published var isPressingBadge = false
+
+    /// What the character is reacting to, most urgent first: a hand on it
+    /// beats a ping, and a ping beats a pointer merely resting on it.
+    var activeReaction: Reaction? {
+        Reaction.resolve(pressed: isPressingBadge,
+                         event: reaction,
+                         hovering: isHoveringBadge)
+    }
 
     /// The badge's square size in points, as dragged from one of its corners.
     ///
@@ -1029,7 +1049,7 @@ final class AppState: ObservableObject {
 
     /// What the character is actually drawn as right now.
     var spriteStyle: SpriteStyle {
-        reaction?.style(tint: mood.style.health) ?? mood.style
+        activeReaction?.style(tint: mood.style.health) ?? mood.style
     }
 
     /// The collapsed widget — character, mood mark and a chip per non-zero

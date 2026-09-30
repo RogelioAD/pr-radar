@@ -49,8 +49,17 @@ public struct SpriteStyle: Sendable {
     /// Cycled one per animation frame.
     public let marks: [Mark]
     public let health: Health
-    /// Vertical offset per animation frame, in sprite pixels.
+    /// Vertical offset per animation frame, in units.
     public let bob: [Int]
+    /// Whether the character runs its sweep in this state.
+    ///
+    /// Tied to the tint rather than picked per mood: the sweep belongs to
+    /// `running` — the blue states — and nothing else. Blue is the app
+    /// *looking*, either watching a clear queue or fetching; green, amber and
+    /// red are all outcomes, and a beam crossing a character that is trying
+    /// to tell you something is wrong makes the state you must notice look
+    /// like the one you can ignore.
+    public var sweeps: Bool { health == .running }
 
     public init(eyes: EyePattern, marks: [Mark], health: Health, bob: [Int]) {
         self.eyes = eyes
@@ -97,8 +106,12 @@ public enum Mood: String, CaseIterable, Sendable {
             return SpriteStyle(eyes: .shut, marks: [.zzz, .zzz, .zzz, .none],
                                health: .good, bob: [0, 0, 0, 1, 1, 1])
         case .idle:
+            // The one mood with a longer cycle than it strictly needs: the
+            // sweep runs off the frame counter, so a one-frame bob would hold
+            // the body still while the beam crossed it.
             return SpriteStyle(eyes: .open, marks: [.none],
-                               health: .running, bob: [0])
+                               health: .running,
+                               bob: [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0])
         case .nudging:
             return SpriteStyle(eyes: .glance, marks: [.bang, .bang, .none],
                                health: .attention, bob: [0, 0, 1, 1])
@@ -106,9 +119,13 @@ public enum Mood: String, CaseIterable, Sendable {
             return SpriteStyle(eyes: .wide, marks: [.bang, .none],
                                health: .bad, bob: [0, 1])
         case .working:
+            // The one state that is literally a scan. The mark sweeps the
+            // gutter and the beam sweeps the character, and a longer cycle so
+            // the body is not holding still underneath a moving beam.
             return SpriteStyle(eyes: .shut,
                                marks: [.scanLeft, .scanMiddle, .scanRight],
-                               health: .running, bob: [0])
+                               health: .running,
+                               bob: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1])
         case .proud:
             return SpriteStyle(eyes: .open, marks: [.spark, .none],
                                health: .good, bob: [0, 0, 1, 1])
@@ -136,6 +153,25 @@ public enum Mood: String, CaseIterable, Sendable {
 /// layer ambiguous.
 public enum Reaction: String, CaseIterable, Sendable {
     case waking, held, startled
+
+    /// Which reaction wins, given everything happening to the panel at once.
+    ///
+    /// Pure, so the truth table is pinned without a window — and a function
+    /// rather than three writers racing for one property. Hover, press and
+    /// events arrive independently, so last-write-wins loses in both
+    /// directions: a release while the pointer is still over the badge would
+    /// clear the hover, and a hover-out mid-drag would cancel the press.
+    ///
+    /// Order is the argument. A hand on the badge is the most immediate thing
+    /// happening to it, so it outranks a review landing; a review landing is
+    /// news, so it outranks a pointer merely resting there.
+    public static func resolve(pressed: Bool,
+                               event: Reaction?,
+                               hovering: Bool) -> Reaction? {
+        if pressed { return .held }
+        if let event { return event }
+        return hovering ? .waking : nil
+    }
 
     public func style(tint: Health) -> SpriteStyle {
         switch self {
