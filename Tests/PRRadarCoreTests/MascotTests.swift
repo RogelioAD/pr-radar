@@ -522,7 +522,7 @@ final class MascotCycleTests: XCTestCase {
         var current: MascotID? = everyone.first
         for _ in 0...everyone.count {
             seen.append(current)
-            current = MascotID.next(after: current, in: everyone)
+            current = MascotID.next(after: current)
         }
         XCTAssertEqual(seen, everyone.map { $0 } + [nil])
         XCTAssertEqual(current, everyone.first,
@@ -533,7 +533,7 @@ final class MascotCycleTests: XCTestCase {
         var current: MascotID? = nil
         var lap: [MascotID?] = []
         for _ in 0..<(everyone.count + 1) {
-            current = MascotID.next(after: current, in: everyone)
+            current = MascotID.next(after: current)
             lap.append(current)
         }
         XCTAssertEqual(Set(lap.compactMap { $0 }), Set(everyone))
@@ -543,80 +543,51 @@ final class MascotCycleTests: XCTestCase {
     /// An id written by an older build must not silently turn the mascot off.
     func testUnknownIdIsNotTreatedAsOff() {
         XCTAssertNil(MascotID(rawValue: "sprocket"))
-        XCTAssertEqual(MascotID.next(after: nil, in: everyone), everyone.first)
+        XCTAssertEqual(MascotID.next(after: nil), everyone.first)
     }
 
-    /// Cycling out of a character who has gone off duty must not dead-end.
-    /// It can happen without anybody touching the control: the pick was made
-    /// in October and the month turned over.
-    func testCyclingOutOfAnOffDutyCharacterLandsBackOnTheRoster() {
-        let roster = MascotID.onDuty(on: july, keepSeasonal: false)
-        XCTAssertFalse(roster.contains(.boo))
-        XCTAssertEqual(MascotID.next(after: .boo, in: roster), roster.first)
-    }
+    // MARK: - Which shelf each one sits on
 
-    /// An empty roster is "off" every time rather than a crash. Nothing
-    /// produces one today; `next` is the kind of function that gets one
-    /// eventually.
-    func testAnEmptyRosterCyclesToOff() {
-        XCTAssertNil(MascotID.next(after: nil, in: []))
-        XCTAssertNil(MascotID.next(after: .blip, in: []))
-    }
-
-    // MARK: - Who is on duty
-
-    private func date(month: Int) -> Date {
-        var parts = DateComponents()
-        parts.year = 2026; parts.month = month; parts.day = 15
-        return Calendar.current.date(from: parts)!
-    }
-    private var july: Date { date(month: 7) }
-    private var october: Date { date(month: 10) }
-
-    func testTheRegularCastIsOnDutyEveryMonth() {
-        let regulars: Set<MascotID> = [.blip, .scoot, .wobble, .bloop]
-        for month in 1...12 {
-            let roster = Set(MascotID.onDuty(on: date(month: month), keepSeasonal: false))
-            XCTAssertTrue(regulars.isSubset(of: roster), "month \(month)")
+    /// `.custom` is the default so a fork keeps compiling, which means nothing
+    /// in the type system stops a *built-in* character forgetting to say where
+    /// it goes — it would just turn up in somebody's personal row. This is the
+    /// only thing that catches that.
+    func testEveryBuiltInMascotDeclaresItsSection() {
+        for mascot in Mascot.all {
+            XCTAssertNotEqual(mascot.cohort, .custom,
+                              "\(mascot.name) ships with the app but claims no shelf")
         }
     }
 
-    func testTheSeasonalFourTurnUpInOctoberAndGoAwayAgain() {
-        let visitors: Set<MascotID> = [.boo, .flit, .gourd, .rattle]
-        for month in 1...12 {
-            let roster = Set(MascotID.onDuty(on: date(month: month), keepSeasonal: false))
-            XCTAssertEqual(roster.isSuperset(of: visitors), month == 10, "month \(month)")
+    func testTheShelvesHoldWhoTheySay() {
+        XCTAssertEqual(Mascot.cohort(.og).map(\.id), [.pip, .byte, .widget, .nimbus])
+        XCTAssertEqual(Mascot.cohort(.space).map(\.id), [.blip, .scoot, .wobble, .bloop])
+        XCTAssertEqual(Mascot.cohort(.october2026).map(\.id), [.boo, .flit, .gourd, .rattle])
+        XCTAssertTrue(Mascot.cohort(.custom).isEmpty, "this build ships nobody's fork")
+    }
+
+    /// The room lays the cast out four to a row, so a shelf that is not a
+    /// multiple of four leaves a ragged last line.
+    func testEveryShelfFillsWholeRows() {
+        for cohort in MascotCohort.ordered where cohort != .custom {
+            XCTAssertEqual(Mascot.cohort(cohort).count % 4, 0,
+                           "\(cohort) has \(Mascot.cohort(cohort).count)")
         }
     }
 
-    /// The toggle overrides the month in one direction only: it keeps them on,
-    /// it never sends them away during October.
-    func testKeepingThemOnWorksInEveryMonth() {
-        for month in 1...12 {
-            let roster = MascotID.onDuty(on: date(month: month), keepSeasonal: true)
-            XCTAssertEqual(Set(roster), Set(MascotID.allCases), "month \(month)")
-        }
+    /// Cast order and shelf order are the same walk, so clicking the mascot
+    /// moves through the room left to right, top to bottom.
+    func testCastOrderMatchesTheRoomsOrder() {
+        XCTAssertEqual(Mascot.all.map(\.id),
+                       MascotCohort.ordered.flatMap { Mascot.cohort($0).map(\.id) })
+        XCTAssertEqual(Mascot.all.map(\.id), MascotID.allCases)
     }
 
-    /// The roster keeps the declared order, so the picker and the click-cycle
-    /// walk the cast the same way round.
-    func testTheRosterKeepsTheCastsOwnOrder() {
-        for keep in [true, false] {
-            for month in [7, 10] {
-                let roster = MascotID.onDuty(on: date(month: month), keepSeasonal: keep)
-                XCTAssertEqual(roster, MascotID.allCases.filter(roster.contains),
-                               "month \(month) keep \(keep)")
-            }
+    /// Every built-in shelf has a heading; the custom one deliberately has
+    /// none, because the room titles it with whoever is signed in.
+    func testOnlyTheCustomShelfBorrowsItsTitle() {
+        for cohort in MascotCohort.ordered {
+            XCTAssertEqual(cohort.title == nil, cohort == .custom, "\(cohort)")
         }
-    }
-
-    /// Every character says which season it belongs to, and only the four the
-    /// app shipped with are evergreen.
-    func testEverySeasonalCharacterIsAnOctoberOne() {
-        for id in MascotID.allCases where id.season != .evergreen {
-            XCTAssertEqual(id.season, .october, "\(id)")
-        }
-        XCTAssertEqual(MascotID.allCases.filter { $0.season == .evergreen },
-                       [.blip, .scoot, .wobble, .bloop])
     }
 }

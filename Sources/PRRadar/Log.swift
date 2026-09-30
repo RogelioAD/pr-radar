@@ -31,26 +31,6 @@ enum Log {
         }
     }
 
-    /// PRRADAR_FAKE_DATE=YYYY-MM-DD stands the app up as though it were that
-    /// day, for the seasonal cast and the banner that announces it.
-    ///
-    /// Same reason as the fakes below it, and more sharply: the one state this
-    /// feature exists to produce happens on 31 days of the year, and the other
-    /// 334 there is no way to look at it at all. Waiting for October to find
-    /// out whether the banner clips is not a test strategy.
-    ///
-    /// Read once. A date that moved while the app was running would re-lay the
-    /// drawer out underneath whoever was reading it.
-    static let fakeDate: Date? = {
-        guard let raw = ProcessInfo.processInfo.environment["PRRADAR_FAKE_DATE"] else {
-            return nil
-        }
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.date(from: raw)
-    }()
-
     /// PRRADAR_FAKE_BEHIND=N forces every one of my PRs to look N commits
     /// behind, so the branch-state chip can be inspected. Both real PRs are
     /// level with their bases, so there is otherwise no way to see it.

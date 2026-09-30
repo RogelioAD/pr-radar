@@ -401,16 +401,31 @@ press.
 ## Mascots
 
 A small pixel-art character that keeps you company in the drawer and, by
-default, replaces the floating icon entirely. Four all year:
+default, replaces the floating icon entirely. **Twelve of them**, on three
+shelves, and none of them go away.
+
+**OG Mascots** — the first cast, drawn at 16 cells and retired when the
+48-cell redraw landed. Back, upscaled by the app's own `scaled3x` rather than
+redrawn, because redrawing them would make them different characters.
+
+| | |
+|---|---|
+| **Pip** | the first one there ever was; the antenna is the tell |
+| **Byte** | the animal. Dark eyes, so the ears do the talking |
+| **Widget** | a screen on a collar — mouth bar and a power LED |
+| **Nimbus** | the first floater, and the reason the bob has two speeds |
+
+**Out There** — the 48-cell redraw.
 
 | | |
 |---|---|
 | **Blip** | a radar bot with a dish and a chest badge — the default |
 | **Scoot** | an astronaut; helmet lamp and chest panel take the mood colour |
 | **Wobble** | a flying saucer, six hull lights chasing round the rim |
-| **Bloop** | an alien with the biggest eyes of the regular cast |
+| **Bloop** | an alien with the biggest eyes on any shelf |
 
-…and four more **through October**:
+**October 2026** — dated because there may be another cohort later, not
+because they leave. They do not.
 
 | | |
 |---|---|
@@ -419,42 +434,75 @@ default, replaces the floating icon entirely. Four all year:
 | **Gourd** | a jack-o'-lantern, the only one lit from inside |
 | **Rattle** | a skeleton; the nose hollow glows and a spark sits in his ribs |
 
-They turn up on 1 October and leave again on the 1st of November. **Settings ▸
-Seasonal characters** keeps them all year if you would rather.
+### The mascot room
 
-**A banner announces them, once.** The first time the drawer is opened during
-October, a strip above the list shows the four faces, says *New for October*,
-and points at the header mascot:
+The **smiling face in the footer** opens a room of the whole cast, four to a
+row, one shelf per cohort. Click a face to wear it; the current one carries an
+accent border and its name in the accent colour. A **No mascot** line under
+the shelves puts the plain tile back, so the room can say "none" rather than
+leaving the context menu as the only way to.
+
+A room rather than a longer pop-up menu: twelve names in a list is a list you
+read, twelve faces in a grid is a set you recognise, and recognising them is
+the whole transaction. Settings keeps its picker — now grouped the same way —
+for anyone who already knows which one they want. Each cell's tooltip carries
+the blurb and what the character's tell is, which is the one place either is
+still said.
+
+The cells are **held still**. Twelve timelines animating at once is a screen
+that will not sit still long enough to be read, and the badge is where a
+character is supposed to move.
+
+### Your own
+
+A fourth shelf appears, titled with **your GitHub login**, holding any
+character this build did not ship. There is nothing to register: a fork adds
+a `MascotID` case and a `Mascot`, and anything that does not claim one of the
+three built-in cohorts lands there.
+
+`cohort` **defaults to `.custom`** on purpose. A fork that added a character
+before the room existed is calling `Mascot(…)` with the old argument list, so
+defaulting means `git pull && make install` keeps building for them and their
+character turns up in their own row without them touching anything. The cost
+is that a *built-in* one could forget to say where it goes and end up in
+somebody's personal row, so that is pinned by a test instead of by the
+compiler.
+
+The shelf is hidden when it is empty. A section titled with your own name
+holding nothing reads as something being broken.
+
+### The arrival banner
+
+**A banner announces a new cohort, once.** The first time the drawer is opened
+after one ships, a strip above the list shows the four faces and points at the
+room:
 
 ```
 ┌────────────────────────────────────────────────────┐
-│  👻 🦇 🎃 💀   New for October                   ×  │
-│                Click the mascot to cycle.           │
+│  👻 🦇 🎃 💀   October 2026                      ×  │
+│                Pick one in the mascot room.         │
 └────────────────────────────────────────────────────┘
 ```
 
 It draws the characters rather than listing their names, because four faces
-are the announcement and four names are a sentence to read.
+are the announcement and four names are a sentence to read. Its heading is the
+shelf's own title, so the banner and the room it points at cannot disagree
+about what the group is called.
 
-It goes away and stays away. Dismissing it records the *season* — `2026-10` —
-rather than a "seen" flag, so next October is news again. Picking one of the
-visitors dismisses it too: the drawer is already showing the thing the strip
-is advertising. And it is tied to **the month, not the toggle** — with
-Seasonal characters left on all year, July does not announce that the October
-cast has arrived, because you did that yourself months ago.
+It goes away and stays away. Dismissing it records the *cohort* rather than a
+"seen" flag, so the next group of characters is news again instead of
+inheriting a flag set years earlier. Picking one of the new characters
+dismisses it too — the drawer is already showing what the strip is
+advertising. It never announces the custom shelf: a fork's own characters are
+not news to the fork that wrote them.
 
 The strip's height is counted in the drawer's chrome, so the list below it is
 never one row shorter than it should be, and dismissing it shrinks the window
 by exactly the strip.
 
-Turning them off does not forget which one you picked. A pick made in October
-falls back to Blip on screen in November and is still recorded, so flipping
-the toggle brings *your* character back rather than the first of the four. The
-picker, the click-to-cycle and the tooltip all read the same roster, so none of
-them can offer a character the others do not have.
-
-**Meet the Cast** asks only for the four regulars. Requiring the visitors would
-leave a shelf slot empty for eleven months with nothing on screen to say why.
+**Meet the Cast** asks for every character this build ships and nothing a fork
+added. Counting a custom one would make the trophy unwinnable for anyone whose
+fork has one, in a way the shelf could never explain.
 
 **It is a status channel, not a sticker.** The character's colour, expression
 and accessory all come from the same derivation the counts do, so it and the

@@ -327,7 +327,7 @@ final class TrophyEvaluatorTests: XCTestCase {
     // MARK: - The app itself
 
     func testSeeingEveryMascotUnlocksMeetTheCast() {
-        let regulars = MascotID.allCases.filter { $0.season == .evergreen }
+        let regulars = Mascot.all.filter { $0.cohort != .custom }.map(\.id)
         var state = settled
         for id in regulars.dropLast() {
             state.record(TrophyFact.mascotSeen(id))
@@ -338,17 +338,15 @@ final class TrophyEvaluatorTests: XCTestCase {
         XCTAssertTrue(unlocks(snapshot(), from: state).contains(.meetTheCast))
     }
 
-    /// The seasonal cast must not be a requirement. They are unreachable for
-    /// eleven months of the year, so a shelf slot that waited on them would
-    /// sit empty with nothing on screen to explain why.
-    func testTheSeasonalCastIsNotNeededForMeetTheCast() {
+    /// A fork's own characters must not be a requirement. Counting them would
+    /// make the trophy unwinnable for anyone whose fork has one, in a way the
+    /// shelf could never explain.
+    func testACustomMascotIsNotNeededForMeetTheCast() {
         var state = settled
-        for id in MascotID.allCases.filter({ $0.season == .evergreen }) {
-            state.record(TrophyFact.mascotSeen(id))
+        for mascot in Mascot.all where mascot.cohort != .custom {
+            state.record(TrophyFact.mascotSeen(mascot.id))
         }
         XCTAssertTrue(unlocks(snapshot(), from: state).contains(.meetTheCast))
-        XCTAssertFalse(MascotID.allCases.allSatisfy { state.has(TrophyFact.mascotSeen($0)) },
-                       "the point of this test is that some were never shown")
     }
 
     func testTheBadgeSizeLimits() {

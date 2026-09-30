@@ -271,10 +271,6 @@ anything**, which is what makes it pleasant to hand to an agent:
 - `make print` proves the whole data path — auth, fetch, parse, derived state —
   with no GUI involved.
 - `make test` covers every rule worth arguing about (see below).
-- `PRRADAR_FAKE_DATE=YYYY-MM-DD` stands the app up as though it were that day.
-  The seasonal cast and the banner that announces them exist on 31 days of the
-  year; without this the other 334 have no way to look at either, and "does the
-  banner clip the list" is not a question worth waiting until October to ask.
 - `PRRADAR_DEBUG=1` prints a hit-test zone map of the real laid-out drawer, and
   of the collapsed badge's four corner grips — including a probe of the panel
   corner outside the art, which must read `move` — so drag, resize and click

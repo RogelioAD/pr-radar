@@ -12,6 +12,7 @@ import Foundation
 /// its filter bar, and a list.
 public enum DrawerRoom: String, CaseIterable, Sendable {
     case trophies
+    case mascots
     case review
     case settings
 
@@ -19,6 +20,7 @@ public enum DrawerRoom: String, CaseIterable, Sendable {
     public var surface: DrawerSurface {
         switch self {
         case .trophies: return .trophies
+        case .mascots: return .mascots
         case .review: return .review
         case .settings: return .settings
         }

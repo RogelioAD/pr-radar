@@ -211,7 +211,7 @@ extension Trophy {
         // MARK: The app itself
 
         Trophy(.meetTheCast, "Meet the Cast",
-               "Show all four of the regular mascots at least once.",
+               "Show every mascot this build ships at least once.",
                art: TrophyArt.badge(.plaque, motif: TrophyMotif.meetTheCast, tier: .silver)),
         Trophy(.bigBadge, "Big Badge",
                "Drag the badge to its largest size.",

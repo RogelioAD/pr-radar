@@ -48,8 +48,8 @@ struct DrawerView: View {
             grabber
             header
             Divider().opacity(0.6)
-            if state.showsSeasonalNotice {
-                seasonalNotice
+            if state.showsCastNotice {
+                castNotice
                 Divider().opacity(0.6)
             }
             // A room replaces everything below the header. Not hidden but
@@ -61,6 +61,12 @@ struct DrawerView: View {
                 TrophyRoomView(state: state, onRowHeights: onRowHeights)
                 Divider().opacity(0.6)
                 trophyFooter
+            case .mascots:
+                MascotRoomView(state: state,
+                               onRowHeights: onRowHeights,
+                               onPick: { state.mascot = $0 })
+                Divider().opacity(0.6)
+                mascotFooter
             case .review:
                 ReviewRoomView(state: state, onRowHeights: onRowHeights)
                 Divider().opacity(0.6)
@@ -135,11 +141,11 @@ struct DrawerView: View {
     /// dismissed, and four timelines animating at somebody while they try to
     /// read past it is the opposite of what a one-off notice should do.
     ///
-    /// Fixed to `Layout.seasonalNoticeHeight`, which is the same number
+    /// Fixed to `Layout.castNoticeHeight`, which is the same number
     /// `chromeHeight` reserves. Letting it size itself is how the panel ends
     /// up framed for a strip of one height around a strip of another.
-    private var seasonalNotice: some View {
-        let visitors = state.seasonalVisitors
+    private var castNotice: some View {
+        let visitors = state.castNoticeVisitors
         let cast = visitors.map(Mascot.named)
         let scale = Layout.noticeMascotScale(for: cast, backingScale: state.backingScale)
         return HStack(spacing: 8) {
@@ -163,7 +169,7 @@ struct DrawerView: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("New for \(SeasonalNotice.monthName(on: state.today))")
+                Text(NewCastNotice.headline)
                     .font(.system(size: 12, weight: .semibold))
                 // Short, and it has to stay short. On a 1x display a 48-cell
                 // character cannot be drawn below 48pt, so four of them take
@@ -171,7 +177,7 @@ struct DrawerView: View {
                 // display the same row is 105pt. The caption has to fit the
                 // narrow case, and the rest of what there is to say is in the
                 // tooltip and the accessibility label.
-                Text("Click the mascot to cycle.")
+                Text("Pick one in the mascot room.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -183,7 +189,7 @@ struct DrawerView: View {
 
             Spacer(minLength: 4)
 
-            Button(action: state.dismissSeasonalNotice) {
+            Button(action: state.dismissCastNotice) {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.secondary)
@@ -191,18 +197,17 @@ struct DrawerView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Dismiss — they stay until the end of the month either way, "
-                  + "and Settings keeps them all year")
-            .accessibilityLabel("Dismiss the seasonal characters notice")
+            .help("Dismiss — they are here for good either way")
+            .accessibilityLabel("Dismiss the new mascots notice")
         }
         .padding(.horizontal, 12)
-        .frame(height: Layout.seasonalNoticeHeight)
+        .frame(height: Layout.castNoticeHeight)
         .frame(maxWidth: .infinity)
         .background(Color.accentColor.opacity(0.08))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("New for \(SeasonalNotice.monthName(on: state.today)): "
-                            + "\(SeasonalNotice.names(visitors)). "
-                            + "Click the mascot in the header to try them.")
+        .accessibilityLabel("\(NewCastNotice.headline): "
+                            + "\(NewCastNotice.names(visitors)). "
+                            + "Pick one in the mascot room.")
     }
 
     /// True when the content area is showing its own, larger mascot.
@@ -416,6 +421,12 @@ struct DrawerView: View {
         case .trophies:
             guard state.trophyState.hasUnseen, state.room != .trophies else { return nil }
             return Health.good.tint
+        case .mascots:
+            // The same announcement the banner makes, on the button that
+            // answers it. Gone once the room has been opened, whether or not
+            // the strip was dismissed from the strip itself.
+            guard state.showsCastNotice, state.room != .mascots else { return nil }
+            return Health.good.tint
         case .review:
             if state.reviewInFlight != nil { return Health.running.tint }
             return state.autoReviewEnabled ? Health.good.tint : nil
@@ -432,6 +443,7 @@ struct DrawerView: View {
     private func name(of room: DrawerRoom) -> String {
         switch room {
         case .trophies: return "Trophy room"
+        case .mascots: return "Mascots"
         case .review: return "Automatic review"
         case .settings: return "Settings"
         }
@@ -444,6 +456,9 @@ struct DrawerView: View {
             let unseen = state.trophyState.unseenCount
             guard unseen > 0 else { return "Trophy room" }
             return unseen == 1 ? "Trophy room — 1 new" : "Trophy room — \(unseen) new"
+        case .mascots:
+            guard let mascot = state.selectedMascot else { return "Mascots" }
+            return "Mascots — \(mascot.name)"
         case .review:
             // Names the PR being reviewed, which is the one fact the room is
             // opened to check and the only place it is said without opening it.
@@ -494,6 +509,21 @@ struct DrawerView: View {
         .frame(height: Layout.footerHeight)
     }
 
+    /// Says which character is on, which is the one fact the room is opened
+    /// to change and the only thing a grid of faces does not already say.
+    private var mascotFooter: some View {
+        HStack(spacing: 6) {
+            roomButtons
+            Text(state.selectedMascot.map { "\($0.name) — \($0.tellName)" } ?? "No mascot")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .frame(height: Layout.footerHeight)
+    }
+
     /// The gear, bottom-left, on whichever surface the drawer is showing.
     ///
     /// In all three footers rather than only the list's: it is the way *out* of
@@ -524,6 +554,8 @@ struct DrawerView: View {
         HStack(spacing: 2) {
             settingsButton
             roomButton(.trophies, symbol: "trophy", filled: "trophy.fill", in: .footer)
+            roomButton(.mascots, symbol: "face.smiling",
+                       filled: "face.smiling.inverse", in: .footer)
             roomButton(.review, symbol: "wand.and.stars",
                        filled: "wand.and.sparkles", in: .footer)
         }

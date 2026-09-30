@@ -134,16 +134,16 @@ enum Layout {
     /// The empty states already reserve a whole row's height for a 20pt SF
     /// Symbol, so this costs no layout at all.
     static let emptyStateMascotPoints: CGFloat = 48
-    /// The row of visitors in the seasonal banner. Small: they are there to be
+    /// The row of new characters in the arrival banner. Small: they are there to be
     /// recognised, not read — the character itself is one click away.
     static let noticeMascotPoints: CGFloat = 20
 
-    /// How tall the seasonal banner is.
+    /// How tall the arrival banner is.
     ///
     /// One number, read by the view that draws it and by `chromeHeight`, which
     /// makes room for it. The two disagreeing is exactly the bug — the same
     /// one `emptyStateHeight` carries a note about.
-    static let seasonalNoticeHeight: CGFloat = 52
+    static let castNoticeHeight: CGFloat = 52
 
     /// The empty mark gutter on a banner perch, in points, so the row of
     /// faces can close it up. Derived from the same arithmetic
@@ -395,6 +395,9 @@ enum Layout {
         // so this is a genuine estimate — near the middle of the three, used
         // only for the single frame before the groups report themselves.
         case .settings, .review: return 130
+        // A shelf: four characters and a heading, which is a fixed drawing
+        // rather than an estimate.
+        case .mascots: return mascotShelfHeight
         }
     }
 
@@ -412,12 +415,12 @@ enum Layout {
     /// own, so a second account costs no chrome and there is nothing here to
     /// keep in step with it.
     ///
-    /// `notice` is the seasonal banner's height, or zero when it is not up.
+    /// `notice` is the arrival banner's height, or zero when it is not up.
     /// Passed in rather than read from anywhere, because this is the number
     /// the *window* is framed from: a strip drawn in the drawer that this does
     /// not count is a strip the panel has made no room for, and what it costs
     /// is the last row of the list. The banner draws itself at exactly
-    /// `seasonalNoticeHeight` for the same reason.
+    /// `castNoticeHeight` for the same reason.
     static func chromeHeight(for surface: DrawerSurface,
                              notice: CGFloat = 0) -> CGFloat {
         switch surface {
@@ -429,6 +432,9 @@ enum Layout {
         // they all come to exactly the same chrome.
         case .trophies, .settings, .review:
             return headerHeight + footerHeight + 2 + notice
+        // The same, plus the "no mascot" line the shelves do not count.
+        case .mascots:
+            return headerHeight + footerHeight + 2 + notice + mascotOffRowHeight
         }
     }
 
@@ -441,10 +447,43 @@ enum Layout {
     static func roomSpacing(for surface: DrawerSurface) -> CGFloat? {
         switch surface {
         case .trophies: return trophyGridSpacing
-        case .settings, .review: return settingsSectionSpacing
+        case .settings, .review, .mascots: return settingsSectionSpacing
         case .reviews, .mine: return nil
         }
     }
+
+    // MARK: - Mascot room
+
+    /// One character's cell in the room. Big enough to tell two apart at a
+    /// glance, which is the whole job of the screen.
+    static let mascotRoomPoints: CGFloat = 44
+    /// Gap between cells, and between one shelf and the next.
+    static let mascotGridSpacing: CGFloat = 10
+
+    static func mascotRoomScale(backingScale: CGFloat) -> CGFloat {
+        // One scale for the whole room, off the tallest crop in the cast, for
+        // the same reason the banner uses one: a grid where characters are
+        // sized individually is a grid of different-sized characters.
+        SpriteScale.snapped(targetPoints: mascotRoomPoints,
+                            spriteWidth: Mascot.all.map(\.headRows).max() ?? 48,
+                            backingScale: backingScale,
+                            minimum: 1 / max(1, backingScale))
+    }
+
+    /// What one shelf occupies: its heading, and one row of characters.
+    ///
+    /// An estimate only in the sense that the cells are measured from the art
+    /// rather than from the screen — every shelf in the cast is exactly one
+    /// row, so this is the real height rather than a guess at one.
+    static var mascotShelfHeight: CGFloat { mascotRoomPoints + 18 + mascotGridSpacing }
+
+    /// The "no mascot" line under the shelves.
+    ///
+    /// Counted in the room's chrome rather than as a row, because it is not
+    /// one: the drawer snaps to shelves. Left out of both it was left out of
+    /// the height too, and the one control that turns the character off sat
+    /// just below the fold of a window that had sized itself to fit.
+    static let mascotOffRowHeight: CGFloat = 30
 
     // MARK: - Settings
 

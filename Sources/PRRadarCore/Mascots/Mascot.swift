@@ -52,69 +52,64 @@ public enum SweepKind: Sendable {
     case marrow
 }
 
-/// When a character is on duty.
+/// Which section of the mascot room a character belongs to.
 ///
-/// Declared per character rather than inferred from anything about the art,
+/// Declared per character rather than worked out from anything about the art,
 /// for the same reason `SweepKind` is: a rule that reads the drawing is a rule
 /// that changes when somebody redraws it.
-public enum MascotSeason: Sendable, Equatable {
-    /// Here all year. The four the app shipped with.
-    case evergreen
-    /// Here during this month, and otherwise only if asked to stay.
-    case month(Int)
+///
+/// `custom` is the default, and that is deliberate. A fork that has added its
+/// own character is constructing `Mascot` with the arguments this type had
+/// before the room existed; defaulting means `git pull && make install` keeps
+/// building for them and their character turns up in their own row without
+/// them doing anything. The cost is that a *built-in* one could forget to say
+/// where it goes and land in somebody's personal row — so that is pinned by a
+/// test rather than by the compiler. See `testEveryBuiltInMascotDeclaresItsSection`.
+public enum MascotCohort: String, CaseIterable, Sendable {
+    /// The 16-cell cast the app shipped with, upscaled to stand next to the rest.
+    case og
+    /// The 48-cell redraw: a radar bot, an astronaut, a saucer and an alien.
+    case space
+    /// The Halloween four. Dated because there may be another cohort later,
+    /// not because they go away — they do not.
+    case october2026
+    /// Anything this build did not ship. A fork's own.
+    case custom
 
-    public static let october = MascotSeason.month(10)
+    /// The section heading. `custom` has none of its own: the room titles it
+    /// with whoever is signed in, which this type has no business knowing.
+    public var title: String? {
+        switch self {
+        case .og:          return "OG Mascots"
+        case .space:       return "Out There"
+        case .october2026: return "October 2026"
+        case .custom:      return nil
+        }
+    }
+
+    /// Ordered as the room stacks them: oldest first, yours last.
+    public static let ordered: [MascotCohort] = [.og, .space, .october2026, .custom]
 }
 
 public enum MascotID: String, CaseIterable, Sendable {
+    /// The original cast, drawn at 16 cells and retired when the 48-cell
+    /// redraw landed. Back, upscaled, because a room with a shelf for them is
+    /// a better home than the git history was.
+    case pip, byte, widget, nimbus
     case blip, scoot, wobble, bloop
-    /// The October four. Appended rather than interleaved: the order here is
-    /// the order the picker cycles in, and the cast the app has always opened
-    /// on should not be shuffled by a visiting one.
     case boo, flit, gourd, rattle
 
-    public var season: MascotSeason {
-        switch self {
-        case .blip, .scoot, .wobble, .bloop: return .evergreen
-        case .boo, .flit, .gourd, .rattle:   return .october
-        }
-    }
-
-    /// The cast on duty on a given day.
-    ///
-    /// `keepSeasonal` is the user's own override — the Settings toggle that
-    /// keeps the visitors on all year. Everything downstream reads this rather
-    /// than `allCases`: the picker, the click-to-cycle, and the trophy that
-    /// asks to have met everybody. A roster that only some of those agreed
-    /// with would be a character you can cycle to and not choose, or one the
-    /// shelf waits on all year for.
-    public static func onDuty(on date: Date,
-                              calendar: Calendar = .current,
-                              keepSeasonal: Bool) -> [MascotID] {
-        let month = calendar.component(.month, from: date)
-        return allCases.filter { id in
-            switch id.season {
-            case .evergreen:      return true
-            case .month(let its): return keepSeasonal || its == month
-            }
-        }
-    }
-
-    /// The picker, for anyone who finds it by clicking: each character on duty
-    /// in turn, then off, then round again.
+    /// The picker, for anyone who finds it by clicking: each character in
+    /// turn, then off, then round again.
     ///
     /// `nil` is a stop on the loop rather than the end of it. Treating it as a
     /// terminus is what strands someone who clicks one past the last character
     /// — the control goes inert and the context menu becomes the only way back.
-    ///
-    /// Takes the roster rather than reading `allCases`, so a character who is
-    /// not on duty cannot be cycled to. Given an empty roster it answers `nil`
-    /// every time, which is "off" — the honest answer, and not a crash.
-    public static func next(after current: MascotID?, in roster: [MascotID]) -> MascotID? {
-        guard let current, let index = roster.firstIndex(of: current) else {
-            return roster.first
+    public static func next(after current: MascotID?) -> MascotID? {
+        guard let current, let index = allCases.firstIndex(of: current) else {
+            return allCases.first
         }
-        return index + 1 < roster.count ? roster[index + 1] : nil
+        return index + 1 < allCases.count ? allCases[index + 1] : nil
     }
 }
 
@@ -150,12 +145,35 @@ public struct Mascot: Identifiable, Sendable, Equatable {
     /// four poses. The tell still takes the live `Health` tint, so the mood is
     /// never competing with the body colour for the same pixels.
     public let ramp: ChassisRamp
+    /// Which shelf of the mascot room this one sits on.
+    public let cohort: MascotCohort
     /// Rows to keep for a small perch: the head, and nothing it stands on.
     ///
     /// Sized so the crop still carries a tell. Cropping past the antenna
     /// would leave a header mascot with no way to show the mood at all,
     /// which is the whole reason a tell exists.
     public let headRows: Int
+
+    /// Spelled out rather than left to the memberwise initialiser, so
+    /// `cohort` can carry a default. See `MascotCohort`: a fork that added a
+    /// character before this existed has to keep compiling.
+    public init(id: MascotID, name: String, tellName: String, blurb: String,
+                sprite: Sprite, eyes: [Point], eyeSize: Int, eyeInk: Slot,
+                sweep: SweepKind, ramp: ChassisRamp, headRows: Int,
+                cohort: MascotCohort = .custom) {
+        self.id = id
+        self.name = name
+        self.tellName = tellName
+        self.blurb = blurb
+        self.sprite = sprite
+        self.eyes = eyes
+        self.eyeSize = eyeSize
+        self.eyeInk = eyeInk
+        self.sweep = sweep
+        self.ramp = ramp
+        self.headRows = headRows
+        self.cohort = cohort
+    }
 
     /// Always drawn in the live tint, whatever the eyes are doing.
     ///
@@ -179,10 +197,148 @@ public struct Mascot: Identifiable, Sendable, Equatable {
     /// than a default it inherits by not being named.
     public var bobScale: Int {
         switch id {
-        case .scoot, .wobble, .boo, .flit: return 2
-        case .blip, .bloop, .gourd, .rattle: return 1
+        case .scoot, .wobble, .boo, .flit, .nimbus: return 2
+        case .blip, .bloop, .gourd, .rattle, .pip, .byte, .widget: return 1
         }
     }
+}
+
+
+// MARK: - The original cast
+//
+// Drawn at 16 cells, retired when the 48-cell redraw landed, and brought back
+// for the room's first shelf. Kept at their original size in source and
+// enlarged by `scaled3x` — the app's own pixel-art upscale, the one the mood
+// marks and the trophies already go through. Redrawing them at 48 would make
+// them *different characters*, which is the one thing a nostalgia shelf must
+// not do.
+//
+// Three things had to change to make them citizens of the current system.
+//
+// Their tell used to be a list of points painted at draw time and is derived
+// from the art now, so it is baked into the literal as `a`.
+//
+// Their body tones were the old shared greyscale — `g`, `d`, `w` — and are
+// chassis rungs now, with a ramp each mixed to land back on the greys they
+// were. That is not cosmetic: `brighten` only understands chassis slots, so
+// on the old palette three of the four had sweeps that changed nothing at
+// all on some frames. A character that stops moving in the one state meant
+// to show the app working is worse than a character in the wrong grey.
+//
+// And they predate the sweep, so each is given one that suits what it
+// already was. Pip and Widget have visors, so a beam crosses them; Byte has
+// the ears for sonar; Nimbus is a floater and shimmers.
+
+extension Mascot {
+    /// Rows 12–15 of the three busts. Identical by construction, so swapping
+    /// characters could never shift the layout around them.
+    private static let collar = [
+        ".....kHHHHk.....",
+        "..kkHHHHHHHHkk..",
+        "..kHHHHHHHHHSk..",
+        "..kkkkkkkkkkkk..",
+    ]
+
+    public static let pip = Mascot(
+        id: .pip, name: "Pip", tellName: "antenna",
+        blurb: "The first one there ever was. Radar, before it had a dish.",
+        sprite: Sprite([
+            ".......aa.......",
+            ".......kk.......",
+            "....kkkkkkkk....",
+            "..kkHHHHHHHHkk..",
+            "..kHHHHHHHHHSk..",
+            "..kHVVVVVVVVHk..",
+            ".kkHVaaVVaaVHkk.",
+            ".kSHVaaVVaaVHSk.",
+            "..kHVVVVVVVVHk..",
+            "..kHHSSSSSSSHk..",
+            "..kkHHHHHHHHkk..",
+            "....kkkkkkkk....",
+        ] + collar).scaled3x(),
+        eyes: [Point(15, 18), Point(27, 18)], eyeSize: 6, eyeInk: .accent,
+        sweep: .visor,
+        ramp: ChassisRamp(deep: RGB(0.129, 0.145, 0.165), shade: RGB(0.271, 0.294, 0.325), mid: RGB(0.435, 0.463, 0.502),
+                          base: RGB(0.639, 0.667, 0.706), light: RGB(0.839, 0.859, 0.886), spec: RGB(0.969, 0.976, 0.984)),
+        headRows: 33, cohort: .og)
+
+    public static let byte = Mascot(
+        id: .byte, name: "Byte", tellName: "ear tips",
+        blurb: "The animal of the first cast. Dark eyes, so the ears do the talking.",
+        sprite: Sprite([
+            "..k..........k..",
+            "..kk........kk..",
+            "..kak......kak..",
+            "..kkkkkkkkkkkk..",
+            ".kHHHHHHHHHHHHk.",
+            ".kHWkHHHHHHWkHk.",
+            ".kHkkHHHHHHkkHk.",
+            ".kHHHHkkkkHHHHk.",
+            ".kHHHkPPPkHHHSk.",
+            ".kSHHkkkkkHHSSk.",
+            "..kSSSSSSSSSSk..",
+            "...kkkkkkkkkk...",
+            ".....kHHHHk.....",
+            "..kkHHHHHHHHkk..",
+            "..kHHaaaaaaHSk..",
+            "..kkkkkkkkkkkk..",
+        ]).scaled3x(),
+        eyes: [Point(9, 15), Point(33, 15)], eyeSize: 6, eyeInk: .outline,
+        sweep: .echo,
+        ramp: ChassisRamp(deep: RGB(0.161, 0.145, 0.129), shade: RGB(0.310, 0.286, 0.259), mid: RGB(0.478, 0.447, 0.408),
+                          base: RGB(0.675, 0.643, 0.600), light: RGB(0.859, 0.835, 0.800), spec: RGB(0.980, 0.969, 0.953)),
+        headRows: 33, cohort: .og)
+
+    public static let widget = Mascot(
+        id: .widget, name: "Widget", tellName: "mouth bar and power LED",
+        blurb: "A screen on a collar. Says everything with one bar.",
+        sprite: Sprite([
+            "................",
+            "...kkkkkkkkkk...",
+            "..kSSSSSSSSSSk..",
+            "..kSVVVVVVVVSk..",
+            "..kSVaaVVaaVSk..",
+            "..kSVaaVVaaVSk..",
+            "..kSVVVVVVVVSk..",
+            "..kSVVaaaaVVSk..",
+            "..kSVVVVVVVVSk..",
+            "..kSSSSSSSaaSk..",
+            "...kkkkkkkkkk...",
+            ".....kkkkkk.....",
+        ] + collar).scaled3x(),
+        eyes: [Point(15, 12), Point(27, 12)], eyeSize: 6, eyeInk: .accent,
+        sweep: .visor,
+        ramp: ChassisRamp(deep: RGB(0.110, 0.129, 0.161), shade: RGB(0.235, 0.271, 0.322), mid: RGB(0.384, 0.435, 0.502),
+                          base: RGB(0.573, 0.627, 0.694), light: RGB(0.796, 0.835, 0.882), spec: RGB(0.957, 0.969, 0.980)),
+        headRows: 33, cohort: .og)
+
+    /// The one floater of the first cast, and the reason `bobScale` exists.
+    public static let nimbus = Mascot(
+        id: .nimbus, name: "Nimbus", tellName: "cheeks",
+        blurb: "The first floater. Nothing under it then either.",
+        sprite: Sprite([
+            "......kkkk......",
+            "....kkWWWWkk....",
+            "...kWWWWWWWWk...",
+            "..kWWWWWWWWWWk..",
+            "..kWWWWWWWWWWk..",
+            "..kWWkkWWkkWWk..",
+            "..kWWkkWWkkWWk..",
+            "..kWWWWWWWWWWk..",
+            "..kWaWWWWWWaWk..",
+            "..kWWWWWWWWWWk..",
+            "..kWWWWWWWWWWk..",
+            "..kWWWWWWWWWWk..",
+            "..kWWWWWWWWWWk..",
+            "..kWWkWWWWkWWk..",
+            "..kWWkWWWWkWWk..",
+            "..kkk.kkkk.kkk..",
+        ]).scaled3x(),
+        eyes: [Point(15, 15), Point(27, 15)], eyeSize: 6, eyeInk: .accent,
+        sweep: .wisp,
+        ramp: ChassisRamp(deep: RGB(0.298, 0.310, 0.337), shade: RGB(0.451, 0.467, 0.494), mid: RGB(0.616, 0.631, 0.659),
+                          base: RGB(0.788, 0.800, 0.824), light: RGB(0.914, 0.922, 0.937), spec: RGB(1.000, 1.000, 1.000)),
+        headRows: 33, cohort: .og)
 }
 
 extension Mascot {
@@ -242,7 +398,7 @@ extension Mascot {
         eyes: [Point(15, 19), Point(27, 19)], eyeSize: 6, eyeInk: .accent, sweep: .visor,
         ramp: ChassisRamp(deep: RGB(0.086, 0.129, 0.169), shade: RGB(0.180, 0.255, 0.314), mid: RGB(0.278, 0.376, 0.435),
                           base: RGB(0.424, 0.529, 0.592), light: RGB(0.608, 0.698, 0.753), spec: RGB(0.863, 0.918, 0.945)),
-        headRows: 28)
+        headRows: 28, cohort: .space)
 }
 
 extension Mascot {
@@ -302,7 +458,7 @@ extension Mascot {
         eyes: [Point(15, 13), Point(27, 13)], eyeSize: 6, eyeInk: .accent, sweep: .hud,
         ramp: ChassisRamp(deep: RGB(0.137, 0.161, 0.220), shade: RGB(0.239, 0.278, 0.376), mid: RGB(0.373, 0.420, 0.533),
                           base: RGB(0.537, 0.588, 0.698), light: RGB(0.741, 0.780, 0.863), spec: RGB(0.957, 0.973, 1.000)),
-        headRows: 28)
+        headRows: 28, cohort: .space)
 }
 
 extension Mascot {
@@ -362,7 +518,7 @@ extension Mascot {
         eyes: [Point(15, 9), Point(27, 9)], eyeSize: 6, eyeInk: .accent, sweep: .beam,
         ramp: ChassisRamp(deep: RGB(0.110, 0.090, 0.188), shade: RGB(0.200, 0.169, 0.322), mid: RGB(0.306, 0.263, 0.471),
                           base: RGB(0.447, 0.400, 0.627), light: RGB(0.655, 0.612, 0.776), spec: RGB(0.902, 0.878, 0.973)),
-        headRows: 31)
+        headRows: 31, cohort: .space)
 }
 
 extension Mascot {
@@ -422,7 +578,7 @@ extension Mascot {
         eyes: [Point(10, 15), Point(29, 15)], eyeSize: 9, eyeInk: .accent, sweep: .psi,
         ramp: ChassisRamp(deep: RGB(0.071, 0.161, 0.102), shade: RGB(0.122, 0.271, 0.153), mid: RGB(0.192, 0.392, 0.227),
                           base: RGB(0.298, 0.545, 0.325), light: RGB(0.455, 0.714, 0.482), spec: RGB(0.784, 0.929, 0.788)),
-        headRows: 28)
+        headRows: 28, cohort: .space)
 }
 
 extension Mascot {
@@ -482,7 +638,7 @@ extension Mascot {
         eyes: [Point(12, 17), Point(29, 17)], eyeSize: 7, eyeInk: .accent, sweep: .wisp,
         ramp: ChassisRamp(deep: RGB(0.137, 0.184, 0.204), shade: RGB(0.235, 0.318, 0.341), mid: RGB(0.361, 0.471, 0.490),
                           base: RGB(0.529, 0.659, 0.671), light: RGB(0.729, 0.847, 0.851), spec: RGB(0.925, 0.980, 0.980)),
-        headRows: 32)
+        headRows: 32, cohort: .october2026)
 }
 
 extension Mascot {
@@ -542,7 +698,7 @@ extension Mascot {
         eyes: [Point(13, 16), Point(28, 16)], eyeSize: 7, eyeInk: .accent, sweep: .echo,
         ramp: ChassisRamp(deep: RGB(0.106, 0.071, 0.063), shade: RGB(0.196, 0.133, 0.114), mid: RGB(0.298, 0.208, 0.176),
                           base: RGB(0.447, 0.325, 0.271), light: RGB(0.639, 0.518, 0.443), spec: RGB(0.906, 0.843, 0.788)),
-        headRows: 30)
+        headRows: 30, cohort: .october2026)
 }
 
 extension Mascot {
@@ -602,7 +758,7 @@ extension Mascot {
         eyes: [Point(10, 15), Point(30, 15)], eyeSize: 8, eyeInk: .accent, sweep: .flicker,
         ramp: ChassisRamp(deep: RGB(0.235, 0.086, 0.024), shade: RGB(0.373, 0.161, 0.043), mid: RGB(0.541, 0.255, 0.063),
                           base: RGB(0.729, 0.373, 0.094), light: RGB(0.882, 0.549, 0.243), spec: RGB(0.976, 0.816, 0.608)),
-        headRows: 34)
+        headRows: 34, cohort: .october2026)
 }
 
 extension Mascot {
@@ -662,12 +818,20 @@ extension Mascot {
         eyes: [Point(11, 9), Point(30, 9)], eyeSize: 7, eyeInk: .accent, sweep: .marrow,
         ramp: ChassisRamp(deep: RGB(0.239, 0.227, 0.196), shade: RGB(0.376, 0.357, 0.306), mid: RGB(0.537, 0.514, 0.443),
                           base: RGB(0.714, 0.686, 0.596), light: RGB(0.867, 0.847, 0.776), spec: RGB(0.984, 0.976, 0.941)),
-        headRows: 26)
+        headRows: 26, cohort: .october2026)
 }
 
 extension Mascot {
-    public static let all: [Mascot] = [blip, scoot, wobble, bloop,
+    /// Every character this build ships, in the order the room stacks them
+    /// and the order clicking the mascot cycles them.
+    public static let all: [Mascot] = [pip, byte, widget, nimbus,
+                                       blip, scoot, wobble, bloop,
                                        boo, flit, gourd, rattle]
+
+    /// The characters on one shelf, in cast order.
+    public static func cohort(_ cohort: MascotCohort) -> [Mascot] {
+        all.filter { $0.cohort == cohort }
+    }
 
     public static func named(_ id: MascotID) -> Mascot {
         all.first { $0.id == id } ?? blip

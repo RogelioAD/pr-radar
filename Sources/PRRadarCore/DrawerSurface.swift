@@ -19,6 +19,7 @@ public enum DrawerSurface: String, CaseIterable, Sendable {
     case reviews
     case mine
     case trophies
+    case mascots
     case review
     case settings
 
@@ -33,7 +34,12 @@ public enum DrawerSurface: String, CaseIterable, Sendable {
     ///
     /// The drag is disabled here rather than ignored, so the edge does not
     /// fight a pointer that will not move it.
-    public var fitsContent: Bool { self == .settings || self == .review }
+    /// The mascot room is here with the two forms rather than with the
+    /// trophy grid it looks like. A shelf of trophies is a list — there are
+    /// thirty-six and more keep arriving, so "show me three rows" is a real
+    /// instruction. The cast is twelve, every one of them fits, and a height
+    /// that hid a shelf would hide a character you cannot then pick.
+    public var fitsContent: Bool { self == .settings || self == .review || self == .mascots }
 
     public init(_ tab: DrawerTab) {
         switch tab {

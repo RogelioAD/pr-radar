@@ -30,6 +30,24 @@ extension Mascot {
         return (ys.min() ?? 0)...(ys.max() ?? 0)
     }
 
+    /// The rows a travelling band can actually light.
+    ///
+    /// Narrower than `litRows`, and the difference matters. A band only
+    /// touches chassis and tell — it deliberately leaves the outline alone,
+    /// because an outline that flashes stops reading as an edge. Plenty of
+    /// silhouettes open and close on rows that are *nothing but* outline:
+    /// Nimbus is a rounded cloud whose first three and last three rows are
+    /// pure `k`, so a band parked there painted nothing at all and the sweep
+    /// appeared to stop for a sixth of its cycle.
+    public var sweepRows: ClosedRange<Int> {
+        let ys = sprite.litPoints.filter {
+            guard let slot = sprite[$0.x, $0.y] else { return false }
+            return slot.isChassis || isTell(slot)
+        }.map(\.y)
+        guard let low = ys.min(), let high = ys.max() else { return litRows }
+        return low...high
+    }
+
     /// The character with a mood applied and one frame of its own idling.
     ///
     /// Order matters and is the argument. The tic runs first because it moves
@@ -164,6 +182,29 @@ extension Mascot {
             // His jaw. Two rows, so it reads as chattering rather than as the
             // whole skull nodding.
             if f % 4 < 2 { shift(&grid, rows: 20..<24, by: 0, down: 1) }
+
+        // The original cast. Each keeps the one thing it always did — these
+        // are the idles the 16-cell art was drawn around, at three times the
+        // coordinates.
+        case .pip:
+            repaintAccent(&grid, x: 18..<30, y: 0..<6,
+                          with: f % 8 < 4 ? .accent : .accentDim)
+
+        case .byte:
+            // The ears, which is the whole of him. They twitch rather than
+            // blink: dark eyes leave nothing else on his face to move.
+            let twitch = [0, 0, 1, 1, 0, 0, -1, -1][f % 8]
+            if twitch != 0 { shift(&grid, rows: 0..<12, by: twitch) }
+
+        case .widget:
+            // The power LED only. The mouth bar is the tell you read, and a
+            // mouth that flashes reads as a fault rather than as a face.
+            repaintAccent(&grid, x: 30..<42, y: 27..<30,
+                          with: f % 6 < 3 ? .accent : .accentDim)
+
+        case .nimbus:
+            repaintAccent(&grid, x: 0..<grid.width, y: 23..<28,
+                          with: f % 10 < 5 ? .accent : .accentDim)
         }
     }
 
@@ -226,7 +267,7 @@ extension Mascot {
     /// entering at the top as the last one leaves — which is what a rising
     /// shimmer looks like anyway.
     private func shimmer(_ grid: inout Sprite, frame: Int, rising: Bool) {
-        let rows = litRows
+        let rows = sweepRows
         let span = max(1, rows.count)
         let step = abs(frame) % span
         for band in 0...3 {
@@ -293,7 +334,7 @@ extension Mascot {
     /// skeleton reads as a photocopier; stopping at each bone reads as
     /// something being counted.
     private func spine(_ grid: inout Sprite, frame: Int) {
-        let rows = litRows
+        let rows = sweepRows
         let stops = 9
         // Held for two frames apiece, so each stop is seen rather than
         // flicked through.
@@ -319,7 +360,7 @@ extension Mascot {
         }
     }
 
-    private func isTell(_ slot: Slot?) -> Bool {
+    func isTell(_ slot: Slot?) -> Bool {
         switch slot {
         case .accent, .accentMid, .accentDim: return true
         default: return false

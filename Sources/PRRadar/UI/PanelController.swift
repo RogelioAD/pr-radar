@@ -258,7 +258,7 @@ final class PanelController {
             .store(in: &cancellables)
     }
 
-    /// Re-frames the drawer when the seasonal banner comes or goes.
+    /// Re-frames the drawer when the arrival banner comes or goes.
     ///
     /// Nothing else would. `syncWidth` only acts on a width that has changed,
     /// and this changes the height: the banner is counted in `chromeHeight`,
@@ -268,13 +268,13 @@ final class PanelController {
     ///
     /// Two ways in, which is why this watches the state rather than hanging
     /// off the button: the × dismisses it, and so does picking one of the
-    /// visitors, from either the header or Settings.
+    /// new characters, from the header, the room or Settings.
     ///
     /// Read a turn late for the same reason `syncWidth` is — `@Published`
     /// announces the change before it has happened, and the height is a
     /// function of the value afterwards.
     private func observeNotice() {
-        state.$seenSeasonalNotice
+        state.$seenCastNotice
             .dropFirst()
             .removeDuplicates()
             .sink { [weak self] _ in
@@ -535,10 +535,10 @@ final class PanelController {
         })
     }
 
-    /// What the seasonal banner is costing the drawer right now, which is
+    /// What the arrival banner is costing the drawer right now, which is
     /// nothing at all on any day it is not up.
     private var noticeHeight: CGFloat {
-        state.showsSeasonalNotice ? Layout.seasonalNoticeHeight : 0
+        state.showsCastNotice ? Layout.castNoticeHeight : 0
     }
 
     private static let zones = DrawerZones(headerHeight: Layout.headerHeight,

@@ -251,19 +251,22 @@ struct SettingsView: View {
         // selection is optional matches on the tag's type, and a tag of the
         // non-optional type never equals the binding — which shows as a picker
         // that will not display what is selected.
-        //
-        // The list is the roster on duty, not every character that exists: a
-        // name in here that the badge would refuse to draw is a choice that
-        // silently does nothing. The binding reads `effectiveMascot` for the
-        // same reason — a stored pick that is out of season is not in the
-        // list, and a selection matching no tag shows as a pop-up with no
-        // title in it.
+        // Grouped the way the mascot room is, because a flat list of twelve
+        // names is a list you read rather than a set you recognise — and the
+        // two places you pick a character should not disagree about how the
+        // cast is organised.
         row("Mascot",
             help: "Which character keeps you company, on the badge and in the drawer") {
-            Picker("Mascot", selection: Binding(get: { state.effectiveMascot },
-                                                set: { state.mascot = $0 })) {
-                ForEach(state.mascotRoster, id: \.self) { id in
-                    Text(Mascot.named(id).name).tag(Optional(id))
+            Picker("Mascot", selection: $state.mascot) {
+                ForEach(MascotCohort.ordered, id: \.self) { cohort in
+                    let members = Mascot.cohort(cohort)
+                    if !members.isEmpty {
+                        Section(cohort.title ?? state.customCohortTitle) {
+                            ForEach(members) { mascot in
+                                Text(mascot.name).tag(Optional(mascot.id))
+                            }
+                        }
+                    }
                 }
                 Divider()
                 Text("None").tag(MascotID?.none)
@@ -277,11 +280,6 @@ struct SettingsView: View {
         }
 
         Divider()
-
-        toggle("Seasonal characters",
-               help: "Keep Boo, Flit, Gourd and Rattle all year. They turn up "
-                   + "in October on their own.",
-               isOn: $state.keepSeasonalMascots)
 
         Divider()
 
