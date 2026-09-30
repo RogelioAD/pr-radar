@@ -108,11 +108,35 @@ enum Layout {
 
     // MARK: - Mascot
 
-    /// The header lockup: a full 16-row bust at 2x, mark gutter included.
-    static let headerMascotScale: CGFloat = 2
+    // Every mascot scale below is expressed as the *physical* size the
+    // character should come out at, then snapped to whole device pixels —
+    // rather than as a multiplier of its cells.
+    //
+    // It used to be the other way round, which worked only while the cast was
+    // one fixed size. Redrawing it at 48 cells turned `2` from "a 32pt bust"
+    // into "an 80pt one", and every one of these constants would have had to
+    // be found and divided by three. Asking for points and letting the art
+    // decide the multiplier is the arrangement that cannot drift.
+
+    /// The header lockup: a bust about this tall, mark gutter included.
+    static let headerMascotPoints: CGFloat = 26
     /// The empty states already reserve a whole row's height for a 20pt SF
     /// Symbol, so this costs no layout at all.
-    static let emptyStateMascotScale: CGFloat = 3
+    static let emptyStateMascotPoints: CGFloat = 48
+
+    static func headerMascotScale(for mascot: Mascot, backingScale: CGFloat) -> CGFloat {
+        SpriteScale.snapped(targetPoints: headerMascotPoints,
+                            spriteWidth: mascot.headRows,
+                            backingScale: backingScale,
+                            minimum: 1 / max(1, backingScale))
+    }
+
+    static func emptyStateMascotScale(for mascot: Mascot, backingScale: CGFloat) -> CGFloat {
+        SpriteScale.snapped(targetPoints: emptyStateMascotPoints,
+                            spriteWidth: mascot.sprite.height,
+                            backingScale: backingScale,
+                            minimum: 1 / max(1, backingScale))
+    }
 
     /// How much room a list with nothing in it takes.
     ///
@@ -202,18 +226,20 @@ enum Layout {
 
     /// The character plus its halo is 18 cells wide, and that is what should
     /// match the Dock tile — the counters hang off it rather than shrinking it.
-    private static let badgeCharacterCells = 18
+    /// Never smaller than this, whatever the Dock is doing. Not because the
+    /// character breaks, but because the counter's digits stop being a number:
+    /// a digit below about ten points is a smudge. Expressed in points and
+    /// converted, so enlarging the art cannot quietly shrink the floor.
+    private static let badgeMinimumDigitPoints: CGFloat = 10
 
-    /// Never below 2x, whatever the Dock is doing. Not because the character
-    /// breaks, but because the counter's 3x5 digits stop being a number: at
-    /// 1.5x a digit is seven and a half points tall.
-    private static let badgeMinimumScale: CGFloat = 2
-
-    static func badgeScale(tile: CGFloat, backingScale: CGFloat) -> CGFloat {
-        SpriteScale.snapped(targetPoints: tile,
-                            spriteWidth: badgeCharacterCells,
-                            backingScale: backingScale,
-                            minimum: badgeMinimumScale)
+    static func badgeScale(tile: CGFloat, backingScale: CGFloat,
+                           mascot: Mascot) -> CGFloat {
+        let cells = SpriteLayout.blockHeight(for: mascot)
+        let digitCells = Counter.height * SpriteLayout.unit(for: mascot)
+        return SpriteScale.snapped(targetPoints: tile,
+                                   spriteWidth: cells,
+                                   backingScale: backingScale,
+                                   minimum: badgeMinimumDigitPoints / CGFloat(digitCells))
     }
 
     /// The tile size a snapped scale actually represents.
@@ -225,16 +251,23 @@ enum Layout {
     /// The smallest and largest size the badge can actually be dragged to,
     /// which is what the "biggest"/"smallest" trophies have to be measured
     /// against — see `BadgeSizing.reachableRange`.
-    static func reachableBadgeTileRange(hasMascot: Bool,
+    static func reachableBadgeTileRange(mascot: Mascot?,
                                         backingScale: CGFloat) -> (minimum: CGFloat,
                                                                    maximum: CGFloat) {
-        badgeSizing.reachableRange(spriteWidth: hasMascot ? badgeCharacterCells : nil,
-                                   backingScale: backingScale,
-                                   minimumScale: badgeMinimumScale)
+        guard let mascot else {
+            return badgeSizing.reachableRange(spriteWidth: nil,
+                                              backingScale: backingScale,
+                                              minimumScale: 1)
+        }
+        let digitCells = Counter.height * SpriteLayout.unit(for: mascot)
+        return badgeSizing.reachableRange(
+            spriteWidth: SpriteLayout.blockHeight(for: mascot),
+            backingScale: backingScale,
+            minimumScale: badgeMinimumDigitPoints / CGFloat(digitCells))
     }
 
-    static func tileSize(forBadgeScale scale: CGFloat) -> CGFloat {
-        CGFloat(badgeCharacterCells) * scale
+    static func tileSize(forBadgeScale scale: CGFloat, mascot: Mascot) -> CGFloat {
+        CGFloat(SpriteLayout.blockHeight(for: mascot)) * scale
     }
 
     /// Padding `SpriteCanvas` adds around a haloed, shadowed composition:

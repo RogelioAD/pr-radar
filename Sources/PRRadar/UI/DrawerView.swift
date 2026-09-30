@@ -185,7 +185,8 @@ struct DrawerView: View {
             if let mascot = headerMascot {
                 MascotView(mascot: mascot,
                            style: state.spriteStyle,
-                           scale: Layout.headerMascotScale)
+                           scale: Layout.headerMascotScale(
+                            for: mascot, backingScale: state.backingScale))
             } else {
                 Image(systemName: "arrow.triangle.pull")
                     .font(.system(size: 12, weight: .semibold))
@@ -601,7 +602,8 @@ struct DrawerView: View {
             if let mascot = state.selectedMascot {
                 MascotView(mascot: mascot,
                            style: state.spriteStyle,
-                           scale: Layout.emptyStateMascotScale)
+                           scale: Layout.emptyStateMascotScale(
+                            for: mascot, backingScale: state.backingScale))
             } else {
                 Image(systemName: symbol).font(.system(size: 20)).foregroundStyle(.tertiary)
             }

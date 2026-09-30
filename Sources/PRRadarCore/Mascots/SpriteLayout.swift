@@ -115,6 +115,11 @@ extension SpriteLayout {
                             height: rows + maxBobUnits * unit)
     }
 
+    /// The character's rows plus the room kept under a bobbing one.
+    public static func blockHeight(for mascot: Mascot) -> Int {
+        mascot.sprite.height + maxBobUnits * unit(for: mascot)
+    }
+
     /// The character's own columns plus the mark gutter beside them.
     public static func blockWidth(for mascot: Mascot) -> Int {
         let unit = unit(for: mascot)

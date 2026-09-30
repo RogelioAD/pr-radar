@@ -40,7 +40,8 @@ struct BadgeView: View {
 
     private func mascotWidget(_ mascot: Mascot, layout: SpriteLayout) -> some View {
         let scale = Layout.badgeScale(tile: state.badgeTileSize,
-                                     backingScale: state.backingScale)
+                                     backingScale: state.backingScale,
+                                     mascot: mascot)
         let size = Layout.badgeSize(for: layout, scale: scale)
         return MascotView(mascot: mascot,
                           style: state.spriteStyle,

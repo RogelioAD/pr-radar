@@ -53,7 +53,12 @@ final class PanelController {
     /// art staying crisp, and it is the same bargain the drawer makes when it
     /// settles onto a row boundary.
     private var badgeScale: CGFloat {
-        Layout.badgeScale(tile: state.badgeTileSize, backingScale: state.backingScale)
+        // Only meaningful while a character is drawn; the plain tile is not
+        // snapped to anything.
+        guard let mascot = state.selectedMascot else { return 1 }
+        return Layout.badgeScale(tile: state.badgeTileSize,
+                                 backingScale: state.backingScale,
+                                 mascot: mascot)
     }
 
     /// The screen the panel is actually on, for anything that has to appear
@@ -738,9 +743,9 @@ final class PanelController {
     /// reconcile.
     private func commitCornerResize() {
         cornerDragOrigin = nil
-        if state.badgeLayout != nil {
-            state.badgeTileSize =
-                Layout.badgeSizing.clamp(Layout.tileSize(forBadgeScale: badgeScale))
+        if state.badgeLayout != nil, let mascot = state.selectedMascot {
+            state.badgeTileSize = Layout.badgeSizing.clamp(
+                Layout.tileSize(forBadgeScale: badgeScale, mascot: mascot))
         }
         Prefs.badgeOrigin = badgeFrame.origin
         // The same feedback the drawer gives when its edge settles onto a row:
@@ -940,7 +945,8 @@ final class PanelController {
             return Layout.tileBadgeSize(tile: state.badgeTileSize)
         }
         let scale = Layout.badgeScale(tile: state.badgeTileSize,
-                                      backingScale: NSScreen.main?.backingScaleFactor ?? 2)
+                                      backingScale: NSScreen.main?.backingScaleFactor ?? 2,
+                                      mascot: state.selectedMascot ?? .blip)
         return Layout.badgeSize(for: layout, scale: scale)
     }
 
