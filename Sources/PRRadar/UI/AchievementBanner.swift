@@ -57,7 +57,7 @@ final class AchievementBanner {
         } else {
             cards = trophies.map { id in
                 let trophy = Trophy.named(id)
-                return Card(emblem: .trophy(trophy.art), title: trophy.name)
+                return Card(emblem: .trophy(trophy.smallArt), title: trophy.name)
             }
         }
         play(cards, on: screen)

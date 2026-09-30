@@ -69,7 +69,16 @@ public struct Trophy: Identifiable, Sendable {
     public let hint: String
     /// Hidden trophies keep both their name and their hint back until earned.
     public let isHidden: Bool
+    /// The shelf drawing: 96 cells, matching the cast's pixel size.
     public let art: Sprite
+    /// The same trophy at its authored 32 cells, for the achievement banner.
+    ///
+    /// Not a smaller rendering of the big one — a sprite only stays crisp at
+    /// whole device pixels, and 96 cells cannot be drawn below 48pt on a 2x
+    /// display. A banner emblem has to sit beside a line of text, so it takes
+    /// the art at the size it was drawn at. The room, which has room, takes
+    /// the enlargement.
+    public let smallArt: Sprite
 
     init(_ id: TrophyID, _ name: String, _ hint: String,
          hidden: Bool = false, art: Sprite) {
@@ -77,7 +86,15 @@ public struct Trophy: Identifiable, Sendable {
         self.name = name
         self.hint = hint
         self.isHidden = hidden
-        self.art = art
+        // Every trophy is authored at 32 and drawn at 96. Enlarged here, once,
+        // at static-init rather than per render — and in exactly one place, so
+        // a drawing cannot arrive at the grid still at its authored size.
+        //
+        // Scale3x rather than a redraw: thirty-six hand-redrawn trophies are
+        // thirty-six chances for the set to stop matching, and the frames are
+        // shared on purpose.
+        self.smallArt = art
+        self.art = art.scaled3x()
     }
 }
 
@@ -113,9 +130,10 @@ extension Trophy {
 
     /// The stand-in art for a hidden trophy, and the only drawing in the set
     /// used more than once.
+    /// Not built through `init`, so it is enlarged where it is defined.
     public static let mystery = TrophyArt.badge(.plaque,
                                                 motif: TrophyMotif.mystery,
-                                                tier: .bronze)
+                                                tier: .bronze).scaled3x()
 }
 
 extension SpriteLayout {

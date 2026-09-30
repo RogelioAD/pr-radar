@@ -171,8 +171,11 @@ enum Layout {
     /// grid would be thirty blurry JPEGs. 2x is also what makes the room
     /// affordable — five 64pt drawings across the drawer's 440pt leaves real
     /// gaps between them, where 3x would fit three.
-    static let trophyScale: CGFloat = 2
-    static var trophyCell: CGFloat { CGFloat(TrophyArt.size) * trophyScale }
+    /// Half a point per cell, matching the cast. Whole device pixels on a
+    /// 2x display; 64pt — what a 32-cell trophy used to occupy — is not
+    /// reachable at 96 cells without landing between two device pixels.
+    static let trophyScale: CGFloat = 0.5
+    static var trophyCell: CGFloat { CGFloat(TrophyArt.drawnSize) * trophyScale }
     /// Five across, which is what `TrophyGrid` chunks the roster into.
     static let trophyColumns = TrophyGrid.columns
     /// Air between cells, and between rows. Wider than a list's 2pt: rows in a
