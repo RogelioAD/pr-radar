@@ -24,15 +24,17 @@ public enum AutoReviewMode: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// One line, because it sits under a picker in a 440pt drawer and the
+    /// drawer has five other groups in it. What a mode *also* does — that you
+    /// still rule on the review afterwards either way — is the same in both and
+    /// so says nothing about the choice.
     public var detail: String {
         switch self {
         case .automatic:
-            return "Every priority and mild finding is posted inline as soon as "
-                 + "the review finishes. You still decide whether to approve, "
-                 + "request changes, or let the comment stand."
+            return "Priority and mild findings are posted inline as soon as the "
+                 + "review finishes."
         case .curated:
-            return "Nothing is sent until you have looked. The row lists what was "
-                 + "found, tier by tier, and you tick the ones worth posting."
+            return "Nothing is sent until you have ticked it."
         }
     }
 

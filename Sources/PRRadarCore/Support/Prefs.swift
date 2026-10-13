@@ -10,6 +10,9 @@ public enum Prefs {
         static let badgeY = "badge.origin.y"
         static let badgeTile = "badge.tileSize"
         static let seenPings = "seen.pings"
+        static let seenComments = "seen.comments"
+        static let notifyComments = "notify.comments"
+        static let notifyBotComments = "notify.botComments"
         static let sortOrder = "list.sortOrder"
         static let drawerContentHeight = "drawer.contentHeight"
         static let selectedTab = "drawer.selectedTab"
@@ -17,6 +20,7 @@ public enum Prefs {
         static let myPRFilter = "mine.filter"
         static let myPRStackedOnly = "mine.stackedOnly"
         static let celebrateCleared = "celebrate.cleared"
+        static let widgetVisible = "badge.visible"
         static let leadsByRepo = "leads.byRepo"
         static let repoFilter = "list.repoFilter"
         static let accountFilter = "list.accountFilter"
@@ -43,6 +47,16 @@ public enum Prefs {
         static let reviewBudget = "review.budget"
         static let reviewMaxPerHour = "review.maxPerHour"
         static let reviewLog = "review.log"
+
+        static let resolveSkill = "resolve.skill"
+        static let resolveMode = "resolve.mode"
+        static let resolveRepos = "resolve.repos"
+        static let resolveOutOfScope = "resolve.outOfScope"
+        static let resolvePending = "resolve.pending"
+        static let resolveGates = "resolve.gates"
+        static let resolveBudget = "resolve.budget"
+        static let resolveTimeout = "resolve.timeoutMinutes"
+        static let resolveLog = "resolve.log"
     }
 
     public static var badgeOrigin: CGPoint? {
@@ -184,6 +198,30 @@ public enum Prefs {
     /// Defaults on, and has no UI: it fires rarely enough to be a pleasure
     /// rather than an interruption. `defaults write ... celebrate.cleared
     /// -bool false` for anyone who disagrees.
+    /// Whether the widget is on the desktop at all.
+    ///
+    /// One switch, answered once, in the menu bar — not a condition the app
+    /// re-evaluates behind you.
+    ///
+    /// It used to hide itself whenever nothing was waiting and you had no open
+    /// pull requests, which sounds tidy and is not: the drawer collapses when
+    /// you click away from it, so a widget opened to change one setting was
+    /// gone again at the next poll, and the thing you most want to be able to
+    /// reach vanished at the exact moment it was least in the way. Worse, it
+    /// made "is it running?" and "do I have work?" the same question, so the
+    /// answer to the first was always inferred from the second.
+    ///
+    /// Now it is on until you say otherwise and off until you say otherwise.
+    /// The menu bar icon is always there either way, so turning it off cannot
+    /// strand you.
+    public static var widgetVisible: Bool {
+        get {
+            guard defaults.object(forKey: Key.widgetVisible) != nil else { return true }
+            return defaults.bool(forKey: Key.widgetVisible)
+        }
+        set { defaults.set(newValue, forKey: Key.widgetVisible) }
+    }
+
     public static var celebrateCleared: Bool {
         get {
             guard defaults.object(forKey: Key.celebrateCleared) != nil else { return true }
@@ -295,11 +333,16 @@ public enum Prefs {
         set { defaults.set(newValue, forKey: Key.reviewAuto) }
     }
 
-    /// The review skill to run, as the user types it — `/code-review`.
+    /// The review skill to run, as the user types it — `/my-review`.
     ///
     /// Deliberately not hardcoded and deliberately not a picker: which review
     /// skill a developer has is theirs, and a list here would go stale the
     /// first time they installed another one.
+    ///
+    /// It also has to be one they *wrote for this*. An ordinary interactive
+    /// review skill — `/code-review` among them — asks questions, posts on its
+    /// own account and answers in prose, and headless there means a quarter of
+    /// an hour of nothing followed by a timeout. The field says so.
     public static var reviewSkill: String? {
         get { defaults.string(forKey: Key.reviewSkill) }
         set {
@@ -413,6 +456,162 @@ public enum Prefs {
     public static var autoReviewLog: AutoReviewLog {
         get { AutoReviewLog.decoded(from: defaults.data(forKey: Key.reviewLog)) }
         set { defaults.set(newValue.encoded(), forKey: Key.reviewLog) }
+    }
+
+    /// Whether somebody commenting on one of your own pull requests is worth a
+    /// banner.
+    ///
+    /// On by default. The row has always carried the count and the count has
+    /// always been the wrong unit for this: it says there is post, never that
+    /// something has just arrived.
+    public static var notifyComments: Bool {
+        get {
+            guard defaults.object(forKey: Key.notifyComments) != nil else { return true }
+            return defaults.bool(forKey: Key.notifyComments)
+        }
+        set { defaults.set(newValue, forKey: Key.notifyComments) }
+    }
+
+    /// Whether a machine counts.
+    ///
+    /// On by default, and a separate switch rather than folded into the one
+    /// above, because the two are genuinely different appetites: bots are most
+    /// of the volume on a busy repo and also most of what there is to answer.
+    /// Somebody who wants the humans and not the robots can have that without
+    /// turning the feature off.
+    public static var notifyBotComments: Bool {
+        get {
+            guard defaults.object(forKey: Key.notifyBotComments) != nil else { return true }
+            return defaults.bool(forKey: Key.notifyBotComments)
+        }
+        set { defaults.set(newValue, forKey: Key.notifyBotComments) }
+    }
+
+    /// Comments already announced, by `PRComment.id`.
+    ///
+    /// Its own store rather than sharing `seenPings`, so that clearing one
+    /// cannot silence the other — and because they fill at very different
+    /// rates: a busy pull request produces more comments in a morning than you
+    /// get review requests in a month, and one shared 400-entry window would
+    /// let the comments evict the pings.
+    public static var seenComments: Set<String> {
+        get { Set(defaults.stringArray(forKey: Key.seenComments) ?? []) }
+        set {
+            let trimmed = newValue.count > 600 ? Set(newValue.prefix(600)) : newValue
+            defaults.set(Array(trimmed), forKey: Key.seenComments)
+        }
+    }
+
+    // MARK: - Resolve
+
+    /// The skill that answers threads on your own pull requests.
+    ///
+    /// Its own setting rather than the review skill reused, because they are
+    /// opposite jobs: one reads and reports, the other edits and pushes. A
+    /// developer who has both has two skills, and the one that writes is not a
+    /// mode of the one that reads.
+    public static var resolveSkill: String? {
+        get { defaults.string(forKey: Key.resolveSkill) }
+        set {
+            if let newValue { defaults.set(newValue, forKey: Key.resolveSkill) }
+            else { defaults.removeObject(forKey: Key.resolveSkill) }
+        }
+    }
+
+    /// How much of a resolve run happens without being looked at.
+    ///
+    /// Defaults to `.curated`, and an unrecognised value reads as `.triage`
+    /// rather than as anything else. A build that cannot understand the stored
+    /// mode must not resolve that doubt by editing somebody's checkout.
+    public static var resolveMode: ResolveMode {
+        get {
+            guard let raw = defaults.string(forKey: Key.resolveMode) else { return .curated }
+            return ResolveMode(rawValue: raw) ?? .triage
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.resolveMode) }
+    }
+
+    /// The repositories resolve is allowed to write in.
+    ///
+    /// **A second allowlist, not the review one reused.** Safe-to-read and
+    /// safe-to-write are different questions, and sharing one list would answer
+    /// the second with an answer given to the first: ticking a repo so a review
+    /// could read it would silently also let an unattended session commit and
+    /// push there. Resolve ticks therefore start empty even for a repo already
+    /// ticked for review.
+    public static var resolveRepos: [String] {
+        get { defaults.stringArray(forKey: Key.resolveRepos) ?? [] }
+        set { defaults.set(newValue, forKey: Key.resolveRepos) }
+    }
+
+    /// What a run does about work outside the pull request's stated job.
+    public static var resolveOutOfScope: ResolveOutOfScope {
+        get {
+            guard let raw = defaults.string(forKey: Key.resolveOutOfScope)
+            else { return .deferWithReasoning }
+            return ResolveOutOfScope(rawValue: raw) ?? .leaveOpen
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.resolveOutOfScope) }
+    }
+
+    /// What a run does about an unsubmitted draft review of your own.
+    ///
+    /// Defaults to leaving it, because publishing one releases every comment in
+    /// somebody's draft at once — including ones written weeks ago — rather
+    /// than this run's replies.
+    public static var resolvePending: ResolvePendingPolicy {
+        get {
+            guard let raw = defaults.string(forKey: Key.resolvePending) else { return .leave }
+            return ResolvePendingPolicy(rawValue: raw) ?? .leave
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.resolvePending) }
+    }
+
+    /// How much checking a run does before committing.
+    ///
+    /// Defaults to `.full`, which is the thorough answer and the slow one. An
+    /// unrecognised value also reads as `.full`: a build that cannot understand
+    /// the stored setting must not resolve that doubt by checking less.
+    public static var resolveGates: ResolveGates {
+        get {
+            guard let raw = defaults.string(forKey: Key.resolveGates) else { return .full }
+            return ResolveGates(rawValue: raw) ?? .full
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.resolveGates) }
+    }
+
+    /// The ceiling on one resolve run, in dollars. Zero means no ceiling.
+    ///
+    /// Higher than a review's, because the work is longer: this one reads every
+    /// thread, writes the fixes, and runs the repository's own gates.
+    public static var resolveBudget: Double {
+        get {
+            guard defaults.object(forKey: Key.resolveBudget) != nil else { return 25 }
+            return defaults.double(forKey: Key.resolveBudget)
+        }
+        set { defaults.set(max(0, newValue), forKey: Key.resolveBudget) }
+    }
+
+    /// How long one run may take, in minutes.
+    ///
+    /// Ninety, where a review gets fifteen. Not a near miss: a run here applies
+    /// fixes, runs the whole test suite for the platform it touched, and then
+    /// commits behind a pre-commit hook that runs the suite again. Fifteen
+    /// minutes would time out mid-commit on every real repository.
+    ///
+    /// Surfaced rather than hardcoded, for the reason the hourly review limit
+    /// was: a ceiling nobody can see reads as the feature having broken.
+    public static var resolveTimeoutMinutes: Int {
+        get {
+            guard defaults.object(forKey: Key.resolveTimeout) != nil else { return 90 }
+            return max(5, defaults.integer(forKey: Key.resolveTimeout))
+        }
+        set { defaults.set(max(5, newValue), forKey: Key.resolveTimeout) }
+    }
+
+    public static var resolveLog: ResolveLog {
+        get { ResolveLog.decoded(from: defaults.data(forKey: Key.resolveLog)) }
+        set { defaults.set(newValue.encoded(), forKey: Key.resolveLog) }
     }
 
     public static var seenPings: Set<String> {

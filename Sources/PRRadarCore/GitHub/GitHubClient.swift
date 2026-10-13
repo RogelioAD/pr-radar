@@ -135,6 +135,39 @@ public struct GitHubClient {
     /// dictionary when there is nothing to compare, and is allowed to fail
     /// independently of the main fetch — callers keep `behindBy` nil rather
     /// than claiming a branch is up to date.
+    /// Every unresolved thread on one pull request, untruncated.
+    ///
+    /// On demand, for a resolve run. Bodies are *not* passed through
+    /// `UnresolvedThread.trimmed` here, unlike the poll's: the row's 320-
+    /// character cut is right for a 440pt drawer and wrong for a session being
+    /// asked to answer the argument.
+    public func fetchThreads(repo: String, number: Int) async throws -> [UnresolvedThread] {
+        let parts = repo.split(separator: "/")
+        guard parts.count == 2 else { return [] }
+        let payload = try await run(
+            Query.threads(owner: String(parts[0]), name: String(parts[1]), number: number),
+            as: ThreadsPayload.self)
+        let nodes = payload.repository?.pullRequest?.reviewThreads?.nodes ?? []
+        return nodes.compactMap { thread in
+            guard let id = thread.id, thread.isResolved == false else { return nil }
+            let comments = thread.comments?.nodes ?? []
+            return UnresolvedThread(
+                id: id, path: thread.path, line: thread.line,
+                isOutdated: thread.isOutdated ?? false,
+                comments: comments.map {
+                    UnresolvedThread.Comment(author: $0.author?.login ?? "someone",
+                                             body: $0.body ?? "",
+                                             id: $0.id, createdAt: $0.createdAt)
+                },
+                moreComments: max(0, (thread.comments?.totalCount ?? 0) - comments.count),
+                excerpt: thread.path.flatMap { path in
+                    thread.hunk?.nodes.first?.diffHunk.flatMap {
+                        DiffExcerpt.parse(diffHunk: $0, path: path, line: thread.line)
+                    }
+                })
+        }
+    }
+
     public func fetchCompares(for items: [MyPullRequest]) async throws -> [String: CompareResult] {
         let targets = items.map { (repo: $0.repo, base: $0.baseRefName, head: $0.headRefName) }
         guard let query = Query.compares(targets) else { return [:] }

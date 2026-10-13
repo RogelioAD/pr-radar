@@ -157,7 +157,9 @@ The two should agree.
 ## Troubleshooting
 
 **No badge at all.** It hides itself when there is nothing waiting *and* you
-have no open PRs. Confirm with `make print`; if that lists items but no badge
+have no open PRs — that is working as intended, and the **menu bar item** is
+the way in when it happens: it carries the same menu, including Settings and
+Quit, plus *Show PR Radar*. Confirm with `make print`; if that lists items but no badge
 appears, check the process is alive: `pgrep -fl PRRadar`.
 
 **A grey `!` on the badge.** The token broke. This state is deliberately
@@ -296,6 +298,12 @@ Sources/PRRadarCore/Mascots/
                        the pixel-art characters as data — sprite grids, the
                        mood derivation, counter chips, and the layout rules
                        for composing them
+Sources/PRRadarCore/Resolve/
+                       answering threads on your own PRs: the ordered guard
+                       over a real checkout, the git-porcelain readers it
+                       rests on, the tool sets and framing for a headless
+                       session that writes, and the rules applied to what it
+                       returns
 Sources/PRRadarCore/Trophies/
                        the thirty trophies: the roster, the drawings and the
                        composer that builds one from a frame, a metal and a
@@ -308,7 +316,7 @@ Scripts/contribute.sh  offers a fork's changes back to the original as a
                        draft PR — see CONTRIBUTING.md
 .githooks/             the post-commit hook that offers it, off until
                        `make hooks`
-Tests/                 338 tests
+Tests/                 991 tests
 Scripts/bundle.sh      assembles and ad-hoc signs PRRadar.app
 ```
 

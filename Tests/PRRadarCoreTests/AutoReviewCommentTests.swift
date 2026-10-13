@@ -652,4 +652,112 @@ extension AutoReviewCommentTests {
                       body)
     }
 
+    // MARK: - Comments you wrote yourself
+
+    func testAnAuthoredCommentIsTickedUnanchoredAndRaisable() throws {
+        let comment = try XCTUnwrap(
+            AutoReviewComment.authored(text: "This drops the error."))
+
+        XCTAssertTrue(comment.isSelected, "a sentence somebody typed starts ticked")
+        // Unanchored on purpose: it asked for a file and a line once, and a
+        // path GitHub cannot resolve loses every finding in the review with it.
+        XCTAssertFalse(comment.isAnchored)
+        XCTAssertNil(comment.anchor)
+        XCTAssertNil(comment.finding.file)
+        XCTAssertNil(comment.finding.line)
+        // Not a nit: `raisable` drops those, and this is not something the
+        // machine mentioned in passing.
+        XCTAssertNotEqual(comment.tier, .nit)
+    }
+
+    /// The body is the user's words and nothing else — no tier heading, no
+    /// recommendation paragraph, none of `threadBody`'s machine furniture.
+    func testAnAuthoredCommentKeepsYourWordsVerbatim() throws {
+        let comment = try XCTUnwrap(
+            AutoReviewComment.authored(text: "  This drops the error.  "))
+        XCTAssertEqual(comment.finding.summary, "This drops the error.")
+    }
+
+    func testAnAuthoredCommentNeedsSomethingToSay() {
+        XCTAssertNil(AutoReviewComment.authored(text: ""))
+        XCTAssertNil(AutoReviewComment.authored(text: "   "))
+        XCTAssertNil(AutoReviewComment.authored(text: "\n\t "))
+    }
+
+    /// The summary's "not in the diff" note explains why a *named* place got no
+    /// comment on it. A comment you wrote named no place, so telling the author
+    /// it is not in the diff would be answering a question nobody asked.
+    func testAnAuthoredCommentIsNotCalledStrandedInTheBody() throws {
+        let comment = try XCTUnwrap(AutoReviewComment.authored(text: "One thought."))
+        let line = AutoReviewComment.summaryLine(comment.finding, inlined: false)
+        XCTAssertEqual(line, "- One thought.")
+        XCTAssertFalse(line.contains("not in the diff"), line)
+    }
+
+    /// A skill finding that named a file and could not be pinned to it still
+    /// gets the note, because there the question is real.
+    func testAFindingThatNamedAPlaceStillSaysWhyItIsNotInline() {
+        let stranded = mild("stranded one", file: "untouched.md", line: 102)
+        let line = AutoReviewComment.summaryLine(stranded, inlined: false)
+        XCTAssertTrue(line.contains("not in the diff; no inline comment"), line)
+    }
+
+    /// The whole point of keeping them in their own array: a re-run replaces
+    /// what the skill produced, and what you typed is not the skill's to
+    /// replace.
+    func testARerunReplacesTheFindingsAndKeepsWhatYouWrote() throws {
+        let comment = try XCTUnwrap(AutoReviewComment.authored(text: "Mine"))
+        var record = AutoReviewRecord(status: .ready)
+        record.prepared = prepared([mild("theirs")])
+        record.authored = [comment]
+
+        // What `review(_:)` does when a fresh run lands.
+        record.prepared = prepared([mild("a different one")])
+
+        XCTAssertEqual(record.authored, [comment])
+        XCTAssertEqual(record.sendable.count, 2)
+    }
+
+    func testAnAuthoredCommentIsCountedAndPosted() throws {
+        let comment = try XCTUnwrap(AutoReviewComment.authored(text: "Mine"))
+        var record = AutoReviewRecord(status: .ready)
+        record.prepared = prepared([mild("theirs")])
+        record.authored = [comment]
+
+        XCTAssertEqual(record.selection.total, 2, "the Post button counts it")
+        XCTAssertEqual(record.selection.chosen, 2)
+        XCTAssertTrue(record.canPost)
+        XCTAssertFalse(record.foundNothing)
+
+        let review = composed(record.sendable)
+        XCTAssertTrue(review.body.contains("Mine"),
+                      "it rides out in the summary")
+        XCTAssertFalse(review.threads.contains { $0.body == "Mine" },
+                       "and never as an inline thread")
+    }
+
+    /// A clean review is the case this most easily gets wrong: it has no
+    /// findings, so the disclosure that would let you take the comment back
+    /// out has to open on the strength of the comment alone.
+    func testACommentOnACleanReviewOpensTheList() throws {
+        let comment = try XCTUnwrap(AutoReviewComment.authored(text: "Mine"))
+        var record = AutoReviewRecord(status: .ready)
+        XCTAssertTrue(record.foundNothing)
+        XCTAssertFalse(record.isAwaitingSelection)
+
+        record.authored = [comment]
+        XCTAssertFalse(record.foundNothing)
+        XCTAssertTrue(record.isAwaitingSelection)
+    }
+
+    /// A record written before this field existed must still decode — the bug
+    /// `init(from:)` is written leniently to avoid, and which adding `threads`
+    /// once caused for real.
+    func testARecordWrittenBeforeAuthoredExistedStillDecodes() throws {
+        let legacy = Data(#"{"status":"ready","attempts":1}"#.utf8)
+        let record = try JSONDecoder().decode(AutoReviewRecord.self, from: legacy)
+        XCTAssertEqual(record.status, .ready)
+        XCTAssertEqual(record.authored, [])
+    }
+
 }

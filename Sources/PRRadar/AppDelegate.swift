@@ -8,6 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let state = AppState()
     private let notifier = Notifier()
+    /// Held for the life of the app: a status item released goes out of the
+    /// menu bar with it.
+    private var statusItem: NSStatusItem?
     private var panel: PanelController!
     private let banner = AchievementBanner()
     /// The review count at the last refresh, so a queue reaching zero can be
@@ -34,6 +37,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var autoReviewer: AutoReviewCoordinator = {
         let coordinator = AutoReviewCoordinator(state: state)
         state.autoReviewer = coordinator
+        return coordinator
+    }()
+
+    /// Built eagerly at launch rather than on first press, because its `init`
+    /// is what turns whatever the last run left behind into something a row can
+    /// say. A resolve abandoned by a crash has to be reported before anybody
+    /// presses anything — it is the one state that may have left commits on a
+    /// branch nobody has read a table about.
+    private lazy var resolver: ResolveCoordinator = {
+        let coordinator = ResolveCoordinator(state: state)
+        state.resolver = coordinator
         return coordinator
     }()
 
@@ -69,6 +83,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.appearance = appearance
         }
         notifier.prepare()
+        installStatusItem()
+        state.onWidgetVisibilityChanged = { [weak self] in self?.panel.syncVisibility() }
+        // Touched so the lazy initialiser runs: see its own comment.
+        _ = resolver
 
         panel = PanelController(state: state)
         panel.onOpen = { [weak self] item in
@@ -112,6 +130,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !others.isEmpty else { return false }
         Log.debug("already running as pid \(others.map(\.processIdentifier)); exiting")
         return true
+    }
+
+    /// Asks before quitting out from under a resolve run.
+    ///
+    /// Quitting a menu-bar app is normally instant and should stay so, and this
+    /// is the one case that earns an interruption: a resolve run is editing
+    /// files in a checkout the user works in, and nothing about quitting stops
+    /// it. `ProcessRunner` SIGTERMs the `claude` process it started, but the
+    /// `cargo`, `gradle` or pre-commit-hook processes under it are
+    /// grandchildren and survive — so quitting without asking leaves work
+    /// happening in somebody's repository with no window left to say so.
+    ///
+    /// Quitting anyway is allowed, and the run is recorded so the next launch
+    /// can say what it did.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let running = state.resolveLog.records.first(where: {
+            $0.value.status == .running
+        }) else { return .terminateNow }
+
+        let alert = NSAlert()
+        alert.messageText = "A resolve run is still working"
+        alert.informativeText = "It is editing files in "
+            + (running.value.treePath ?? "one of your checkouts")
+            + ". Quitting will not stop the work already underway, and PR Radar "
+            + "will not be here to report what it did."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Wait")
+        alert.addButton(withTitle: "Quit Anyway")
+        return alert.runModal() == .alertFirstButtonReturn ? .terminateCancel : .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -353,6 +400,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                 surface: .mine,
                                                 liveIDs: Set(mine.map(\.id)))
         state.myPRs = mine
+        pruneResolveLog(live: mine)
+        countConflicts(in: mine)
+        // After the assignment, not beside `notifyNewPings` above: your own
+        // pull requests have not landed at that point, so a call there would
+        // every time be reading the *previous* poll's comments.
+        notifier.notifyNewComments(in: mine)
         validateRepoFilter()
         Log.debug("my PRs: \(mine.count), ready to merge: \(state.myPRsReadyToMerge)")
 
@@ -675,6 +728,126 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// The rule itself lives on AppState, which is also where an account switch
     /// reaches it. One implementation, because the two triggers must agree.
+    /// Works out what actually conflicts, for the rows GitHub says are dirty.
+    ///
+    /// A third phase, and the same bargain as the compare phase above it: it is
+    /// independently fallible, and a failure leaves `conflictedFiles` nil so
+    /// the row says `conflicts` the way it always did rather than claiming a
+    /// number it does not have.
+    ///
+    /// **Only conflicted rows, and nothing on the common path.** It returns
+    /// before touching the disk when nothing is dirty, which is almost always,
+    /// so the sixty-second poll pays nothing for this most of the time. A dirty
+    /// row costs one `worktree list` per repository plus one `merge-tree` per
+    /// pull request — and `merge-tree` is the cheap way to ask, since it
+    /// computes the merge without a checkout, an index or a clean tree.
+    ///
+    /// **It fetches the base, but only when the answer disagrees with GitHub.**
+    /// Computing against whatever `origin/<base>` the clone already has is
+    /// nearly always right and costs nothing, so that is tried first. When it
+    /// comes back *clean* on a pull request GitHub has called dirty, the two
+    /// cannot both be true and the local base is the thing more likely to be
+    /// out of date — so that one ref is fetched and the question asked again.
+    ///
+    /// This is not a hypothetical. It shipped reporting
+    /// **"Resolve conflicts · 0 files"** on a pull request GitHub was showing a
+    /// conflict on, because the clone's copy of the base branch was a day old
+    /// and the branches had not diverged yet at that commit. Fetching only on
+    /// disagreement keeps the common path free and is self-limiting: once the
+    /// ref is current the next poll agrees and fetches nothing.
+    ///
+    /// Detached, so a slow repository cannot hold up the poll that found it.
+    private func countConflicts(in items: [MyPullRequest]) {
+        let dirty = items.filter(\.isConflicted)
+        guard !dirty.isEmpty, let root = Prefs.reviewWorkspace else { return }
+
+        Task { [weak self] in
+            guard let self else { return }
+            var counted: [String: [String]] = [:]
+            // One worktree listing per repository, not per pull request.
+            var treesByRepo: [String: [GitWorktrees.Entry]] = [:]
+            // And at most one fetch per repository per pass, however many of
+            // its pull requests disagree.
+            var fetched: Set<String> = []
+
+            for pr in dirty {
+                if treesByRepo[pr.repo] == nil {
+                    guard let clone = await self.state.findCheckout(of: pr.repo,
+                                                                    under: root)
+                    else { continue }
+                    let porcelain = (try? await AppState.runGit(
+                        ["-C", clone.path, "worktree", "list", "--porcelain"])) ?? ""
+                    treesByRepo[pr.repo] = GitWorktrees.parse(porcelain: porcelain)
+                }
+                guard let trees = treesByRepo[pr.repo],
+                      case .success(let found) = GitWorktrees.holding(
+                        branch: pr.headRefName, in: trees),
+                      let tree = found
+                else { continue }
+
+                var paths = await Self.conflicts(in: tree.path, base: pr.baseRefName)
+
+                // GitHub says this branch conflicts and the local answer says
+                // it does not. They cannot both be right, and the local base is
+                // the one that goes stale — so fetch that single ref and ask
+                // again, once, before believing either.
+                if paths?.isEmpty == true, !fetched.contains(pr.repo),
+                   let clone = await self.state.findCheckout(of: pr.repo, under: root) {
+                    fetched.insert(pr.repo)
+                    _ = try? await AppState.runGit(
+                        ["-C", clone.path, "fetch", "--quiet", "origin", pr.baseRefName])
+                    paths = await Self.conflicts(in: tree.path, base: pr.baseRefName)
+                }
+
+                // Only a real, counted conflict is stored. A clean result here
+                // means the two sources still disagree after a fetch, and the
+                // honest answer to that is "no number" — never zero, which
+                // would have the row contradict itself and, worse, look calmer
+                // than the truth.
+                guard let paths, !paths.isEmpty else { continue }
+                counted[pr.id] = paths
+            }
+
+            guard !counted.isEmpty else { return }
+            await MainActor.run {
+                // Written back against the live list rather than the one this
+                // started from: a poll may have landed while git was thinking,
+                // and reviving a row it dropped would be worse than a count
+                // arriving a minute late.
+                self.state.myPRs = self.state.myPRs.map { pr in
+                    guard let paths = counted[pr.id] else { return pr }
+                    var copy = pr
+                    copy.conflictedFiles = paths
+                    return copy
+                }
+            }
+        }
+    }
+
+    /// Asks one worktree what a merge of its base would conflict on.
+    ///
+    /// nil when the question could not be answered at all; empty when it
+    /// merges cleanly. The caller cares about the difference.
+    private static func conflicts(in tree: String, base: String) async -> [String]? {
+        guard let git = AppState.gitPath() else { return nil }
+        let result = try? await ProcessRunner.run(
+            executable: git,
+            arguments: ["-C", tree] + MergeTree.arguments(head: "HEAD",
+                                                          base: "origin/\(base)"),
+            timeout: 60)
+        guard let result else { return nil }
+        return MergeTree.conflictedPaths(exitCode: result.exitCode, output: result.stdout)
+    }
+
+    /// Keeps the resolve log from growing without bound, with the one carve-out
+    /// `ResolveLog.prune` documents: evidence that commits landed unreported is
+    /// never dropped by age.
+    private func pruneResolveLog(live: [MyPullRequest]) {
+        var log = state.resolveLog
+        log.prune(liveKeys: Set(live.map(\.id)), now: Date())
+        if log != state.resolveLog { state.resolveLog = log }
+    }
+
     private func validateRepoFilter() {
         let before = state.repoFilter
         state.dropStaleRepoFilter()
@@ -683,9 +856,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Menu bar
+    //
+    // The way in when the badge is not on screen.
+    //
+    // For a long time the context menu on the badge was the only way to reach
+    // anything — including Quit — and the comment here said so. That held up
+    // only because the badge was assumed to be there. It is not: the widget
+    // takes itself off the desktop when nothing is waiting and you have no open
+    // pull requests, which is a sensible thing to do and leaves the app running
+    // with no interface whatsoever. Everything you might want at that moment —
+    // the settings room, the wand room, Quit — was unreachable, and the empty
+    // queue is exactly when you are most likely to want to change a setting.
+    //
+    // So: one status item, showing the same menu the badge shows. Not a second
+    // menu — the same one, built by the same method, because two menus that
+    // mean the same thing are two menus to keep agreeing.
+
+    private func installStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        // A template image, so it inverts with the menu bar and follows the
+        // user's accent and reduced-transparency settings rather than being a
+        // coloured sticker that only looks right on one wallpaper.
+        //
+        // The dot-and-waves rather than `antenna.radiowaves.left.and.right`,
+        // which was the first attempt: the antenna is wide at menu-bar size and
+        // leans on its mast, while this one leads with the point and reads as
+        // something being swept rather than broadcast.
+        //
+        // Overridable without a rebuild, because this is a question of taste
+        // that is answered by looking at it in the menu bar next to everything
+        // else, not by reasoning about it:
+        //
+        //     defaults write com.yourname.prradar menubar.symbol -string scope
+        //
+        // An unrecognised name falls back rather than leaving an empty slot —
+        // a status item with no image is a few invisible pixels you cannot find
+        // to click, which would take the app's only escape hatch with it.
+        let fallback = "dot.radiowaves.left.and.right"
+        let chosen = UserDefaults.standard.string(forKey: "menubar.symbol") ?? fallback
+        let image = NSImage(systemSymbolName: chosen,
+                            accessibilityDescription: "PR Radar")
+            ?? NSImage(systemSymbolName: fallback,
+                       accessibilityDescription: "PR Radar")
+        image?.isTemplate = true
+        item.button?.image = image
+        item.button?.toolTip = "PR Radar"
+        item.button?.target = self
+        item.button?.action = #selector(statusItemPressed)
+        // Both buttons open the menu. A left click that did something *else*
+        // would make the only reliable way to quit depend on knowing which
+        // button to use.
+        item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        statusItem = item
+    }
+
+    @objc private func statusItemPressed() {
+        guard let button = statusItem?.button else { return }
+        let menu = buildMenu()
+        // `menu.popUp` rather than assigning `statusItem.menu`: assigning it
+        // makes the menu own the click, and the item can then never do anything
+        // but open a menu. Popping it by hand keeps the door open for the
+        // button to grow a different behaviour later without this becoming a
+        // rewrite.
+        menu.popUp(positioning: nil,
+                   at: NSPoint(x: 0, y: button.bounds.maxY + 4),
+                   in: button)
+    }
+
     // MARK: - Context menu
     //
-    // There is no Dock icon or menu bar item, so this is the only way to quit.
+    // Shown from the badge and from the menu bar item, so it is built in one
+    // place and has to make sense reached either way.
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
@@ -715,6 +957,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(.separator())
         }
 
+        // The widget's on/off switch, and the only one. It lives here rather
+        // than in the settings room because of where it is needed: with the
+        // widget turned off there is no badge to right-click, so a control
+        // reachable only through the drawer would be a switch you could turn
+        // off and not back on. A checkmark rather than a verb, so the menu says
+        // what the state *is* instead of making you work it out from what the
+        // item offers to do.
+        let visible = NSMenuItem(title: "Show the widget",
+                                 action: #selector(menuToggleWidget),
+                                 keyEquivalent: "")
+        visible.state = state.widgetVisible ? .on : .off
+        visible.target = self
+        menu.addItem(visible)
+        menu.addItem(.separator())
+
         menu.addItem(withTitle: "Open review requests on GitHub",
                      action: #selector(menuOpenGitHub), keyEquivalent: "").target = self
 
@@ -732,7 +989,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return menu
     }
 
-    @objc private func menuOpenSettings() { panel.openRoom(.settings) }
+    // Both reveal rather than merely open: chosen from the menu bar there may
+    // be no window on screen at all, and `openRoom` assumes there is one.
+    @objc private func menuOpenSettings() { panel.reveal(.settings) }
+
+    @objc private func menuToggleWidget() {
+        state.widgetVisible.toggle()
+        // Turning it on shows the badge rather than the drawer: the drawer is
+        // what the badge is for, and opening both at once would answer a
+        // question nobody asked.
+    }
 
     @objc private func menuRefresh() { refreshNow() }
 

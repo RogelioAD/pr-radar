@@ -5,14 +5,20 @@ public struct Approval: Identifiable, Equatable, Sendable {
     public let login: String
     public let state: ReviewState
     public let isLead: Bool
+    /// When it was submitted. Optional and defaulted, because no row has ever
+    /// drawn it — it is here so a verdict can be announced once rather than on
+    /// every poll, and a review with no timestamp is simply never announced.
+    public var submittedAt: Date?
 
     public var id: String { login }
     public var shortName: String { Leads.shortName(for: login) }
 
-    public init(login: String, state: ReviewState, isLead: Bool) {
+    public init(login: String, state: ReviewState, isLead: Bool,
+                submittedAt: Date? = nil) {
         self.login = login
         self.state = state
         self.isLead = isLead
+        self.submittedAt = submittedAt
     }
 }
 
@@ -154,6 +160,42 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
     /// where the count is not zero simply means the row can say how many there
     /// are but not what they say.
     public var unresolvedThreads: [UnresolvedThread] = []
+
+    /// The commit the pull request's head branch is actually at.
+    ///
+    /// Fetched since the checks rollup existed — `commits(last: 1)` carries it
+    /// — and thrown away until something needed it. Resolve needs it: it runs
+    /// in the user's own checkout, and a checkout that is not at this commit is
+    /// a different tree than the one the threads were written against.
+    ///
+    /// Optional and defaulted, like everything else added to this type after
+    /// the fact, so no construction site has to change.
+    public var headOid: String?
+
+    /// What a merge of the base into this branch would conflict on.
+    ///
+    /// Worked out locally by `MergeTree`, because GitHub reports *that* a pull
+    /// request is dirty and never what or how much. nil means the question was
+    /// not answered — no clone, no local copy of the base ref, or the row is
+    /// not conflicted in the first place — and is deliberately not the same as
+    /// an empty array, for the reason `behindBy` is optional: a row that says
+    /// "conflicts · 0 files" is contradicting itself.
+    public var conflictedFiles: [String]?
+
+    /// GitHub's node id, which every mutation on this pull request needs as
+    /// its subject.
+    ///
+    /// Optional and defaulted like the rest of what was added after the fact.
+    /// A row that arrived without one simply cannot be acted on, and says so,
+    /// rather than offering a button that would fail.
+    public var nodeID: String?
+
+    /// Who owns the repository the head branch lives in.
+    ///
+    /// nil, or a login that is not the base repo's owner, means a fork — which
+    /// resolve must refuse, because it cannot push there. Worth knowing before
+    /// a run rather than fifteen minutes into one.
+    public var headRepositoryOwner: String?
     /// Which account surfaced this row. Empty until a fetch tags it, and set
     /// after the inbox builds rather than threaded through it — the same
     /// post-build shape `behindBy` already uses, and it keeps every existing
@@ -203,6 +245,11 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
 
     public var isStacked: Bool { stackedOn != nil }
 
+    /// Whether the branch conflicts, whatever is or is not known about how
+    /// much. Asked where the count is not the point — the ordering rule that
+    /// hides the threads button, for one.
+    public var isConflicted: Bool { mergeBlocker == .dirty }
+
     /// What, if anything, the branch needs doing to it before it can merge.
     ///
     /// Read straight off what GitHub already reports — `mergeStateStatus` and
@@ -210,13 +257,15 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
     public enum BranchState: Equatable, Sendable {
         case upToDate
         case needsRebase(behindBy: Int?)
-        case conflicts
+        /// `files` is nil when nothing could count them — the same shape, and
+        /// the same reason, as `needsRebase`'s count.
+        case conflicts(files: Int?)
         /// The compare request didn't answer, so we genuinely don't know.
         case unknown
     }
 
     public var branchState: BranchState {
-        if mergeBlocker == .dirty { return .conflicts }
+        if mergeBlocker == .dirty { return .conflicts(files: conflictedFiles?.count) }
         if let behind = behindBy {
             return behind > 0 ? .needsRebase(behindBy: behind) : .upToDate
         }

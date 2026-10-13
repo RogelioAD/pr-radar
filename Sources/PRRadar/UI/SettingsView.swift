@@ -149,6 +149,23 @@ struct SettingsView: View {
 
         Divider()
 
+        toggle("Tell me about comments",
+               help: "Notify when somebody comments on, or reviews, one of your "
+                   + "own pull requests",
+               isOn: $state.notifyComments)
+
+        // Indented under the switch it depends on, and disabled when that one
+        // is off: a sub-choice that still looks live over a feature that is not
+        // is a control that cannot do anything.
+        toggle("…including bots",
+               help: "Count github-actions and the review bots. They are most of "
+                   + "the volume, and most of what there is to answer.",
+               isOn: $state.notifyBotComments)
+            .disabled(!state.notifyComments)
+            .padding(.leading, 12)
+
+        Divider()
+
         toggle("Celebrate a cleared queue",
                help: "Show the achievement banner when the last review is done",
                isOn: $state.celebrateCleared)

@@ -61,15 +61,27 @@ final class AppState: ObservableObject {
     func expanded(on tab: DrawerTab) -> Set<String> {
         switch tab {
         case .reviews: return openFindings
-        case .mine: return openThreads
+        // Both disclosures a My PR row has. A resolve table carries a drafted
+        // reply per thread and needs the width for the same reason a findings
+        // list does — and the two are keyed the same way, by row id, so they
+        // can share one set without colliding.
+        case .mine: return openThreads.union(openResolve)
         }
     }
 
     func expandable(on tab: DrawerTab) -> [String] {
         switch tab {
         case .reviews: return keysAwaitingSelection
-        case .mine: return idsWithUnresolvedThreads
+        case .mine: return idsWithUnresolvedThreads + idsAwaitingResolveSelection
         }
+    }
+
+    /// Pull requests of yours with a resolve table there is something to show
+    /// for. The same guard `idsWithUnresolvedThreads` applies, and for the same
+    /// reason: a key left behind after a table retires would hold the drawer at
+    /// double width over a list with nothing open in it.
+    var idsAwaitingResolveSelection: [String] {
+        scopedMyPRs.filter { resolveLog[$0.id]?.isAwaitingSelection == true }.map(\.id)
     }
 
     /// Pull requests of yours with a thread there is something to show for.
@@ -128,6 +140,7 @@ final class AppState: ObservableObject {
             // open on it, and a key left behind would hold the drawer wide.
             let live = Set(myPRs.map(\.id))
             if !openThreads.isSubset(of: live) { openThreads.formIntersection(live) }
+            if !openResolve.isSubset(of: live) { openResolve.formIntersection(live) }
         }
     }
     @Published var myPRSortOrder: MyPRSortOrder = Prefs.myPRSortOrder {
@@ -223,6 +236,23 @@ final class AppState: ObservableObject {
     }
 
     /// Whether clearing the review queue drops the achievement banner.
+    @Published var widgetVisible: Bool = Prefs.widgetVisible {
+        didSet {
+            Prefs.widgetVisible = widgetVisible
+            // Taking effect at the next poll would mean choosing it from a menu
+            // and watching nothing happen for a minute.
+            onWidgetVisibilityChanged?()
+        }
+    }
+    /// Set by the delegate, so the choice lands immediately.
+    var onWidgetVisibilityChanged: (() -> Void)?
+
+    @Published var notifyComments: Bool = Prefs.notifyComments {
+        didSet { Prefs.notifyComments = notifyComments }
+    }
+    @Published var notifyBotComments: Bool = Prefs.notifyBotComments {
+        didSet { Prefs.notifyBotComments = notifyBotComments }
+    }
     @Published var celebrateCleared: Bool = Prefs.celebrateCleared {
         didSet { Prefs.celebrateCleared = celebrateCleared }
     }
@@ -256,11 +286,18 @@ final class AppState: ObservableObject {
     /// Writes straight back to the log, which is what persists the choice: a
     /// review can sit half-picked-over across a relaunch, and losing the ticks
     /// would mean reading nine findings again.
+    /// Looks in both arrays, because the row draws them as one list. A comment
+    /// you wrote has to untick like any other, and which array it came out of
+    /// is bookkeeping the row has no business knowing about.
     func setFinding(_ id: String, on item: ReviewItem, selected: Bool) {
-        guard var record = autoReviewLog[item.pingKey],
-              let index = record.prepared.firstIndex(where: { $0.id == id })
-        else { return }
-        record.prepared[index].isSelected = selected
+        guard var record = autoReviewLog[item.pingKey] else { return }
+        if let index = record.prepared.firstIndex(where: { $0.id == id }) {
+            record.prepared[index].isSelected = selected
+        } else if let index = record.authored.firstIndex(where: { $0.id == id }) {
+            record.authored[index].isSelected = selected
+        } else {
+            return
+        }
         autoReviewLog[item.pingKey] = record
     }
 
@@ -271,7 +308,208 @@ final class AppState: ObservableObject {
         for index in record.prepared.indices where record.prepared[index].tier == tier {
             record.prepared[index].isSelected = selected
         }
+        for index in record.authored.indices where record.authored[index].tier == tier {
+            record.authored[index].isSelected = selected
+        }
         autoReviewLog[item.pingKey] = record
+    }
+
+    /// Adds a comment you wrote to a finished review.
+    ///
+    /// Ticked on arrival, unlike a nit: you do not type a sentence into a
+    /// narrow drawer in order to then decide whether to send it.
+    ///
+    /// Returns whether it landed, so the field can keep what was typed when it
+    /// did not — a row whose record has gone is the one case, and silently
+    /// swallowing the text there would be worse than the failure.
+    @discardableResult
+    func addAuthoredComment(_ comment: PreparedFinding, on item: ReviewItem) -> Bool {
+        guard var record = autoReviewLog[item.pingKey], record.status == .ready
+        else { return false }
+        // A second comment on the same line with the same words is the double
+        // press, not a second thought. `id` is tier|file|line|summary, so this
+        // is exactly the test the findings list already de-duplicates on.
+        guard !record.sendable.contains(where: { $0.id == comment.id }) else { return false }
+        record.authored.append(comment)
+        autoReviewLog[item.pingKey] = record
+        return true
+    }
+
+    /// Takes one back out. Only ever an authored comment: the skill's findings
+    /// are unticked, never deleted, because the row is a record of what the
+    /// review said as well as a list of what you are sending.
+    func removeAuthoredComment(_ id: String, on item: ReviewItem) {
+        guard var record = autoReviewLog[item.pingKey] else { return }
+        record.authored.removeAll { $0.id == id }
+        autoReviewLog[item.pingKey] = record
+    }
+
+    // MARK: - Resolve
+
+    @Published var resolveLog: ResolveLog = Prefs.resolveLog {
+        didSet { Prefs.resolveLog = resolveLog }
+    }
+    @Published var resolveMode: ResolveMode = Prefs.resolveMode {
+        didSet { Prefs.resolveMode = resolveMode }
+    }
+    @Published var resolveOutOfScope: ResolveOutOfScope = Prefs.resolveOutOfScope {
+        didSet { Prefs.resolveOutOfScope = resolveOutOfScope }
+    }
+    @Published var resolvePending: ResolvePendingPolicy = Prefs.resolvePending {
+        didSet { Prefs.resolvePending = resolvePending }
+    }
+    @Published var resolveGates: ResolveGates = Prefs.resolveGates {
+        didSet { Prefs.resolveGates = resolveGates }
+    }
+    @Published var resolveBudget: Double = Prefs.resolveBudget {
+        didSet { Prefs.resolveBudget = resolveBudget }
+    }
+    @Published var resolveTimeoutMinutes: Int = Prefs.resolveTimeoutMinutes {
+        didSet { Prefs.resolveTimeoutMinutes = resolveTimeoutMinutes }
+    }
+    /// Typed, and committed the way the review skill is — see `commitResolveSkill`.
+    @Published var resolveSkillDraft: String = Prefs.resolveSkill ?? ""
+    @Published var resolveRepos: [String] = Prefs.resolveRepos {
+        didSet { Prefs.resolveRepos = resolveRepos }
+    }
+
+    /// Rows whose resolve table is open, by `MyPullRequest.id`.
+    @Published var openResolve: Set<String> = []
+
+    var resolveAllowlist: Set<String> { Set(resolveRepos.map { $0.lowercased() }) }
+
+    func isResolveAllowed(_ repo: String) -> Bool {
+        resolveAllowlist.contains(repo.lowercased())
+    }
+
+    func setResolveAllowed(_ repo: String, _ allowed: Bool) {
+        var repos = Set(resolveRepos)
+        if allowed { repos.insert(repo) } else { repos.remove(repo) }
+        resolveRepos = repos.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    /// Whether resolve has everything it needs to run at all.
+    var canResolve: Bool {
+        claudePath != nil && ReviewSkill.normalized(resolveSkillDraft) != nil
+    }
+
+    func commitResolveSkill() {
+        if let skill = ReviewSkill.normalized(resolveSkillDraft) {
+            Prefs.resolveSkill = skill
+        }
+        resolveSkillDraft = Prefs.resolveSkill ?? ""
+    }
+
+    func resolveRecord(for pr: MyPullRequest) -> ResolveRecord? {
+        resolveLog[pr.id]
+    }
+
+    /// Why the Resolve button is not offered, from configuration alone.
+    ///
+    /// Configuration only, deliberately. The rest of the guards need to ask git
+    /// about a worktree, and asking that for every row on every sixty-second
+    /// poll would be a subprocess storm. So the row offers the press, and the
+    /// press is where the tree is actually inspected.
+    func resolveBlock(for pr: MyPullRequest) -> ResolveBlock? {
+        var probe = ResolveProbe()
+        probe.claudePath = claudePath
+        probe.skill = ReviewSkill.normalized(resolveSkillDraft)
+        probe.isAllowed = isResolveAllowed(pr.repo)
+        return ResolveGuard.configuration(probe, pr: pr)
+    }
+
+    // MARK: - Finding things on disk
+
+    /// One git call, for the two questions this type answers about the disk.
+    ///
+    /// A copy of the coordinators' own, and deliberately so: those run a review
+    /// or a resolve and throw their own failures, and this one only ever asks a
+    /// checkout what its origin is. Routing that through either coordinator's
+    /// error vocabulary would make a nil answer here look like a failed run.
+    /// Where git is, or nil. The same three candidates every caller here uses,
+    /// asked in one place so a fourth does not get its own list.
+    static func gitPath() -> String? {
+        ProcessRunner.firstExecutable(
+            among: ["/usr/bin/git", "/opt/homebrew/bin/git", "/usr/local/bin/git"])
+    }
+
+    static func runGit(_ arguments: [String]) async throws -> String {
+        guard let git = ProcessRunner.firstExecutable(
+            among: ["/usr/bin/git", "/opt/homebrew/bin/git", "/usr/local/bin/git"])
+        else { return "" }
+        let result = try await ProcessRunner.run(
+            executable: git, arguments: arguments, timeout: 30)
+        guard result.exitCode == 0 else { return "" }
+        return result.stdout
+    }
+
+    // Shared by both coordinators. They started on the review one and were
+    // private there; resolve needs the same two answers — where a repository is
+    // checked out, and which directories a helper might live in — and a second
+    // copy of a forty-line list of Node install layouts is how the two drift.
+
+    /// A checkout of `repo` somewhere under `root`, found by asking git.
+    ///
+    /// Matching on the folder's *name* was the first version and it fails on
+    /// the commonest real layout there is: a worktrees directory, where every
+    /// checkout is named after its branch and not one of them is named after
+    /// the repository. Renamed clones fail the same way. So the name-based
+    /// guesses are tried first — they are free and usually right — and then
+    /// every git directory under the root is asked what its origin actually is.
+    ///
+    /// A worktree is a perfectly good answer: `git worktree add` from inside
+    /// one resolves to the shared common directory, so the new checkout comes
+    /// off the same object store.
+    func findCheckout(of repo: String, under root: String) async -> URL? {
+        var seen = Set<String>()
+        var candidates = Workspace.candidates(root: root, repo: repo)
+
+        // Then the root itself and everything one level inside it.
+        let expanded = (root as NSString).expandingTildeInPath
+        candidates.append(expanded)
+        let children = (try? FileManager.default.contentsOfDirectory(atPath: expanded)) ?? []
+        candidates += children
+            .filter { !$0.hasPrefix(".") }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+            .map { (expanded as NSString).appendingPathComponent($0) }
+
+        for path in candidates where seen.insert(path).inserted {
+            guard isGitCheckout(path) else { continue }
+            guard let remote = try? await Self.runGit(["-C", path, "remote", "get-url", "origin"])
+            else { continue }
+            if Workspace.remote(remote, names: repo) { return URL(fileURLWithPath: path) }
+        }
+        return nil
+    }
+
+    /// True for a clone *or* a worktree. In a clone `.git` is a directory; in a
+    /// worktree it is a file pointing at the shared one. Testing only for a
+    /// directory is what made every worktree invisible.
+    func isGitCheckout(_ path: String) -> Bool {
+        FileManager.default.fileExists(
+            atPath: (path as NSString).appendingPathComponent(".git"))
+    }
+
+    func helperPaths() -> [String] {
+        // The skill shells out to `gh`, which a GUI-launched app's PATH does
+        // not contain. The same directories `claude` is looked for in, because
+        // the two are installed the same ways and by the same people — two
+        // Homebrew paths found `gh` on this machine and would have failed on a
+        // MacPorts or nix one, with the review dying halfway through rather
+        // than saying anything useful.
+        //
+        // The directory `claude` was actually found in goes first: whatever
+        // installed one very often installed the other beside it.
+        var paths: [String] = []
+        if let claude = claudePath {
+            paths.append((claude as NSString).deletingLastPathComponent)
+        }
+        paths += ClaudeInvocation.binDirectories(
+            home: NSHomeDirectory(),
+            pathVariable: ProcessInfo.processInfo.environment["PATH"])
+
+        var seen = Set<String>()
+        return paths.filter { seen.insert($0).inserted }
     }
 
     /// Repos automatic review is allowed to touch, lowercased for comparison.
@@ -365,6 +603,38 @@ final class AppState: ObservableObject {
 
     func act(_ action: AutoReviewCoordinator.Action, on item: ReviewItem) {
         autoReviewer?.act(action, on: item)
+    }
+
+    /// Held weakly for the same reason the reviewer is.
+    weak var resolver: ResolveCoordinator?
+
+    func resolve(_ pr: MyPullRequest, scope: ResolveScope = .threads) {
+        resolver?.resolve(pr, scope: scope)
+    }
+
+    func updateBranch(_ pr: MyPullRequest) {
+        resolver?.updateBranch(pr)
+    }
+
+    func stopResolve(_ pr: MyPullRequest) {
+        resolver?.stop(pr)
+    }
+
+    func isResolving(_ pr: MyPullRequest) -> Bool {
+        resolver?.isRunning(pr) ?? false
+    }
+
+
+    func actResolve(_ action: ResolveCoordinator.Action, on pr: MyPullRequest) {
+        resolver?.act(action, on: pr)
+    }
+
+    func setResolveRow(_ threadID: String, on pr: MyPullRequest, selected: Bool) {
+        resolver?.setRow(threadID, on: pr, selected: selected)
+    }
+
+    func toggleResolve(_ id: String) {
+        if openResolve.contains(id) { openResolve.remove(id) } else { openResolve.insert(id) }
     }
 
     /// The skill to run, as the settings field holds it — an edit buffer for
@@ -1155,8 +1425,17 @@ final class AppState: ObservableObject {
     /// "nothing is waiting on you" on the strength of accounts that were never
     /// read — the single reading this whole feature exists to prevent — and it
     /// would take the badge, and with it the only way back in, off the screen.
+    /// Whether the panel should be off screen.
+    ///
+    /// Two clauses, and no opinion about your workload. It used to also go when
+    /// both lists were empty — see `Prefs.widgetVisible` for why that is gone.
+    ///
+    /// `!expanded` stays: an open drawer is never taken away from under you,
+    /// whatever the switch says, because hiding is about passive presence and a
+    /// drawer somebody is reading is not passive. It is also what lets Settings
+    /// be opened from the menu while the widget is turned off.
     var shouldHidePanel: Bool {
-        items.isEmpty && myPRs.isEmpty && !hasProblem && !isPartial
+        !widgetVisible && !expanded
     }
 }
 

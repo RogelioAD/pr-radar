@@ -19,6 +19,7 @@ public struct MyPRSearchResult: Decodable {
 }
 
 public struct MyPRNode: Decodable {
+    public let id: String?
     public let number: Int?
     public let title: String?
     public let url: String?
@@ -27,6 +28,7 @@ public struct MyPRNode: Decodable {
     public let updatedAt: Date?
     public let headRefName: String?
     public let baseRefName: String?
+    public let headRepositoryOwner: ActorDTO?
     public let reviewDecision: String?
     public let mergeStateStatus: String?
     public let mergeable: String?
@@ -87,6 +89,8 @@ public struct ThreadCommentConn: Decodable {
 }
 
 public struct ThreadCommentNode: Decodable {
+    public let id: String?
+    public let createdAt: Date?
     public let author: ActorDTO?
     public let body: String?
 }
@@ -156,4 +160,15 @@ public struct ComparisonNode: Decodable {
     public let aheadBy: Int?
     public let behindBy: Int?
     public let status: String?
+}
+
+/// The narrow threads-only query's payload.
+public struct ThreadsPayload: Decodable {
+    public struct Repository: Decodable {
+        public let pullRequest: PullRequest?
+    }
+    public struct PullRequest: Decodable {
+        public let reviewThreads: ThreadConn?
+    }
+    public let repository: Repository?
 }

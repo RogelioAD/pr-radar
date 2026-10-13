@@ -60,6 +60,38 @@ public enum Query {
         """
     }
 
+    /// Every unresolved thread on one pull request, with the whole conversation.
+    ///
+    /// A second, narrower query rather than widening `myPullRequests`, and the
+    /// difference is what it costs. That one runs on the sixty-second poll for
+    /// every pull request you have at once, which is why it fetches three
+    /// comments per thread and the row truncates each to 320 characters. This
+    /// runs on a button press, for one pull request, and asks for everything —
+    /// because a session being asked to rule on an argument must not be handed
+    /// a truncated copy of it.
+    public static func threads(owner: String, name: String, number: Int,
+                               first: Int = 100) -> String {
+        """
+        query {
+          repository(owner: "\(owner)", name: "\(name)") {
+            pullRequest(number: \(number)) {
+              reviewThreads(first: \(first)) {
+                totalCount
+                nodes {
+                  id isResolved isOutdated path line
+                  comments(first: 50) {
+                    totalCount
+                    nodes { id createdAt author { login } body }
+                  }
+                  hunk: comments(first: 1) { nodes { diffHunk } }
+                }
+              }
+            }
+          }
+        }
+        """
+    }
+
     /// The viewer's own open pull requests, with everything a My PRs row needs.
     ///
     /// Sent as its own request rather than another alias on the reviews
@@ -73,6 +105,10 @@ public enum Query {
             issueCount
             nodes {
               ... on PullRequest {
+                # The node id, which every mutation on your own PR needs as its
+                # subject. The reviews query has always asked for it; this one
+                # had nothing to mutate until the row grew buttons.
+                id
                 number
                 title
                 url
@@ -81,6 +117,10 @@ public enum Query {
                 updatedAt
                 headRefName
                 baseRefName
+                # Whose repository the head branch lives in. A fork's is not
+                # yours, and resolve has to refuse there rather than discover
+                # it cannot push a quarter of an hour in.
+                headRepositoryOwner { login }
                 reviewDecision
                 mergeStateStatus
                 mergeable
@@ -112,7 +152,11 @@ public enum Query {
                     # was answered — and `totalCount` says how much is left.
                     comments(first: 3) {
                       totalCount
-                      nodes { author { login } body }
+                      # `id` and `createdAt` are for the notification rather
+                      # than the row: a comment has to be the same comment next
+                      # poll or it is announced once a minute for ever, and the
+                      # node id is the only thing about it that is stable.
+                      nodes { id createdAt author { login } body }
                     }
                     # Aliased and asked for once. `diffHunk` is a property of
                     # the comment in the schema but a property of the *thread*

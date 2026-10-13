@@ -328,7 +328,7 @@ final class AutoReviewCoordinator {
             executable: claude,
             arguments: ClaudeInvocation.arguments(for: request),
             workingDirectory: worktree.path,
-            environment: ProcessRunner.environment(extraPaths: helperPaths()),
+            environment: ProcessRunner.environment(extraPaths: state.helperPaths()),
             timeout: Self.timeout)
 
         let findings = try AutoReviewParser.parse(
@@ -354,7 +354,7 @@ final class AutoReviewCoordinator {
     /// throwaway worktree, so their working tree is never touched.
     private func checkout(_ item: ReviewItem) async throws -> Worktree {
         guard let root = Prefs.reviewWorkspace,
-              let clone = await findCheckout(of: item.repo, under: root)
+              let clone = await state.findCheckout(of: item.repo, under: root)
         else { throw AutoReviewFailure.noClone(item.repo) }
 
         let ref = Workspace.ref(forPR: item.number)
@@ -434,70 +434,6 @@ final class AutoReviewCoordinator {
             _ = try? await Self.runGit(["-C", worktree.clone.path, "worktree",
                                         "remove", "--force", worktree.path.path])
         }
-    }
-
-    /// A checkout of `repo` somewhere under `root`, found by asking git.
-    ///
-    /// Matching on the folder's *name* was the first version and it fails on
-    /// the commonest real layout there is: a worktrees directory, where every
-    /// checkout is named after its branch and not one of them is named after
-    /// the repository. Renamed clones fail the same way. So the name-based
-    /// guesses are tried first — they are free and usually right — and then
-    /// every git directory under the root is asked what its origin actually is.
-    ///
-    /// A worktree is a perfectly good answer: `git worktree add` from inside
-    /// one resolves to the shared common directory, so the new checkout comes
-    /// off the same object store.
-    private func findCheckout(of repo: String, under root: String) async -> URL? {
-        var seen = Set<String>()
-        var candidates = Workspace.candidates(root: root, repo: repo)
-
-        // Then the root itself and everything one level inside it.
-        let expanded = (root as NSString).expandingTildeInPath
-        candidates.append(expanded)
-        let children = (try? FileManager.default.contentsOfDirectory(atPath: expanded)) ?? []
-        candidates += children
-            .filter { !$0.hasPrefix(".") }
-            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-            .map { (expanded as NSString).appendingPathComponent($0) }
-
-        for path in candidates where seen.insert(path).inserted {
-            guard isGitCheckout(path) else { continue }
-            guard let remote = try? await Self.runGit(["-C", path, "remote", "get-url", "origin"])
-            else { continue }
-            if Workspace.remote(remote, names: repo) { return URL(fileURLWithPath: path) }
-        }
-        return nil
-    }
-
-    /// True for a clone *or* a worktree. In a clone `.git` is a directory; in a
-    /// worktree it is a file pointing at the shared one. Testing only for a
-    /// directory is what made every worktree invisible.
-    private func isGitCheckout(_ path: String) -> Bool {
-        FileManager.default.fileExists(
-            atPath: (path as NSString).appendingPathComponent(".git"))
-    }
-
-    private func helperPaths() -> [String] {
-        // The skill shells out to `gh`, which a GUI-launched app's PATH does
-        // not contain. The same directories `claude` is looked for in, because
-        // the two are installed the same ways and by the same people — two
-        // Homebrew paths found `gh` on this machine and would have failed on a
-        // MacPorts or nix one, with the review dying halfway through rather
-        // than saying anything useful.
-        //
-        // The directory `claude` was actually found in goes first: whatever
-        // installed one very often installed the other beside it.
-        var paths: [String] = []
-        if let claude = state.claudePath {
-            paths.append((claude as NSString).deletingLastPathComponent)
-        }
-        paths += ClaudeInvocation.binDirectories(
-            home: NSHomeDirectory(),
-            pathVariable: ProcessInfo.processInfo.environment["PATH"])
-
-        var seen = Set<String>()
-        return paths.filter { seen.insert($0).inserted }
     }
 
     private static func runGit(_ arguments: [String]) async throws -> String {
@@ -585,6 +521,9 @@ final class AutoReviewCoordinator {
             // says better.
             record.threads = []
             record.prepared = []
+            // Including what you wrote. It is on the pull request now, so
+            // keeping the draft would only let a later press send it twice.
+            record.authored = []
         }
     }
 
@@ -623,9 +562,9 @@ final class AutoReviewCoordinator {
             // Recomposed from the ticks as they stand, not from what was
             // composed when the review finished — the whole point of curated
             // mode is that the two differ.
-            let chosen = record.prepared.isEmpty
+            let chosen = record.sendable.isEmpty
                 ? record.heldReview
-                : AutoReviewComment.compose(record.prepared,
+                : AutoReviewComment.compose(record.sendable,
                                             skill: Prefs.reviewSkill ?? "",
                                             pingKey: key)
             guard let chosen, !chosen.body.isEmpty else { return }

@@ -176,6 +176,7 @@ final class PanelController {
             onSelectTab: { [weak self] in self?.selectTab($0) },
             onToggleFindings: { [weak self] in self?.toggleFindings($0) },
             onToggleThreads: { [weak self] in self?.toggleThreads($0) },
+            onToggleResolve: { [weak self] in self?.toggleResolve($0) },
             onToggleRoom: { [weak self] in self?.toggleRoom($0) },
             onResetBadgeSize: { [weak self] in self?.resetBadgeSize() },
             onBadgeSize: { [weak self] in self?.setBadgeSize($0) },
@@ -361,6 +362,30 @@ final class PanelController {
 
     func syncVisibility() {
         state.shouldHidePanel ? hide() : show()
+    }
+
+    /// Opens the drawer because somebody asked for it, whatever the hide rule
+    /// says.
+    ///
+    /// `show()` declines when there is nothing waiting, which is right for the
+    /// poll that calls it thirty times an hour and wrong for a person choosing
+    /// a menu item. An empty queue is the *commonest* moment to want the
+    /// settings room — it is when the badge is not on screen to right-click —
+    /// so refusing there would make the menu bar item useless in the one case
+    /// it exists for.
+    ///
+    /// It stays open afterwards because `shouldHidePanel` yields to an expanded
+    /// drawer; without that the next refresh would close it again.
+    func reveal(_ room: DrawerRoom? = nil) {
+        if !panel.isVisible { panel.orderFrontRegardless() }
+        syncBackingScale()
+        if let room { state.open(room) }
+        if state.expanded {
+            applyFrame(animated: true)
+        } else {
+            setExpanded(true)
+        }
+        panel.makeKeyAndOrderFront(nil)
     }
 
     // MARK: - Expand / collapse
@@ -881,6 +906,19 @@ final class PanelController {
         resettle(into: state.drawerWidth(room: state.room, tab: state.selectedTab,
                                          openKeys: opened)) {
             state.openThreads = opened
+        }
+    }
+
+    /// The resolve table, which widens the drawer the same way and so has to be
+    /// opened through here rather than straight onto the state: the window and
+    /// its contents have to be told to travel at once, and a change made
+    /// outside this would resize the contents under a window that stayed put.
+    func toggleResolve(_ id: String) {
+        var opened = state.openResolve
+        if opened.contains(id) { opened.remove(id) } else { opened.insert(id) }
+        resettle(into: state.drawerWidth(room: state.room, tab: state.selectedTab,
+                                         openKeys: state.openThreads.union(opened))) {
+            state.openResolve = opened
         }
     }
 

@@ -13,6 +13,7 @@ struct RootView: View {
     let onSelectTab: (DrawerTab) -> Void
     let onToggleFindings: (String) -> Void
     let onToggleThreads: (String) -> Void
+    let onToggleResolve: (String) -> Void
     let onToggleRoom: (DrawerRoom) -> Void
     let onResetBadgeSize: () -> Void
     let onBadgeSize: (CGFloat) -> Void
@@ -31,6 +32,7 @@ struct RootView: View {
                            onSelectTab: onSelectTab,
                            onToggleFindings: onToggleFindings,
                            onToggleThreads: onToggleThreads,
+                           onToggleResolve: onToggleResolve,
                            onToggleRoom: onToggleRoom,
                            onResetBadgeSize: onResetBadgeSize,
                            onBadgeSize: onBadgeSize,

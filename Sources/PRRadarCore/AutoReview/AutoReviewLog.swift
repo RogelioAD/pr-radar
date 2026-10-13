@@ -64,6 +64,20 @@ public struct AutoReviewRecord: Codable, Equatable, Sendable {
     /// anchored against is long gone by the time anyone ticks a box.
     public var prepared: [PreparedFinding] = []
 
+    /// Comments you wrote yourself, as opposed to ones the skill found.
+    ///
+    /// The same `PreparedFinding` the skill's findings are, because that is
+    /// genuinely what a hand-written comment is: a tier, a summary, and an
+    /// anchor to hang it on. Everything downstream — composing, ticking,
+    /// counting, posting — then works on it without knowing the difference.
+    ///
+    /// Kept in its own array rather than appended to `prepared` for one
+    /// reason: a re-run replaces everything the skill produced, and what you
+    /// typed is not the skill's to replace. Losing a sentence you wrote
+    /// because you asked for a second opinion would be the kind of small
+    /// betrayal nobody reports and everybody remembers.
+    public var authored: [PreparedFinding] = []
+
     /// The inline threads the body goes out with.
     ///
     /// Persisted alongside it, and that is the whole point: with automatic
@@ -137,6 +151,7 @@ public struct AutoReviewRecord: Codable, Equatable, Sendable {
         body = try container.decodeIfPresent(String.self, forKey: .body)
         threads = try container.decodeIfPresent([ReviewThread].self, forKey: .threads) ?? []
         prepared = try container.decodeIfPresent([PreparedFinding].self, forKey: .prepared) ?? []
+        authored = try container.decodeIfPresent([PreparedFinding].self, forKey: .authored) ?? []
         reviewNodeID = try container.decodeIfPresent(String.self, forKey: .reviewNodeID)
         reviewURLString = try container.decodeIfPresent(String.self, forKey: .reviewURLString)
         threadNodeIDs = try container.decodeIfPresent([String].self, forKey: .threadNodeIDs) ?? []

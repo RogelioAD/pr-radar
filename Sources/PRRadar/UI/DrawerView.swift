@@ -38,6 +38,7 @@ struct DrawerView: View {
     let onToggleFindings: (String) -> Void
     /// Likewise for a My PRs row's unresolved threads.
     let onToggleThreads: (String) -> Void
+    let onToggleResolve: (String) -> Void
     let onToggleRoom: (DrawerRoom) -> Void
     let onResetBadgeSize: () -> Void
     let onBadgeSize: (CGFloat) -> Void
@@ -644,7 +645,11 @@ struct DrawerView: View {
                                 onToggleFindings: { onToggleFindings(item.pingKey) },
                                 onAction: { state.act($0, on: item) },
                                 onSetFinding: { state.setFinding($0, on: item, selected: $1) },
-                                onSetTier: { state.setTier($0, on: item, selected: $1) }) {
+                                onSetTier: { state.setTier($0, on: item, selected: $1) },
+                                onAddComment: { state.addAuthoredComment($0, on: item) },
+                                onRemoveComment: {
+                                    state.removeAuthoredComment($0, on: item)
+                                }) {
                             onOpen(item)
                         }
                     }
@@ -679,13 +684,44 @@ struct DrawerView: View {
                                         onOpen: { onOpenMyPR(item) },
                                         width: state.listContentWidth,
                                         showingThreads: state.openThreads.contains(item.id),
-                                        onToggleThreads: { onToggleThreads(item.id) })
+                                        onToggleThreads: { onToggleThreads(item.id) },
+                                        resolve: state.resolveRecord(for: item),
+                                        resolveBlock: state.resolveBlock(for: item),
+                                        showingResolve: state.openResolve.contains(item.id),
+                                        onResolve: { state.resolve(item, scope: $0) },
+                                        onUpdateBranch: { state.updateBranch(item) },
+                                        onStop: state.isResolving(item)
+                                            ? { state.stopResolve(item) } : nil,
+                                        onToggleResolve: { onToggleResolve(item.id) },
+                                        onResolveAction: { state.actResolve($0, on: item) },
+                                        onSetResolveRow: {
+                                            state.setResolveRow($0, on: item, selected: $1)
+                                        },
+                                        acting: state.rowActions.isActing(on: item.id))
                         case .stack(let stack):
                             MyPRStackView(stack: stack, now: state.clock,
                                           accountLabel: {
                                               state.accountLabel(for: $0.account)
                                           },
-                                          onOpen: { onOpenMyPR($0) })
+                                          onOpen: { onOpenMyPR($0) },
+                                          showingThreads: {
+                                              state.openThreads.contains($0.id)
+                                          },
+                                          onToggleThreads: { onToggleThreads($0.id) },
+                                          resolveRecord: { state.resolveRecord(for: $0) },
+                                          resolveBlock: { state.resolveBlock(for: $0) },
+                                          showingResolve: {
+                                              state.openResolve.contains($0.id)
+                                          },
+                                          acting: { state.rowActions.isActing(on: $0.id) },
+                                          onResolve: { state.resolve($0, scope: $1) },
+                                          onUpdateBranch: { state.updateBranch($0) },
+                                          onStop: { state.stopResolve($0) },
+                                          onToggleResolve: { onToggleResolve($0.id) },
+                                          onResolveAction: { state.actResolve($1, on: $0) },
+                                          onSetResolveRow: {
+                                              state.setResolveRow($1, on: $0, selected: $2)
+                                          })
                         }
                     }
                 }

@@ -221,7 +221,8 @@ Says what the branch needs rather than doing it:
 | *(nothing)* | level with its base |
 | `needs rebase · N behind` | the compare shows N commits behind |
 | `needs rebase` | GitHub reports `BEHIND` but the count is unavailable |
-| `conflicts · needs rebase` | the branch conflicts with its base |
+| `conflicts · N files` | the branch conflicts, and `merge-tree` counted them |
+| `conflicts · needs rebase` | it conflicts, but nothing could count the files |
 | `base state unknown` | the compare request failed |
 
 That last row matters: a failed lookup reads as *unknown*, never as "up to
@@ -732,13 +733,17 @@ Off until asked for. Turned on with the wand beside the trophy, it runs the
 review skill **you already have** against every PR waiting on you, and posts
 what it found as a review from your own account.
 
-The skill is typed into Settings — `/code-review`, or whatever you use. It is
-deliberately not a picker and deliberately not hardcoded: which review skill a
-developer has is theirs, and a list here would go stale the first time they
-installed another one. It runs headlessly, so a skill that asks questions will
-time out rather than work; the field says so, and the tool that would ask is
-denied outright so the failure is fast and legible instead of a quarter-hour of
-nothing.
+The skill is typed into the wand room. It is deliberately not a picker and
+deliberately not hardcoded: which review skill a developer has is theirs, and a
+list here would go stale the first time they installed another one.
+
+It does have to be one **written for this**. Headless means answering in one
+pass: asking nothing, posting nothing, and returning the JSON schema PR Radar
+parses. An ordinary interactive review skill — `/code-review` among them — does
+none of those things; it asks, it posts on its own account, and it answers in
+prose, so it times out rather than works. The field says so, and the tool that
+would ask is denied outright, so the failure is fast and legible instead of a
+quarter-hour of nothing.
 
 ### The pin, which is the whole feature
 
@@ -755,6 +760,12 @@ until you pick one of four buttons on the row:
 | Mark approved | Submits an approving review. Asks twice. |
 | Request changes | Submits one, using the priority findings as the body. |
 | Re-run | Reviews again and retires the review already posted. |
+
+**Re-run is also on a review you have not posted yet** — beside the tier counts,
+the moment the findings land. That is the likeliest time to want it: reading
+`2 priority · 5 mild` and not believing it used to mean posting a review you
+distrusted in order to earn the button that would replace it. It throws away
+what is on the row, including anything you have ticked, and says so.
 
 The pin names **one node id** — the review PR Radar posted — and says it does
 not count as you having dealt with the PR. Everything else about the rule runs
@@ -786,6 +797,27 @@ tab to count them.
 
 Nits are counted and never raised. Posting a colleague a list of nits under
 your own name is how an automated reviewer gets muted.
+
+### The thing it missed
+
+Under the nits, in **Let me choose**, there is an **other** box: one field. It
+rides out in the review's summary alongside the ticked findings, in your own
+words — no tier heading and no "recommendation" paragraph, because that
+furniture exists to make a machine's output legible as a machine's, and dressing
+your own sentence in it would be the app putting words in your mouth.
+
+It asked for a file and a line at first, so the comment could post inline. That
+was wrong twice over: typing a path into a 440pt drawer is slow and is the part
+you get wrong, and a path GitHub cannot resolve is rejected — which, because a
+review goes out as a single mutation, loses *every other finding with it*. What
+you want to add is usually about the pull request rather than one line of it, so
+it goes in the summary and the two fragile fields are gone.
+
+The summary's "not in the diff" note is not said about it either. That note
+explains why a *named* place got no comment on it, and your sentence named none.
+
+A comment you wrote survives a re-run. The findings are the skill's to replace;
+the sentence is not.
 
 Some details that had to be decided:
 
@@ -826,6 +858,244 @@ request, under your own name, that cannot be taken back.
 every row, because the state this feature exists to produce is otherwise
 reachable only by spending real money on somebody's real PR.
 
+## Resolving your own threads
+
+The other half of the job. Automatic review answers the PRs waiting on *you*;
+this answers the threads waiting on everybody else — the ones on your own pull
+requests.
+
+Every My PRs row with open threads grows a **Resolve** button. It runs the
+resolve skill you name in the wand room against that PR: reads every unresolved
+thread, decides what to do about each, and replies.
+
+**It is never automatic, and that is deliberate.** Review bots comment again
+after every push, so a resolver on a timer would spend its life answering its
+own fixes. There is no switch; there is a button.
+
+### Two jobs, one feature
+
+The Resolve button answers review threads. A second button, **Resolve
+conflicts**, appears instead when the branch conflicts with its base — and it is
+the *same run*: same skill, same checkout, same guards, same lease, with one
+sentence different in its prompt. Making it a second feature would have meant a
+second coordinator, a second set of guards and a second lease — three copies of
+the dangerous part, to express a difference that is really one instruction.
+
+While there are conflicts, the threads button is hidden. That is the skill's own
+ordering, and the reason it gives for it: a fix applied to a branch that cannot
+merge gets re-resolved by hand later, and an *already done* verdict proved
+against a pre-merge head is simply wrong. One button at a time, and it is the
+one to press first.
+
+The button is **Rebase & resolve · N files**, and it does the whole sequence in
+order: brings the checkout up to the pull request if it has fallen behind,
+merges the base in, resolves what conflicts, and pushes. One press.
+
+(It says *rebase* because that is the word the row has always used for bringing
+a branch up to its base — the `needs rebase` chip predates all of this. The
+mechanism is a merge: base **into** the branch, never a rebase of a branch that
+is already pushed, which is the one thing the run is forbidden to do.)
+
+It says how many files, the way **Update base · 3 behind** says how far behind. GitHub does not report that — `mergeStateStatus` says *that* a PR is
+dirty and never what or how much — so it is computed locally with
+`git merge-tree --write-tree --name-only`, which works out the merge without a
+checkout, an index or a clean tree. Hovering lists the files.
+
+It asks against whatever `origin/<base>` your clone already has, which is nearly
+always right and costs nothing — **and fetches that one ref when the answer
+disagrees with GitHub.** A local merge that comes back clean on a pull request
+GitHub has called dirty cannot both be true, and the local base is the thing
+more likely to be a day old, so it is fetched and the question asked again.
+
+That is not hypothetical: this shipped saying **"Resolve conflicts · 0 files"**
+on a pull request GitHub was showing a conflict on, because the clone's copy of
+the base was from the day before and the branches had not diverged yet at that
+commit. Fetching only on disagreement keeps the common path free and settles
+itself — once the ref is current the next poll agrees and fetches nothing.
+
+When the count still cannot be had, the button says **Resolve conflicts** with
+no number rather than inventing one, exactly as a missing compare leaves
+`needs rebase` without a count. `conflicts · 0 files` is not a thing the row
+says: an empty result means the two sources disagree, never that there is
+nothing to fix.
+
+A conflicts run merges base **into** the branch, never the reverse and never a
+rebase of a branch that is already pushed. Conflicts in generated output, lock
+files and goldens are regenerated rather than resolved by picking a side. If
+both sides changed the same logic incompatibly it stops and says so rather than
+guessing — the same bar as *needs you*.
+
+### Update base, which is not the rebase button
+
+A branch that is merely **behind** needs no skill and no checkout. The row
+offers **Update base · N behind**, which is one GraphQL mutation: GitHub merges
+the base into the head on its own servers, exactly as its own *Update branch*
+button does.
+
+This is worth distinguishing from the rebase button that was built here once and
+removed — that one meant a local checkout, five safety guards and a force-push,
+to save a command the terminal runs better. This rewrites nothing, so there is
+nothing to force-push, and `expectedHeadOid` makes the whole thing refuse if the
+branch moved since the row was drawn. A stale row cannot update a branch
+somebody else just pushed to.
+
+Where a button is offered, the chip that used to state the problem is gone: the
+count rides the button's own title. A row saying `needs rebase · 3 behind` next
+to a button saying `Update base` was stating a problem and offering its answer
+as two separate things to read.
+
+### Where it runs, and what it refuses
+
+In **your own checkout of the PR's branch** — not a throwaway worktree, because
+the fixes have to be pushed from somewhere you can push from. Which means every
+run starts by proving the tree is safe to work in, and refuses with a sentence
+rather than tidying up on your behalf:
+
+| It says | Because |
+|---|---|
+| `feat/x is not checked out anywhere` | it will not `gh pr checkout` into your clone |
+| `4 uncommitted changes in app-feat` | that is somebody's work in progress |
+| `that checkout is at a1b2c3d; the PR is at e4f5a6b` | it could not be fast-forwarded there — the branch has commits of its own |
+| `a merge is in progress` | a half-finished rebase is not a base to build on |
+| `feat/x has no upstream to push to` | a reply citing a commit is false until it is pushed |
+| `the branch is on their fork` | it cannot push there |
+
+### It catches up on its own
+
+A branch that has moved — usually a bot pushing after a review — leaves your
+checkout a commit or two behind the pull request, and a run started there would
+merge into code older than the pull request and then write replies citing it.
+
+That was a second button for about an hour. It is now the first thing every run
+does, because two buttons to press in a fixed order is a worse answer than one
+that knows the order — and this step has no decision in it: a checkout that is
+simply behind is a fetch and a pointer move.
+
+**Only ever a fast-forward.** If the branch turns out to have commits of its own
+the run stops and says how many, because a reset would make it work and would
+throw those away — whether to rebase, push or discard them is yours to decide,
+not something to settle at a button press. The tree is re-checked for
+uncommitted work at that moment too, rather than trusted from a poll.
+
+Untracked files do **not** block it. Generated bindings, `target/`, `build/` —
+every real checkout has them, and none of them is work a run could destroy.
+
+### Three modes
+
+| | |
+|---|---|
+| **Just tell me** | Reads and reports. Nothing is edited, committed, pushed or posted. |
+| **Fix it, then let me post** | Applies fixes, runs the gates, commits and pushes — then stops. You tick the replies and PR Radar sends them. |
+| **Fix it and post it** | The whole thing, as your skill runs it from a terminal. |
+
+The middle one is the default, and its label is careful on purpose. Curated
+*review* promises nothing has happened yet. Curated *resolve* cannot: a reply
+saying "fixed in `a1b2c3d`" is false until that commit is pushed, so the code
+has already landed by the time you read the table.
+
+### What it will not be talked out of
+
+The pull request's own comments reach the model, so these are denials rather
+than instructions:
+
+- A thread needing a product or design call is **never resolved**.
+- A thread is **never resolved without a reply**, and never over a reply that
+  did not actually land — a draft review of your own silently swallows replies,
+  and that is checked.
+- A reply citing a commit is **held back until that commit is on the remote**.
+- **Nothing is ever written to Asana.** A ticket nobody approved is worse than
+  a gap, so gaps are reported instead.
+- The session cannot `checkout`, `switch`, `rebase`, `reset`, `stash` or
+  force-push. It works in the tree it was given.
+
+### The gates, answered in advance
+
+A skill with interactive menus does not fail headlessly — it *waits*, and then
+times out having done nothing. So the wand room has a **Resolve answers**
+section holding the answers to the questions your skill would stop at: what to
+do with out-of-scope work, and what to do about an unsubmitted draft review.
+They are passed into the session so it never reaches the menu.
+
+### How much it checks, and stopping it
+
+A conflict in a single Kotlin test fixture took **sixteen minutes**. Almost all
+of it was `./gradlew testDevelopmentDebugUnitTest lintDevelopmentDebug`, then a
+pre-commit hook running the whole Rust workspace again. Both were correct — the
+skill says to run the whole suite, and that is right when nobody is watching.
+Somebody *was* watching, and in a terminal they would have said "it is a
+fixture, build the test module".
+
+**Checking** is how you say that without being there:
+
+| | |
+|---|---|
+| Run the full suite | Thorough and slow. Minutes, not seconds. |
+| Only what it touched | The crate or module the change is in. Much faster, blind to what it broke elsewhere. |
+| Leave it to CI | Runs nothing. The pull request's own checks are the only judge. |
+
+It scopes what the **session** runs and nothing else. Your repository's own
+commit hooks still run at every setting, because the way to skip one is
+`--no-verify` and that is a quality-gate bypass this will not perform however it
+is configured. Running fewer checks is your choice; defeating one that runs is
+not, and the framing says so at every level.
+
+And there is a **Stop** button on a running row, which there was not at first —
+the only ways out of a quarter-hour you had changed your mind about were
+quitting the app or finding the pid. It asks the session to stop rather than
+killing it, so a commit in flight finishes instead of leaving `index.lock` in
+your repository. That makes stopping not instant, and the row says *Stopping…*
+while it waits. A run stopped after it had already pushed is reported as having
+landed unreported, not as stopped: there are commits on the branch either way.
+
+### When it is interrupted
+
+A resolve run is **never restarted**. An interrupted review had only read, so
+asking again is safe. This one may have edited, committed and pushed, and
+nothing can tell from outside which — so the row becomes evidence instead:
+
+- *interrupted* — nothing had landed. Press it again.
+- *N commits landed unreported* — code reached the branch and nobody read the
+  table. The row hands you the `git log` that shows what. **Never pruned**, and
+  never offered a retry.
+- *still running elsewhere* — a run from a previous launch is still going.
+
+Quitting while one is in flight asks first, which is the only place this app
+interrupts a quit.
+
+---
+
+## The menu bar item
+
+One status item, showing the same menu the badge's right-click shows — built by
+the same method, because two menus that mean the same thing are two menus to
+keep agreeing.
+
+It exists because of a gap that only shows up when everything is going well.
+With the widget turned off there is no badge to right-click, so without this
+there would be no settings, no wand room, and no way to quit short of `pkill`.
+
+**The widget's on/off switch is in it**, as a checkmark — *Show the widget* —
+and it is the only one. It is here rather than in the settings room for the
+reason above: a control reachable only through the drawer would be a switch you
+could turn off and not back on.
+
+### It no longer hides itself
+
+The widget used to disappear whenever nothing was waiting *and* you had no open
+pull requests. That sounds tidy and was not. The drawer collapses when you click
+away from it, so a widget opened to change one setting was gone again at the
+next poll — the thing you most want to reach vanishing at the moment it was
+least in the way. It also made *is it running?* and *do I have work?* the same
+question, so the answer to the first was always inferred from the second.
+
+Now it is on until you say otherwise and off until you say otherwise. The only
+thing that still overrides the switch is an **open drawer**, which is never
+taken away from under you — hiding is about passive presence, and a drawer
+somebody is reading is not passive. That is also what lets Settings be opened
+from the menu while the widget is turned off.
+
+---
+
 ## Notifications
 
 A native notification when a PR you have not seen appears; clicking it opens
@@ -834,6 +1104,20 @@ request timestamp.
 
 On first launch the seen-list is seeded silently rather than firing a burst of
 notifications for a backlog you already know about.
+
+### Comments on your own PRs
+
+The My PRs row has always carried a count — `3 open` — and a count answers "is
+there post", never "has something just arrived". So comments and reviews on
+your own pull requests notify too: inline thread comments, approvals, and
+changes-requested, bots included.
+
+Collapsed per pull request, because a push wakes three bot reviewers at once
+and eleven banners for one push would make the problem worse. Changes requested
+is the only one allowed to break through as time-sensitive.
+
+Two switches in Settings: the feature, and whether bots count. Both default on,
+and the first run seeds silently like the review list's does.
 
 ---
 

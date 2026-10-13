@@ -21,6 +21,7 @@ struct ReviewRoomView: View {
 
     private enum ReviewField: Hashable {
         case skill
+        case resolveSkill
     }
 
     var body: some View {
@@ -69,6 +70,8 @@ struct ReviewRoomView: View {
                 case .status: status
                 case .skill: skill
                 case .clones: clones
+                case .resolve: resolve
+                case .resolveAnswers: resolveAnswers
                 case .repositories: ReviewReposEditor(state: state)
                 }
             }
@@ -110,12 +113,9 @@ struct ReviewRoomView: View {
         }
 
         if !state.canAutoReview {
-            Text(state.claudePath == nil
+            note(state.claudePath == nil
                  ? "Claude Code is not installed, so there is nothing to run."
                  : "Name a review skill below and this can be switched on.")
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
         }
 
         Divider()
@@ -188,8 +188,12 @@ struct ReviewRoomView: View {
     @ViewBuilder
     private var skill: some View {
         VStack(alignment: .leading, spacing: 4) {
-            row("Run") {
-                TextField("/code-review", text: $state.reviewSkillDraft)
+            row("Run",
+                help: "A review skill of your own, written to run headlessly: it "
+                    + "has to answer in one pass — ask nothing, post nothing, and "
+                    + "return the JSON schema PR Radar parses. An interactive one "
+                    + "stalls and times out, /code-review among them.") {
+                TextField("/your-review-skill", text: $state.reviewSkillDraft)
                     .textFieldStyle(.roundedBorder)
                     .focused($focus, equals: .skill)
                     .onSubmit { state.commitReviewSkill() }
@@ -199,12 +203,7 @@ struct ReviewRoomView: View {
             if !state.reviewSkillDraft.isEmpty && !isSkillValid {
                 warning("Not a skill command — this will be put back")
             }
-            Text("Whichever review skill you already have. It runs headlessly, so "
-                 + "one that stops to ask questions will time out — `/code-review` "
-                 + "is known to work.")
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
+            note("One you wrote to run headlessly. An interactive skill stalls.")
         }
         .onChange(of: focus) { previous, _ in
             if previous == .skill { state.commitReviewSkill() }
@@ -212,10 +211,15 @@ struct ReviewRoomView: View {
 
         Divider()
 
+        // The two limits are one question asked twice — how much of this may
+        // happen while you are not looking — so they are one group with one
+        // line under them rather than two groups with a rule between.
         VStack(alignment: .leading, spacing: 4) {
             row("Spend limit",
-                help: "The most one review may cost before the CLI stops it. "
-                    + "Zero means no limit.") {
+                help: "The most one review may cost before the CLI stops it. A "
+                    + "review of a substantial PR runs to a few dollars, and a cap "
+                    + "below about $2 cuts every one off partway through. Zero "
+                    + "means no limit.") {
                 HStack(spacing: 4) {
                     Text("$")
                         .foregroundStyle(.secondary)
@@ -228,27 +232,10 @@ struct ReviewRoomView: View {
                         .labelsHidden()
                 }
             }
-            // Named because the number is meaningless without it, and because
-            // the default used to be a twentieth of this.
-            Text(state.reviewBudget > 0 && state.reviewBudget < 2
-                 ? "A real review of a real PR runs to a few dollars — below about $2 "
-                   + "it will be cut off partway through."
-                 : "A review of a substantial PR runs to a few dollars. Zero means no limit.")
-                .font(.system(size: 10))
-                .foregroundStyle(state.reviewBudget > 0 && state.reviewBudget < 2
-                                 ? Health.attention.tint : .init(.tertiaryLabelColor))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-
-        Divider()
-
-        // Next to the spend limit, because they are the same question asked
-        // twice: how much of this may happen while you are not looking. This
-        // one had an answer and no row — PRs came back "hourly limit reached"
-        // with nothing on screen admitting a limit existed.
-        VStack(alignment: .leading, spacing: 4) {
-            row("Reviews per hour",
-                help: "How many reviews may start in any hour. Zero means no limit.") {
+            row("Per hour",
+                help: "How many reviews may start in any hour. Counted from when "
+                    + "one starts, so a review that fails still spends its slot. "
+                    + "Zero means no limit.") {
                 HStack(spacing: 4) {
                     TextField("6", value: $state.reviewMaxPerHour, format: .number)
                         .textFieldStyle(.roundedBorder)
@@ -259,24 +246,20 @@ struct ReviewRoomView: View {
                         .labelsHidden()
                 }
             }
-            // Which edge of it is worth saying changes with the value: at zero
-            // the thing to know is that nothing is pacing this, and otherwise
-            // it is that a review which failed still spent its slot.
-            //
-            // The non-zero line names the zero, the way the spend limit's does.
-            // Saying it only *once the value is zero* tells you what you have
-            // already done and never that you could: the escape hatch was
-            // reachable only by hovering for a tooltip, or by guessing.
-            Text(state.reviewMaxPerHour == 0
-                 ? "No limit — everything eligible is reviewed as fast as it arrives, "
-                   + "at whatever that costs."
-                 : "Counted from when a review starts, so one that fails still spends "
-                   + "its slot. PRs past the limit wait, and say so. Set it to 0 for "
-                   + "no limit.")
-                .font(.system(size: 10))
-                .foregroundStyle(state.reviewMaxPerHour == 0
-                                 ? Health.attention.tint : .init(.tertiaryLabelColor))
-                .fixedSize(horizontal: false, vertical: true)
+            // Only the edges. The ordinary case is in the tooltips above; what
+            // has to be on screen is a value that will not work and a value
+            // that has taken the brakes off, because neither looks wrong.
+            if state.reviewBudget > 0 && state.reviewBudget < 2 {
+                caution("Below about $2 a review is cut off partway through.")
+            }
+            if state.reviewMaxPerHour == 0 {
+                caution("No limit — everything eligible is reviewed as it arrives.")
+            }
+            // Said plainly rather than only in a tooltip: an escape hatch
+            // nobody can see is one nobody uses.
+            if state.reviewBudget > 0 || state.reviewMaxPerHour > 0 {
+                note("0 removes either limit.")
+            }
         }
 
         Divider()
@@ -294,10 +277,7 @@ struct ReviewRoomView: View {
                 .frame(width: 180)
                 .accessibilityLabel("What happens when a review finishes")
             }
-            Text(state.reviewMode.detail)
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
+            note(state.reviewMode.detail)
         }
     }
 
@@ -363,22 +343,210 @@ struct ReviewRoomView: View {
                 .help(current)
                 .accessibilityLabel("The folder your repository clones live in")
             }
+            .help("Both features read code from your own clones. A review takes a "
+                  + "throwaway worktree and never touches your working tree; a "
+                  + "resolve works in the checkout that already holds the branch, "
+                  + "and refuses if there is anything in it.")
 
-            Text(state.reviewWorkspace == nil
+            // This one stays: it is the answer to the question actually being
+            // asked, and it changes as you walk the tree. "Is this a folder" is
+            // obvious; "are your clones in it" is not.
+            note(state.reviewWorkspace == nil
                  ? "Pick the folder your clones live in."
                  : FolderPicker.summary(cloneCount: state.reviewCloneCount(in: current),
                                         subfolderCount: subfolders.count))
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text("A review reads the code in your own checkout, in a throwaway "
-                 + "worktree — your working tree is never touched. A repo with no "
-                 + "clone says so on the row rather than being reviewed blind.")
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    // MARK: - Resolve
+
+    /// What answers the threads on your own pull requests.
+    ///
+    /// A section rather than a room of its own, because it shares the clones
+    /// folder, the `claude` binary and half the vocabulary of the one above it —
+    /// and two rooms with the same three pickers in them would drift.
+    ///
+    /// There is deliberately **no "resolve automatically" switch**. The bots
+    /// comment again after every push, so a resolver on a timer would answer
+    /// its own fixes for ever and spend money doing it. This is pressed, from
+    /// the row, or it does not happen.
+    @ViewBuilder
+    private var resolve: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            row("Run",
+                help: "A skill that answers review threads on your own pull "
+                    + "requests: reads each one, fixes what it can, and replies. "
+                    + "Its gates are answered for it below, so it never stops to "
+                    + "ask.") {
+                TextField("/resolve", text: $state.resolveSkillDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focus, equals: .resolveSkill)
+                    .onSubmit { state.commitResolveSkill() }
+                    .accessibilityLabel("The resolve skill to run")
+                    .frame(width: 180)
+            }
+            if !state.resolveSkillDraft.isEmpty && !isResolveSkillValid {
+                warning("Not a skill command — this will be put back")
+            }
+            note("A Resolve button on every PR of yours with open threads. "
+                 + "Never runs on its own.")
+        }
+        .onChange(of: focus) { previous, _ in
+            if previous == .resolveSkill { state.commitResolveSkill() }
+        }
+
+        Divider()
+
+        VStack(alignment: .leading, spacing: 4) {
+            row("When it finishes") {
+                Picker("When it finishes", selection: $state.resolveMode) {
+                    ForEach(ResolveMode.allCases) { mode in
+                        Label(mode.title, systemImage: mode.symbol).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 180)
+                .accessibilityLabel("How much of a resolve run happens unattended")
+            }
+            note(state.resolveMode.detail)
+
+            // Said once, under the two modes it is true of. Curated review
+            // promises nothing has happened yet; curated resolve cannot, and a
+            // reader who carries the first promise across to the second will be
+            // wrong in a way that costs a push.
+            if state.resolveMode.writesCode {
+                caution("Edits your checkout and pushes. Refuses a tree with work in it.")
+            }
+        }
+
+        Divider()
+
+        VStack(alignment: .leading, spacing: 4) {
+            row("Spend limit",
+                help: "The most one resolve run may cost. More than a review's, "
+                    + "because there is more in it. Zero means no limit.") {
+                HStack(spacing: 4) {
+                    Text("$").foregroundStyle(.secondary)
+                    TextField("25", value: $state.resolveBudget,
+                              format: .number.precision(.fractionLength(0...2)))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 56)
+                        .accessibilityLabel("Spend limit per resolve run, in dollars")
+                    Stepper("Spend limit", value: $state.resolveBudget, in: 0...200, step: 5)
+                        .labelsHidden()
+                }
+            }
+            row("Give up after",
+                help: "How long one run may take before it is asked to stop. Far "
+                    + "longer than a review because there is more in it: the "
+                    + "fixes, the repository's own test suite, and a commit "
+                    + "behind a pre-commit hook that often runs the suite again. "
+                    + "It is asked to stop and never killed — killing one "
+                    + "mid-commit leaves a lock file in your repository.") {
+                HStack(spacing: 4) {
+                    TextField("90", value: $state.resolveTimeoutMinutes, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 56)
+                        .accessibilityLabel("Minutes before a resolve run is stopped")
+                    Text("min").foregroundStyle(.secondary)
+                    Stepper("Give up after", value: $state.resolveTimeoutMinutes,
+                            in: 5...240, step: 15)
+                        .labelsHidden()
+                }
+            }
+            note("A run that overruns is asked to stop, never killed.")
+        }
+
+        Divider()
+
+        // Beside the timeout, because this is what the timeout is mostly spent
+        // on. A one-file conflict took sixteen minutes and almost all of it was
+        // the Android suite followed by a pre-commit hook running the Rust
+        // workspace again — both correct, both what you would have skipped if
+        // you had been sitting there.
+        VStack(alignment: .leading, spacing: 4) {
+            row("Checking") {
+                Picker("Checking", selection: $state.resolveGates) {
+                    ForEach(ResolveGates.allCases) { gates in
+                        Text(gates.title).tag(gates)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 180)
+                .accessibilityLabel("How much checking a resolve run does")
+            }
+            note(state.resolveGates.detail)
+            if state.resolveGates.isUnverified {
+                caution("Nothing is run locally. Your commit hooks still are.")
+            }
+        }
+    }
+
+    /// The questions your resolve skill would stop and ask, answered in advance.
+    ///
+    /// This section exists because of a specific failure: a skill with
+    /// interactive gates, run headlessly, does not fail — it *waits*, for a
+    /// quarter of an hour, and then times out having done nothing. Every
+    /// control here is one of those gates, and the answer is passed into the
+    /// session's framing so it never reaches the menu.
+    @ViewBuilder
+    private var resolveAnswers: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            row("Work outside the PR's job") {
+                Picker("Work outside the PR's job", selection: $state.resolveOutOfScope) {
+                    ForEach(ResolveOutOfScope.allCases) { choice in
+                        Text(choice.title).tag(choice)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 180)
+                .accessibilityLabel("What to do with out-of-scope comments")
+            }
+            note(state.resolveOutOfScope.detail)
+        }
+
+        Divider()
+
+        VStack(alignment: .leading, spacing: 4) {
+            row("An unsubmitted draft review") {
+                Picker("An unsubmitted draft review", selection: $state.resolvePending) {
+                    ForEach(ResolvePendingPolicy.allCases) { policy in
+                        Text(policy.title).tag(policy)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 180)
+                .accessibilityLabel("What to do about a pending review of your own")
+            }
+            note(state.resolvePending.detail)
+        }
+
+        Divider()
+
+        // Rules, not controls — three of them, and they were three stacked
+        // lines of grey under two pickers, which is the shape of a paragraph
+        // nobody reads. One line says there are rules and the tooltip says what
+        // they are, which is the right way round for things that cannot be
+        // changed: knowing they exist is what matters on every glance, and
+        // knowing exactly what they say matters once.
+        Label("Four things this always does, whatever is picked above.",
+              systemImage: "lock")
+            .font(.system(size: 10))
+            .foregroundStyle(.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
+            .help("""
+                  A thread needing a product or design call is always left open.
+
+                  Nothing is ever written to Asana — a ticket created with nobody \
+                  watching is one nobody approved, so gaps are reported instead.
+
+                  A reply citing a commit is held back until that commit is \
+                  actually on the remote.
+
+                  No gate is ever bypassed to make a fix land — no `--no-verify`, \
+                  no lint suppression, no weakened assertion. Running fewer \
+                  checks is yours to choose; defeating one that runs is not.
+                  """)
     }
 
     // MARK: - Bits
@@ -387,8 +555,37 @@ struct ReviewRoomView: View {
         ReviewSkill.normalized(state.reviewSkillDraft) != nil
     }
 
+    private var isResolveSkillValid: Bool {
+        ReviewSkill.normalized(state.resolveSkillDraft) != nil
+    }
+
     private func commitAll() {
         state.commitReviewSkill()
+        state.commitResolveSkill()
+    }
+
+    /// A line of body text under a control.
+    ///
+    /// The room's one rule about prose, and it took six groups to learn it: a
+    /// line earns its place only when it **changes with the value** or
+    /// **warns**. Everything else is the row's tooltip. The room had a
+    /// paragraph under all fourteen controls, which is more words than
+    /// controls, and a wall of tertiary grey is not read — it is scrolled past,
+    /// taking the two lines that mattered with it.
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10))
+            .foregroundStyle(.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// A value that will not work, or one that has taken the brakes off.
+    /// Tinted, because neither looks wrong in the field it is typed into.
+    private func caution(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10))
+            .foregroundStyle(Health.attention.tint)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// Said plainly rather than by refusing the keystroke: a field that

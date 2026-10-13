@@ -213,6 +213,39 @@ extension SettingsRoomTests {
     func testSettingsNoLongerCarriesAReviewSection() {
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("review"))
     }
+
+    /// The raw values are row-height keys, so renaming one silently discards
+    /// whatever the drawer had been sized to.
+    func testReviewSectionStoredNamesAreStable() {
+        XCTAssertEqual(ReviewSection.allCases.map(\.rawValue),
+                       ["status", "skill", "resolve", "resolveAnswers",
+                        "clones", "repositories"])
+    }
+
+    /// Resolving is configured in the same room as reviewing, because the two
+    /// share the clones folder, the claude binary and half the vocabulary — and
+    /// a second room with the same pickers in it would drift from this one.
+    /// Each feature reads as one block, and the setup they share comes after
+    /// both rather than between them.
+    func testTheSharedSetupComesAfterBothFeatures() {
+        let order = ReviewSection.allCases
+        let review = order.firstIndex(of: .skill)!
+        let resolve = order.firstIndex(of: .resolve)!
+        let answers = order.firstIndex(of: .resolveAnswers)!
+        let clones = order.firstIndex(of: .clones)!
+        let repos = order.firstIndex(of: .repositories)!
+
+        XCTAssertLessThan(review, resolve, "reviewing comes first")
+        XCTAssertEqual(answers, resolve + 1, "resolve's answers sit with resolve")
+        XCTAssertGreaterThan(clones, answers, "shared setup comes after both")
+        XCTAssertGreaterThan(repos, answers)
+    }
+
+    func testResolvingIsConfiguredInTheWandRoomRatherThanARoomOfItsOwn() {
+        XCTAssertFalse(DrawerRoom.allCases.map(\.rawValue).contains("resolve"))
+        XCTAssertTrue(ReviewSection.allCases.contains(.resolve))
+        XCTAssertTrue(ReviewSection.allCases.contains(.resolveAnswers))
+    }
 }
 
 // MARK: - The two review modes

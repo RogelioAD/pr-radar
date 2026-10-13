@@ -29,6 +29,10 @@ struct RowView: View {
     var onAction: ((AutoReviewCoordinator.Action) -> Void)?
     var onSetFinding: ((String, Bool) -> Void)?
     var onSetTier: ((FindingTier, Bool) -> Void)?
+    /// Adds a comment of your own. Returns whether it landed, so the fields
+    /// keep what was typed when it did not.
+    var onAddComment: ((PreparedFinding) -> Bool)?
+    var onRemoveComment: ((String) -> Void)?
     let onOpen: () -> Void
 
     @State private var hovering = false
@@ -39,6 +43,10 @@ struct RowView: View {
     /// have been simpler, but comparing two findings in the same file is the
     /// commonest reason to open the code at all.
     @State private var openCode: Set<String> = []
+    /// What is in the "other" box, kept here rather than in the record: an
+    /// unfinished sentence is not a comment, and persisting one would redraw
+    /// every row in the drawer on every keystroke.
+    @State private var draft = ""
 
     private var staleness: Staleness { Staleness.of(item.pingedAt, now: now) }
 
@@ -217,6 +225,7 @@ struct RowView: View {
                     // is the only decision this row has and the line it would
                     // otherwise sit on would hold nothing else.
                     approve
+                    rerun
                 case .ready:
                     Chip(text: "review ready", symbol: "wand.and.sparkles", health: .running)
                     runTime(review)
@@ -244,6 +253,11 @@ struct RowView: View {
                                 ? "Post the ticked findings as one review"
                                 : "Nothing ticked — decide below instead")
                     }
+                    // Last, after the thing this row is for. A review you have
+                    // read and do not believe is the commonest reason to want
+                    // another one, and until now the only way to ask was to
+                    // post the one you distrusted first.
+                    rerun
                 case .posted:
                     Chip(text: "PR Radar left a review", symbol: "text.bubble", health: .running)
                         .help("Opened on the PR — decide below, and this row stays until you do")
@@ -312,19 +326,88 @@ struct RowView: View {
     /// which is what "all three nits, actually" needs in a 440pt drawer.
     @ViewBuilder
     private func findings(_ review: AutoReviewRecord) -> some View {
+        let authored = Set(review.authored.map(\.id))
         VStack(alignment: .leading, spacing: 6) {
             ForEach(FindingTier.allCases, id: \.self) { tier in
                 let group = review.findings(in: tier)
                 if !group.isEmpty {
                     tierHeader(tier, group: group)
                     ForEach(group) { prepared in
-                        findingRow(prepared)
+                        findingRow(prepared, isAuthored: authored.contains(prepared.id))
                     }
                 }
             }
+            other(review)
         }
         .padding(.leading, 13)
         .padding(.top, 2)
+    }
+
+    /// The thing the review missed.
+    ///
+    /// Last, under the nits, because that is where you arrive having read
+    /// everything the skill had to say — which is the moment you know what it
+    /// did not say. Until now the findings list was a closed question: you
+    /// could decline what was found and could not add to it, so the one
+    /// sentence you actually wanted to leave meant opening GitHub.
+    ///
+    /// **One field.** It had three — a comment, a file and a line — so the
+    /// thing could post inline beside the skill's findings. That was wrong
+    /// twice over: typing a path into a 440pt drawer is slow and is the part
+    /// you get wrong, and a path GitHub cannot resolve takes the *whole* review
+    /// down with it, since it all goes out as one mutation. What you want to
+    /// add is usually about the pull request rather than one line of it, so it
+    /// goes in the summary and the two fields that made it fragile are gone.
+    @ViewBuilder
+    private func other(_ review: AutoReviewRecord) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Chip(text: "other", symbol: "pencil", health: .neutral)
+                Text("something it missed")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+            }
+
+            HStack(alignment: .bottom, spacing: 4) {
+                TextField("What you want to say", text: $draft, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(1...4)
+                    .font(.system(size: 10))
+                    .accessibilityLabel("A comment of your own")
+                RowButton(title: "Add", symbol: "plus", health: .neutral,
+                          enabled: composed != nil) {
+                    add()
+                }
+                .help(composed == nil
+                      ? "Type something first"
+                      : "Add it to the list above, ticked")
+            }
+
+            note("Goes in the review's summary, in your own words.")
+        }
+        .padding(.top, 4)
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 9))
+            .foregroundStyle(.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The comment the field currently adds up to, or nil while it does not add
+    /// up to one. Both the Add button's enablement and the press itself read
+    /// this, so a disabled button and a refused press cannot disagree.
+    private var composed: PreparedFinding? {
+        AutoReviewComment.authored(text: draft)
+    }
+
+    private func add() {
+        guard let comment = composed else { return }
+        // Cleared only on success. A comment refused because an identical one
+        // is already in the list must not also take the text away, leaving
+        // nothing on screen to explain why nothing happened.
+        if onAddComment?(comment) == true { draft = "" }
     }
 
     private func tierHeader(_ tier: FindingTier, group: [PreparedFinding]) -> some View {
@@ -345,9 +428,9 @@ struct RowView: View {
     }
 
     @ViewBuilder
-    private func findingRow(_ prepared: PreparedFinding) -> some View {
+    private func findingRow(_ prepared: PreparedFinding, isAuthored: Bool) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            findingTick(prepared)
+            findingTick(prepared, isAuthored: isAuthored)
             if openCode.contains(prepared.id), let excerpt = prepared.excerpt {
                 DiffHunkView(excerpt: excerpt).padding(.leading, 15).padding(.trailing, 2)
             }
@@ -360,7 +443,7 @@ struct RowView: View {
     /// and the file:line beneath opens the code. They were one button, and a
     /// disclosure nested inside a button that toggles a tick is a click whose
     /// meaning depends on which pixel it landed on.
-    private func findingTick(_ prepared: PreparedFinding) -> some View {
+    private func findingTick(_ prepared: PreparedFinding, isAuthored: Bool) -> some View {
         HStack(alignment: .top, spacing: 5) {
             Button {
                 onSetFinding?(prepared.id, !prepared.isSelected)
@@ -397,7 +480,11 @@ struct RowView: View {
                         // Said out loud, because "it will be posted, just not
                         // where you are looking" is not something to discover
                         // on the PR afterwards.
-                        if !prepared.isAnchored {
+                        // Not on a comment you wrote: unanchored is what one
+                        // *is*, not something that went wrong with it. The
+                        // warning exists for a skill finding that named a file
+                        // and could not be pinned to it.
+                        if !prepared.isAnchored && !isAuthored {
                             // Tinted rather than tertiary. It sat in the same
                             // grey as the file path beside it, so the one row
                             // that behaves differently from every other looked
@@ -415,6 +502,27 @@ struct RowView: View {
                                 .font(.system(size: 8))
                                 .foregroundStyle(.tertiary)
                                 .help("Carries a suggested fix")
+                        }
+                        // Yours, and so deletable — which the skill's own
+                        // findings are not. Unticking one is a decision about
+                        // a review and is worth keeping on the row; a sentence
+                        // you typed by mistake is just a mistake.
+                        if isAuthored {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 8))
+                                .foregroundStyle(.tertiary)
+                                .help("You wrote this one")
+                            Button {
+                                onRemoveComment?(prepared.id)
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(.tertiary)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .pressable()
+                            .help("Remove it")
                         }
                     }
             }
@@ -529,6 +637,34 @@ struct RowView: View {
         .help(item.nodeID == nil
               ? "This PR arrived without an id, so it cannot be acted on from here"
               : "Submit an approving review")
+    }
+
+    /// Review it again, and throw away whatever is on the row now.
+    ///
+    /// One button, drawn in three places: on a failed row, where it reads as
+    /// Retry; on the decisions band of a posted review, where it also retires
+    /// the review already sent; and here, on a finished review nobody has acted
+    /// on yet — which is where it was missing, and is the likeliest moment to
+    /// want it. Reading `2 priority · 5 mild` and not believing it was, until
+    /// now, a reason to post a review you distrusted just to earn the button
+    /// that would replace it.
+    ///
+    /// Nothing is superseded from here: `supersede` returns early without a
+    /// `reviewNodeID`, and a review that has not been posted has none. So the
+    /// help text promises a fresh run and not a replacement.
+    ///
+    /// Deliberately not the two-press confirmation `approve` wears. That dance
+    /// exists because approving is irreversible and this is not — a re-run
+    /// spends money and discards findings that can be produced again, which is
+    /// a cost, not a consequence. Ticks already made do go, and that is what
+    /// the help text has to say out loud.
+    private var rerun: some View {
+        RowButton(title: "Re-run", symbol: "arrow.clockwise", health: .running,
+                  enabled: !sending) {
+            onAction?(.rerun)
+        }
+        .help("Review again from scratch. What is on the row now, including "
+              + "anything you have ticked, is thrown away.")
     }
 
     private var avatar: some View {

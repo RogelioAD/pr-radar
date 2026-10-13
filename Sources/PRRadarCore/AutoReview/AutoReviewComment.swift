@@ -92,18 +92,30 @@ extension AutoReviewRecord {
         return ComposedReview(body: body, threads: threads)
     }
 
+    /// Everything this row can send: what the skill found, then what you wrote.
+    ///
+    /// The one place the two arrays are joined, and the reason everything
+    /// downstream can go on treating a hand-written comment as an ordinary
+    /// finding. Authored comments come last so they read as the postscript they
+    /// are rather than interleaving with the skill's own ordering.
+    public var sendable: [PreparedFinding] { prepared + authored }
+
     /// How many findings are ticked, and how many there are to tick.
     public var selection: (chosen: Int, total: Int) {
-        (prepared.filter(\.isSelected).count, prepared.count)
+        (sendable.filter(\.isSelected).count, sendable.count)
     }
 
     /// The prepared findings of one tier, in the order they were found.
     public func findings(in tier: FindingTier) -> [PreparedFinding] {
-        prepared.filter { $0.tier == tier }
+        sendable.filter { $0.tier == tier }
     }
 
     /// Whether this review is waiting to be picked over rather than sent.
-    public var isAwaitingSelection: Bool { status == .ready && !prepared.isEmpty }
+    ///
+    /// True on a clean review the moment you write a comment on it: the
+    /// findings list is how you take it back out again, and a disclosure that
+    /// would not open is a sentence you cannot untick.
+    public var isAwaitingSelection: Bool { status == .ready && !sendable.isEmpty }
 
     /// Whether the review came back clean.
     ///
@@ -116,7 +128,7 @@ extension AutoReviewRecord {
     /// before curated mode has no prepared findings and is not thereby a clean
     /// review — it is an old row whose findings were never broken out.
     public var foundNothing: Bool {
-        status == .ready && prepared.isEmpty && !counts.values.contains { $0 > 0 }
+        status == .ready && sendable.isEmpty && !counts.values.contains { $0 > 0 }
     }
 
     /// Whether the four ways out belong on the row now.
@@ -243,6 +255,43 @@ public enum AutoReviewComment {
                                    isSelected: finding.tier != .nit,
                                    excerpt: excerpt)
         }
+    }
+
+    /// A comment you wrote yourself, in the shape everything else here works in.
+    ///
+    /// Built as a `PreparedFinding` so that ticking, counting, composing and
+    /// posting need to know nothing about where it came from — the alternative
+    /// was a second kind of thing threaded through all four, to say something
+    /// the first kind already says.
+    ///
+    /// **Unanchored, deliberately.** It asked for a file and a line at first,
+    /// so the comment could post inline beside the skill's findings. That was
+    /// the wrong trade in use: typing a path and a line number into a 440pt
+    /// drawer is slow, it is the part you get wrong, and a path GitHub cannot
+    /// resolve is rejected — which, because a review posts as one mutation,
+    /// loses every other finding going out with it. The thing worth saying is
+    /// usually about the pull request rather than about a line of it, and the
+    /// summary is where that belongs.
+    ///
+    /// So it rides in the body, through the same `unanchored` path a finding
+    /// takes when the skill named a file that is not in the diff.
+    ///
+    /// **The body is yours, verbatim.** No tier heading, no "recommendation"
+    /// paragraph, none of the furniture `threadBody` puts around a finding.
+    /// That furniture exists to make a machine's output legible as a machine's
+    /// output; dressing your own sentence in it would be the app putting words
+    /// in your mouth.
+    ///
+    /// `.mild` because the tiers are a posting rule as much as a label:
+    /// `raisable` drops nits, and a comment somebody sat and typed is not a
+    /// nit. It can still be dropped by unticking it.
+    public static func authored(text: String) -> PreparedFinding? {
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return nil }
+        return PreparedFinding(
+            finding: Finding(tier: .mild, summary: body, recommendation: body),
+            anchor: nil,
+            isSelected: true)
     }
 
     public static func compose(_ findings: AutoReviewFindings,
@@ -466,7 +515,15 @@ public enum AutoReviewComment {
             location = finding.line.map { "`\(file):\($0)`" } ?? "`\(file)`"
             location += " — "
         }
-        let note = inlined ? "" : " _(not in the diff; no inline comment)_"
+        // The note explains why a named place got no comment on it, so it is
+        // only said when a place was named. A finding with no file never
+        // offered to be inline — a comment the reviewer wrote by hand is the
+        // case — and telling the author it is "not in the diff" would be
+        // answering a question nobody asked, about their reviewer's own
+        // sentence.
+        let note = inlined || finding.file == nil
+            ? ""
+            : " _(not in the diff; no inline comment)_"
         return "- \(location)\(finding.summary)\(note)"
     }
 

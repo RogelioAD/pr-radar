@@ -51,7 +51,8 @@ public struct MyPRInbox {
             // Bot "COMMENTED" reviews are noise on this tab.
             if state == .commented { return nil }
             return Approval(login: login, state: state,
-                            isLead: repoLeads.contains(login))
+                            isLead: repoLeads.contains(login),
+                            submittedAt: review.submittedAt)
         }
 
         let awaiting = (node.reviewRequests?.nodes ?? []).compactMap { request -> String? in
@@ -76,7 +77,9 @@ public struct MyPRInbox {
                 comments: comments.map {
                     UnresolvedThread.Comment(
                         author: $0.author?.login ?? "someone",
-                        body: UnresolvedThread.trimmed($0.body ?? ""))
+                        body: UnresolvedThread.trimmed($0.body ?? ""),
+                        id: $0.id,
+                        createdAt: $0.createdAt)
                 },
                 moreComments: max(0, (thread.comments?.totalCount ?? 0) - comments.count),
                 excerpt: thread.path.flatMap { path in
@@ -86,7 +89,7 @@ public struct MyPRInbox {
                 })
         }
 
-        return MyPullRequest(
+        var item = MyPullRequest(
             repo: repo,
             number: number,
             title: title,
@@ -111,6 +114,10 @@ public struct MyPRInbox {
             deletions: node.deletions ?? 0,
             changedFiles: node.changedFiles ?? 0
         )
+        item.nodeID = node.id
+        item.headOid = node.commits?.nodes.first?.commit?.oid
+        item.headRepositoryOwner = node.headRepositoryOwner?.login
+        return item
     }
 
     /// Tallies a check rollup. CheckRun and StatusContext report their verdict

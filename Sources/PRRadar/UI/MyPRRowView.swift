@@ -26,6 +26,26 @@ struct MyPRRowView: View {
     var showingThreads = false
     var onToggleThreads: (() -> Void)?
 
+    /// Where a resolve run on this PR has got to, or nil when there has not
+    /// been one.
+    var resolve: ResolveRecord?
+    /// Why Resolve is not offered, from configuration alone. The rest of the
+    /// guards need to ask git about a worktree, which is too expensive to do
+    /// per row per poll — so they run on the press and report onto the row.
+    var resolveBlock: ResolveBlock?
+    /// Whether this row's resolve table is open.
+    var showingResolve = false
+    var onResolve: ((ResolveScope) -> Void)?
+    /// Merges the base branch in, server-side. nil when the row cannot act.
+    var onUpdateBranch: (() -> Void)?
+    /// Stops the run on this row. nil when there is not one.
+    var onStop: (() -> Void)?
+    var onToggleResolve: (() -> Void)?
+    var onResolveAction: ((ResolveCoordinator.Action) -> Void)?
+    var onSetResolveRow: ((String, Bool) -> Void)?
+    /// Whether something on this row is mid-round-trip.
+    var acting = false
+
     @State private var hovering = false
 
     var body: some View {
@@ -40,7 +60,11 @@ struct MyPRRowView: View {
                 identityLine
                 reviewChips
                 stateChips
+                if let resolve { resolveStrip(resolve) }
                 if showingThreads, !item.unresolvedThreads.isEmpty { threads }
+                if showingResolve, let table = resolve?.table, !table.threads.isEmpty {
+                    resolveTable(table)
+                }
                 if showsStackRow { stackRow }
             }
             // Definite, so the marker beside it is never squeezed out. The
@@ -315,6 +339,9 @@ struct MyPRRowView: View {
                      symbol: "bubble.left", health: .neutral)
             }
 
+            resolveButton
+            branchButtons
+
             // Behind and conflicted are said once, by the branch chip.
             if !coveredByBranchChip {
                 Chip(text: item.mergeBlocker.label, symbol: "arrow.triangle.merge",
@@ -322,6 +349,425 @@ struct MyPRRowView: View {
             }
 
             branchChip
+        }
+    }
+
+    // MARK: - Resolve
+
+    /// Answer the threads, rather than only counting them.
+    ///
+    /// Beside the count, because it is the thing you want the moment you read
+    /// one. Shown only when there is something to answer, and drawn disabled
+    /// with its reason when the configuration is not there — a button that
+    /// vanishes teaches nobody that the feature exists, and a button that says
+    /// "not ticked for resolving" teaches them where to go.
+    ///
+    /// **Never automatic.** There is no switch anywhere that makes this happen
+    /// by itself, and that is a decision rather than an omission: the bots
+    /// comment again after every push, so a resolver on a timer would answer
+    /// its own fixes for ever.
+    @ViewBuilder
+    private var resolveButton: some View {
+        if item.unresolvedThreadCount > 0, onResolve != nil, canOfferResolve,
+           // Not while the branch conflicts. The skill runs its conflicted-files
+           // pass *before* triage for a reason it states plainly: a fix applied
+           // to a branch that cannot merge gets re-resolved by hand later, and
+           // an ALREADY-DONE verdict proved against a pre-merge head is simply
+           // wrong. Offering both buttons at once would invite the order that
+           // wastes the run — so while there are conflicts there is one button,
+           // and it is the one to press first.
+           !item.isConflicted {
+            RowButton(title: acting ? "Resolving…" : "Resolve",
+                      symbol: acting ? "hourglass" : "arrow.triangle.merge",
+                      health: resolveBlock == nil ? .running : .neutral,
+                      enabled: resolveBlock == nil && !acting) {
+                onResolve?(.threads)
+            }
+            .help(resolveHelp)
+        }
+    }
+
+    /// What the branch needs doing to it, offered rather than only named.
+    ///
+    /// The row has always *said* `needs rebase` and `conflicts`, and a rebase
+    /// button was built here once and removed: it meant a local checkout, five
+    /// safety guards and a force-push, to save a command the terminal runs
+    /// better. Both of these answer that, and differently.
+    ///
+    /// **Update base** is not that rebase. GitHub merges base into head on its
+    /// own servers — the same thing its own "Update branch" button does — so
+    /// there is no checkout, no rewrite and nothing to force-push, and
+    /// `expectedHeadOid` refuses the whole thing if the branch moved since this
+    /// row was drawn. One mutation, no local state.
+    ///
+    /// **Resolve conflicts** is the case GitHub will not do for you, and it
+    /// does need a checkout — so it is not a second feature with a second set
+    /// of guards, it is the resolve run with a different sentence in its
+    /// prompt. The five safety guards the old button would have needed exist
+    /// now, and this goes through every one of them.
+    @ViewBuilder
+    private var branchButtons: some View {
+        switch item.branchState {
+        case .needsRebase(let behind):
+            if showsUpdateButton {
+                // The count rides the button rather than a chip beside it. A
+                // chip saying `needs rebase · 3 behind` next to a button saying
+                // `Update base` is the row stating a problem and offering its
+                // answer as two separate things to read.
+                RowButton(title: acting
+                            ? "Updating…"
+                            : behind.map { "Update base · \($0) behind" } ?? "Update base",
+                          symbol: "arrow.triangle.pull",
+                          health: .attention,
+                          enabled: !acting) {
+                    onUpdateBranch?()
+                }
+                .help("Merge origin/\(item.baseRefName) into this branch. GitHub "
+                      + "does it server-side — no checkout, nothing rewritten, "
+                      + "and it refuses if the branch has moved since this row "
+                      + "was drawn.")
+            }
+
+        case .conflicts(let files):
+            if showsConflictsButton {
+                RowButton(title: acting
+                            ? "Merging…"
+                            : files.map { "Rebase & resolve · \($0) file"
+                                        + ($0 == 1 ? "" : "s") }
+                                ?? "Rebase & resolve",
+                          symbol: "exclamationmark.triangle",
+                          health: resolveBlock == nil ? .bad : .neutral,
+                          enabled: resolveBlock == nil && !acting) {
+                    onResolve?(.conflicts)
+                }
+                .help(conflictsHelp)
+            }
+
+        case .upToDate, .unknown:
+            EmptyView()
+        }
+    }
+
+    /// Whether Stop has already been pressed on this run.
+    private var isStopping: Bool { resolve?.failure == "Stopping…" }
+
+    /// Whether the row can offer to update the branch itself.
+    ///
+    /// A PR that arrived without its ids cannot be acted on, and a button that
+    /// would fail is worse than a chip that explains — so the chip takes over
+    /// in that case rather than the button being drawn disabled.
+    private var showsUpdateButton: Bool {
+        onUpdateBranch != nil && item.nodeID != nil && item.headOid != nil
+    }
+
+    private var showsConflictsButton: Bool {
+        onResolve != nil && canOfferResolve
+    }
+
+    /// The same refusals the threads button shows, because it is the same run.
+    private var conflictsHelp: String {
+        if acting { return "Running — one at a time" }
+        if let block = resolveBlock {
+            return [block.reason, block.remedy].compactMap { $0 }.joined(separator: ". ")
+        }
+        return "Does the whole thing, in order: brings your checkout up to the "
+             + "pull request if it has fallen behind, merges origin/"
+             + "\(item.baseRefName) in, and resolves what conflicts using your "
+             + "resolve skill.\n\nIt only ever fast-forwards your checkout — a "
+             + "branch with commits of its own stops it rather than being "
+             + "reset — and it refuses a tree with uncommitted work rather than "
+             + "tidying up.\n\n" + conflictHelp
+    }
+
+    /// Which files, not just how many. `merge-tree --name-only` hands these
+    /// over alongside the count, so withholding them would be a choice.
+    private var conflictHelp: String {
+        guard let files = item.conflictedFiles, !files.isEmpty else {
+            return "Conflicts with \(item.baseRefName)."
+        }
+        let shown = files.prefix(12).joined(separator: "\n")
+        return files.count > 12
+            ? shown + "\n…and \(files.count - 12) more"
+            : shown
+    }
+
+    /// Whether offering it makes sense at all. A run already in flight, or one
+    /// whose result is still on the row, is not something to start again.
+    private var canOfferResolve: Bool {
+        guard let resolve else { return true }
+        return resolve.status.mayRerun
+    }
+
+    private var resolveHelp: String {
+        if acting { return "Running — one at a time" }
+        guard let block = resolveBlock else {
+            return "Run your resolve skill against these threads. It checks your "
+                 + "checkout first and refuses rather than tidying it."
+        }
+        return [block.reason, block.remedy].compactMap { $0 }.joined(separator: ". ")
+    }
+
+    /// Where a run got to, in the review row's vocabulary so the two halves of
+    /// the app read as one.
+    @ViewBuilder
+    private func resolveStrip(_ record: ResolveRecord) -> some View {
+        ChipFlow(spacing: 4) {
+            switch record.status {
+            case .running:
+                if let startedAt = record.startedAt {
+                    TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                        stopwatch(record, now: context.date, health: .running)
+                    }
+                } else {
+                    Chip(text: record.scope.runningLabel,
+                         symbol: "arrow.triangle.merge", health: .running)
+                }
+                // The way out of a quarter-hour you have changed your mind
+                // about. Not instant, and does not pretend to be: it asks the
+                // session to stop rather than killing it, so a commit in flight
+                // finishes instead of leaving a lock file behind.
+                if onStop != nil {
+                    RowButton(title: isStopping ? "Stopping…" : "Stop",
+                              symbol: "stop.circle", health: .neutral,
+                              enabled: !isStopping) {
+                        onStop?()
+                    }
+                    .help(isStopping
+                          ? "Asked to stop. Waiting for anything in flight to finish."
+                          : "Ask it to stop. A commit already running is allowed to "
+                            + "finish — stopping is not instant, and killing one "
+                            + "mid-commit would leave a lock file in your repository.")
+                }
+
+            case .stopped:
+                Chip(text: "stopped", symbol: "stop.circle", health: .neutral)
+                    .help(record.failure ?? "")
+                stopwatch(record, now: now, health: .neutral)
+
+            case .blocked:
+                Chip(text: record.block?.reason ?? record.failure ?? "not resolved",
+                     symbol: "exclamationmark.triangle", health: .neutral)
+                    .help(record.block?.remedy ?? "")
+
+            case .failed:
+                Chip(text: "resolve failed", symbol: "exclamationmark.triangle", health: .bad)
+                    .help(record.failure ?? "")
+                stopwatch(record, now: now, health: .bad)
+
+            case .interrupted:
+                Chip(text: "interrupted", symbol: "bolt.slash", health: .neutral)
+                    .help("PR Radar stopped while this was running. Nothing had "
+                          + "landed in your checkout.")
+
+            // The one worth interrupting for. Code reached the branch and
+            // nobody has read a word about it, so the row says where to look
+            // and does not offer to run again on top of it.
+            case .landedUnreported:
+                Chip(text: "\(record.pushedShas.count) commit"
+                        + "\(record.pushedShas.count == 1 ? "" : "s") landed unreported",
+                     symbol: "exclamationmark.octagon", health: .bad)
+                    .help(record.forensics ?? record.failure ?? "")
+                if let forensics = record.forensics {
+                    RowButton(title: "Copy check", symbol: "doc.on.doc", health: .neutral) {
+                        Clipboard.copy(forensics)
+                    }
+                    .help(forensics)
+                }
+
+            case .orphaned:
+                Chip(text: "still running elsewhere", symbol: "hourglass", health: .attention)
+                    .help("A run from a previous launch of PR Radar is still "
+                          + "working in \(record.treePath ?? "your checkout").")
+
+            case .ready:
+                mergeChips(record)
+                dispositionChips(record)
+                stopwatch(record, now: now, health: .good)
+                if record.isAwaitingSelection {
+                    RowButton(title: showingResolve ? "Hide replies" : "Choose replies",
+                              symbol: showingResolve ? "chevron.up" : "chevron.down",
+                              health: .neutral) {
+                        onToggleResolve?()
+                    }
+                }
+                if let table = record.table, table.selection.chosen > 0 {
+                    RowButton(title: acting
+                                ? "Sending…"
+                                : "Post \(table.selection.chosen) of \(table.selection.total)",
+                              symbol: "paperplane", health: .running, enabled: !acting) {
+                        onResolveAction?(.post)
+                    }
+                    .help("Reply to each ticked thread and close the ones that "
+                          + "were actually answered")
+                }
+                RowButton(title: "Dismiss", symbol: "xmark", health: .neutral,
+                          enabled: !acting) {
+                    onResolveAction?(.dismiss)
+                }
+
+            case .posted:
+                if record.scope.producesReplies {
+                    Chip(text: "\(record.postedThreadIDs.count) answered",
+                         symbol: "checkmark.bubble", health: .good)
+                }
+                mergeChips(record)
+                dispositionChips(record)
+
+            case .dismissed:
+                EmptyView()
+            }
+
+            // Said wherever it is true, because it is the highest-value thing a
+            // run finds: real work, out of scope, and in nobody's backlog.
+            if let gaps = record.table?.untrackedGaps, !gaps.isEmpty {
+                Chip(text: "\(gaps.count) untracked", symbol: "tray.full",
+                     health: .attention)
+                    .help("Out of scope and nothing tracking it — "
+                          + gaps.compactMap(\.asanaNote).joined(separator: "; "))
+            }
+            // A count that quietly meant something smaller is the failure this
+            // whole feature exists to avoid.
+            if let missing = record.table?.missing, !missing.isEmpty {
+                Chip(text: "\(missing.count) not triaged", symbol: "questionmark.circle",
+                     health: .attention)
+                    .help("The run did not come back with these threads, so "
+                          + "nothing has been decided about them.")
+            }
+        }
+    }
+
+    /// What a conflicts run did.
+    ///
+    /// Three outcomes worth telling apart, and the middle one is the reason
+    /// this is not just a tick: a branch that turned out to merge cleanly after
+    /// all is a different answer from one that was fixed, and reporting it as
+    /// "resolved 0 files" would read as work done.
+    @ViewBuilder
+    private func mergeChips(_ record: ResolveRecord) -> some View {
+        if let merge = record.table?.merge {
+            if !merge.conflicted {
+                Chip(text: "merged clean", symbol: "arrow.triangle.merge", health: .good)
+                    .help("It merged without conflicting after all. Nothing was "
+                          + "hand-resolved.")
+            } else {
+                Chip(text: "\(merge.files.count) file"
+                        + "\(merge.files.count == 1 ? "" : "s") resolved",
+                     symbol: "arrow.triangle.merge", health: .good)
+                    .help(merge.files.isEmpty
+                          ? (merge.resolution ?? "")
+                          : merge.files.joined(separator: "\n"))
+            }
+            if let resolution = merge.resolution, !resolution.isEmpty {
+                Chip(text: "how", symbol: "info.circle", health: .neutral)
+                    .help(resolution)
+            }
+            if let sha = merge.sha, !sha.isEmpty {
+                Chip(text: String(sha.prefix(7)), symbol: "checkmark.seal", health: .good)
+                    .help("The merge commit, pushed")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func dispositionChips(_ record: ResolveRecord) -> some View {
+        if let table = record.table {
+            ForEach(ResolveDisposition.allCases, id: \.self) { disposition in
+                let count = table.count(disposition)
+                if count > 0 {
+                    Chip(text: "\(count) \(disposition.label)", health: disposition.health)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func stopwatch(_ record: ResolveRecord, now: Date, health: Health) -> some View {
+        HStack(spacing: 4) {
+            Chip(text: record.status == .running ? "resolving…" : "resolved",
+                 symbol: "arrow.triangle.merge", health: health)
+            if let seconds = record.runTime(now: now) {
+                Chip(text: RunTime.clock(seconds), symbol: "stopwatch", health: health)
+            }
+        }
+    }
+
+    /// The table, one thread at a time, with the drafted reply under each.
+    @ViewBuilder
+    private func resolveTable(_ table: ResolveTable) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if !table.scope.isEmpty {
+                Text(table.scope)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            // Said before the replies, because it changes what every reply
+            // below it means: while a draft review of yours is open, anything
+            // posted into it is invisible to everybody else.
+            if let pending = table.pending {
+                Label("A draft review of yours holds \(pending.comments) comments. "
+                      + "Replies are invisible to others until you submit it.",
+                      systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Health.attention.tint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(table.threads) { row in
+                resolveRow(row)
+            }
+        }
+        .padding(.leading, 10)
+        .padding(.top, 2)
+    }
+
+    @ViewBuilder
+    private func resolveRow(_ row: ResolveRow) -> some View {
+        HStack(alignment: .top, spacing: 5) {
+            Button {
+                onSetResolveRow?(row.threadId, !row.isSelected)
+            } label: {
+                Image(systemName: row.isSelected ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 10))
+                    .foregroundStyle(row.isSelected ? Color.accentColor : .secondary)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .pressable()
+            .disabled(!row.mayResolve)
+            .help(row.mayResolve
+                  ? (row.isSelected ? "Do not send this one" : "Send this one too")
+                  : "Nothing was decided about this one, so it stays open")
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Chip(text: row.disposition.label, health: row.disposition.health)
+                    if let sha = row.sha, !sha.isEmpty {
+                        Text(String(sha.prefix(7)))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    }
+                    // A reply citing a commit that is not on the remote is
+                    // false the moment it lands, so it is held and says so.
+                    if row.shaIsUnpushed {
+                        Text("not pushed")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(Health.bad.tint)
+                            .help("That commit is not on the remote, so a reply "
+                                  + "citing it would not be true. Held back.")
+                    }
+                }
+                Text(row.reply)
+                    .font(.system(size: 10))
+                    .foregroundStyle(row.isSelected ? .primary : .secondary)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let needs = row.needs, !needs.isEmpty {
+                    Text("needs you: \(needs)")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Health.attention.tint)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
     }
 
@@ -342,24 +788,37 @@ struct MyPRRowView: View {
                      : "\nFailing: " + checks.failingNames.joined(separator: ", ")))
     }
 
-    /// Says plainly what the branch needs, instead of offering to do it.
+    /// Says what the branch needs — when nothing beside it is offering to do it.
     ///
     /// Rebasing from here was built and then removed: it meant a local
     /// checkout, five safety guards and a force-push, to save a command the
-    /// terminal runs better. Naming the state is the useful half.
+    /// terminal runs better. Naming the state was the useful half, and for a
+    /// long time it was the whole of it.
+    ///
+    /// It is now the fallback rather than the rule. Where the row can act — a
+    /// server-side merge, or a resolve run through the guards that exist now —
+    /// the button carries the state in its own title, and this draws nothing.
+    /// Two controls saying `3 behind` is the row stating a problem and offering
+    /// its answer as separate things to read.
     @ViewBuilder
     private var branchChip: some View {
         switch item.branchState {
         case .upToDate:
             EmptyView()
         case .needsRebase(let behind):
-            Chip(text: behind.map { "needs rebase · \($0) behind" } ?? "needs rebase",
-                 symbol: "arrow.triangle.pull", health: .attention)
-                .help("Update this branch from origin/\(item.baseRefName)")
-        case .conflicts:
-            Chip(text: "conflicts · needs rebase", symbol: "exclamationmark.triangle",
-                 health: .bad, filled: true)
-                .help("Conflicts with \(item.baseRefName); rebase to resolve")
+            if !showsUpdateButton {
+                Chip(text: behind.map { "needs rebase · \($0) behind" } ?? "needs rebase",
+                     symbol: "arrow.triangle.pull", health: .attention)
+                    .help("Update this branch from origin/\(item.baseRefName)")
+            }
+        case .conflicts(let files):
+            if !showsConflictsButton {
+                Chip(text: files.map { "conflicts · \($0) file" + ($0 == 1 ? "" : "s") }
+                        ?? "conflicts · needs rebase",
+                     symbol: "exclamationmark.triangle",
+                     health: .bad, filled: true)
+                    .help(conflictHelp)
+            }
         case .unknown:
             Chip(text: "base state unknown", symbol: "questionmark", health: .neutral)
                 .help("Couldn't determine whether this branch is behind "

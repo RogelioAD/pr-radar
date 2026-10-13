@@ -301,7 +301,49 @@ final class MyPRInboxTests: XCTestCase {
     func testConflictsOutrankTheBehindCount() throws {
         var items = try build([node(mergeState: "DIRTY")])
         items[0].behindBy = 0
-        XCTAssertEqual(items[0].branchState, .conflicts)
+        XCTAssertEqual(items[0].branchState, .conflicts(files: nil))
+        XCTAssertTrue(items[0].isConflicted)
+    }
+
+    /// GitHub never says how many files conflict, so the count arrives later
+    /// and separately — and until it does, the state is conflicted with an
+    /// unknown size rather than conflicted with none.
+    func testTheConflictedFileCountIsUnknownUntilSomethingCountsIt() throws {
+        var items = try build([node(mergeState: "DIRTY")])
+        XCTAssertNil(items[0].conflictedFiles)
+        XCTAssertEqual(items[0].branchState, .conflicts(files: nil))
+
+        items[0].conflictedFiles = ["Cargo.lock", "Sources/A.swift"]
+        XCTAssertEqual(items[0].branchState, .conflicts(files: 2))
+    }
+
+    /// The row must never say "conflicts · 0 files".
+    ///
+    /// It said exactly that, on a real pull request, because the local copy of
+    /// the base branch was a day old: the merge came out clean against a stale
+    /// base while GitHub was showing a conflict against the real one. An empty
+    /// list is "we disagree", never "no conflicts" — so it is not stored, and
+    /// the row falls back to saying `conflicts` with no number.
+    func testAnEmptyCountIsNeverShownAsZero() throws {
+        var items = try build([node(mergeState: "DIRTY")])
+        // What the old code stored on a clean-but-dirty disagreement.
+        items[0].conflictedFiles = []
+        XCTAssertEqual(items[0].branchState, .conflicts(files: 0),
+                       "the state faithfully reports what it was given…")
+        // …which is why the caller must never give it this. The guard lives in
+        // `countConflicts`; this pins the shape it is guarding.
+        XCTAssertNotEqual(items[0].conflictedFiles, nil)
+        XCTAssertTrue(items[0].conflictedFiles?.isEmpty == true,
+                      "an empty list is the value that must not be stored")
+    }
+
+    /// A count on a branch GitHub does not call dirty must not invent a
+    /// conflict: the flag decides whether there is one, the count only how big.
+    func testACountDoesNotMakeACleanBranchConflicted() throws {
+        var items = try build([node(mergeState: "CLEAN")])
+        items[0].conflictedFiles = ["Cargo.lock"]
+        XCTAssertFalse(items[0].isConflicted)
+        XCTAssertNotEqual(items[0].branchState, .conflicts(files: 1))
     }
 
     /// Without a count, GitHub's own BEHIND verdict is enough to say so.

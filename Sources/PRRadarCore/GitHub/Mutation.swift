@@ -49,6 +49,44 @@ public enum Mutation {
       }
     }
     """
+
+    /// Brings a pull request's branch up to date with its base.
+    ///
+    /// **GitHub does the merge, on its own servers.** That is the whole reason
+    /// this can exist when the rebase button could not: rebasing meant a local
+    /// checkout, a pile of safety guards and a force-push, to save a command
+    /// the terminal runs better. This is one mutation, needs no clone at all,
+    /// and cannot lose a commit because it merges rather than rewrites — the
+    /// same thing GitHub's own "Update branch" button does.
+    ///
+    /// `expectedHeadOid` is the guard that replaces all five of the old ones.
+    /// GitHub refuses the merge if the branch has moved since the row was
+    /// drawn, so a stale row cannot update a branch somebody else just pushed
+    /// to.
+    public static let updateBranch = """
+    mutation($pullRequestId: ID!, $expectedHeadOid: GitObjectID!) {
+      updatePullRequestBranch(
+        input: {pullRequestId: $pullRequestId, expectedHeadOid: $expectedHeadOid}) {
+        pullRequest { id headRefOid }
+      }
+    }
+    """
+
+    /// Answers one thread.
+    ///
+    /// The url comes back and is checked by the caller, because this mutation
+    /// has a silent failure mode worth guarding: if the viewer has a PENDING
+    /// review on the pull request, the reply is absorbed into that unsubmitted
+    /// draft. The mutation returns success, the comment exists, and nobody but
+    /// its author can see it — while the thread reads as answered.
+    public static let replyToThread = """
+    mutation($threadId: ID!, $body: String!) {
+      addPullRequestReviewThreadReply(
+        input: {pullRequestReviewThreadId: $threadId, body: $body}) {
+        comment { id url createdAt }
+      }
+    }
+    """
 }
 
 /// What `addPullRequestReview` gives back.
@@ -97,6 +135,18 @@ struct UpdateReviewPayload: Decodable {
     struct Review: Decodable { let id: String }
     struct Wrapper: Decodable { let pullRequestReview: Review? }
     let updatePullRequestReview: Wrapper?
+}
+
+struct UpdateBranchPayload: Decodable {
+    struct PullRequest: Decodable { let id: String; let headRefOid: String? }
+    struct Wrapper: Decodable { let pullRequest: PullRequest? }
+    let updatePullRequestBranch: Wrapper?
+}
+
+struct ReplyPayload: Decodable {
+    struct Comment: Decodable { let id: String; let url: String? }
+    struct Wrapper: Decodable { let comment: Comment? }
+    let addPullRequestReviewThreadReply: Wrapper?
 }
 
 struct ResolveThreadPayload: Decodable {
@@ -166,6 +216,39 @@ extension GitHubClient {
                                      variables: ["threadId": .string(id)],
                                      as: ResolveThreadPayload.self)
         return payload?.resolveReviewThread?.thread?.isResolved ?? false
+    }
+
+    /// Merges the base branch into a pull request's head, server-side.
+    ///
+    /// Returns the branch's new head, or throws. The error is worth surfacing
+    /// rather than swallowing: the two interesting failures are a branch that
+    /// moved under us — which is the `expectedHeadOid` guard doing its job —
+    /// and a merge that conflicts, which GitHub will not do for you and which
+    /// is exactly what the Resolve conflicts button is for.
+    @discardableResult
+    public func updateBranch(pullRequestID: String,
+                             expectedHeadOid: String) async throws -> String? {
+        let payload = try await run(
+            Mutation.updateBranch,
+            variables: ["pullRequestId": .string(pullRequestID),
+                        "expectedHeadOid": .string(expectedHeadOid)],
+            as: UpdateBranchPayload.self)
+        return payload.updatePullRequestBranch?.pullRequest?.headRefOid
+    }
+
+    /// Replies to one thread, and says whether the reply is actually visible.
+    ///
+    /// Returns the comment's url rather than a bool, because the caller has a
+    /// decision to make with it: **never resolve a thread whose reply did not
+    /// land.** A thread closed over a reply that is not there reads to every
+    /// reviewer as handled, which is the one failure this whole feature exists
+    /// to prevent.
+    public func replyToThread(id: String, body: String) async -> String? {
+        let payload = try? await run(Mutation.replyToThread,
+                                     variables: ["threadId": .string(id),
+                                                 "body": .string(body)],
+                                     as: ReplyPayload.self)
+        return payload?.addPullRequestReviewThreadReply?.comment?.url
     }
 
     /// One inline thread, as `DraftPullRequestReviewThread` wants it.

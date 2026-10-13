@@ -44,8 +44,14 @@ public enum ProcessRunnerError: LocalizedError, Equatable {
 ///    prints one line.
 /// 2. **stdin is `/dev/null`.** A child that reads an inherited stdin waits for
 ///    input that a background app is never going to send.
-/// 3. **The timeout escalates.** A `--print` session can ignore `SIGTERM` in the
-///    middle of a request, so a `SIGKILL` follows after a grace period.
+/// 3. **The timeout escalates — unless the caller forbids it.** A `--print`
+///    session can ignore `SIGTERM` in the middle of a request, so a `SIGKILL`
+///    follows after a grace period. That is right for a run that only *reads*,
+///    and wrong for one that writes: a `SIGKILL` landing inside `git commit`
+///    leaves `.git/index.lock` in somebody's working tree, and every git
+///    command they run afterwards fails with an error that does not mention
+///    this app. `escalate: false` sends the polite ask and then stops, because
+///    a slow run is a smaller problem than a wedged repository.
 /// 4. **Cancellation is honoured**, so quitting the app does not leave the
 ///    child running.
 public enum ProcessRunner {
@@ -75,7 +81,8 @@ public enum ProcessRunner {
                            workingDirectory: URL? = nil,
                            environment: [String: String] = ProcessRunner.environment(),
                            timeout: TimeInterval,
-                           grace: TimeInterval = 5) async throws -> ProcessResult {
+                           grace: TimeInterval = 5,
+                           escalate: Bool = true) async throws -> ProcessResult {
         guard FileManager.default.isExecutableFile(atPath: executable) else {
             throw ProcessRunnerError.notFound([executable])
         }
@@ -108,7 +115,8 @@ public enum ProcessRunner {
                 // A dedicated thread, not a dispatch queue. See `collect`.
                 Thread.detachNewThread {
                     let result = collect(from: process, out: out, err: err,
-                                         timeout: timeout, grace: grace)
+                                         timeout: timeout, grace: grace,
+                                         escalate: escalate)
                     continuation.resume(returning: result)
                 }
             }
@@ -143,7 +151,8 @@ public enum ProcessRunner {
     private static func collect(from process: Process,
                                 out: Pipe, err: Pipe,
                                 timeout: TimeInterval,
-                                grace: TimeInterval) -> ProcessResult {
+                                grace: TimeInterval,
+                                escalate: Bool = true) -> ProcessResult {
         let collector = OutputCollector()
         let readers = DispatchSemaphore(value: 0)
 
@@ -172,7 +181,12 @@ public enum ProcessRunner {
             while process.isRunning && Date() < hard {
                 Thread.sleep(forTimeInterval: 0.05)
             }
-            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            // Only when the caller allows it. A run that may be holding the
+            // index of a repository the user works in is left to finish, and
+            // reported as having overrun rather than killed.
+            if process.isRunning && escalate {
+                kill(process.processIdentifier, SIGKILL)
+            }
         }
 
         process.waitUntilExit()

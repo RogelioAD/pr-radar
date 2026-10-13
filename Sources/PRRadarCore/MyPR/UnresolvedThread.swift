@@ -13,10 +13,21 @@ public struct UnresolvedThread: Equatable, Sendable, Identifiable, Codable {
     public struct Comment: Equatable, Sendable, Codable {
         public let author: String
         public let body: String
+        /// GitHub's node id. Optional, and defaulted, because it is not what
+        /// the row needs — the row needs who said it and what they said, and
+        /// has drawn both since before this field existed. It is here for the
+        /// notification, which has a harder problem: saying a thing once.
+        public var id: String?
+        /// When it was said, so a burst of comments can be ordered and the
+        /// newest one named.
+        public var createdAt: Date?
 
-        public init(author: String, body: String) {
+        public init(author: String, body: String,
+                    id: String? = nil, createdAt: Date? = nil) {
             self.author = author
             self.body = body
+            self.id = id
+            self.createdAt = createdAt
         }
     }
 

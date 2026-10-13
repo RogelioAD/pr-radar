@@ -15,6 +15,26 @@ struct MyPRStackView: View {
     /// first would be quietly wrong about the rest.
     var accountLabel: (MyPullRequest) -> String? = { _ in nil }
     let onOpen: (MyPullRequest) -> Void
+    /// Everything a row inside a card can do, forwarded per member.
+    ///
+    /// None of this was here, and that was a bug waiting to be noticed: a card
+    /// drew rows that could not open their own threads, so the same pull
+    /// request behaved differently depending on whether something else happened
+    /// to be stacked on it. A Resolve button that worked everywhere *except*
+    /// inside a stack would have been the same bug with higher stakes, since a
+    /// stack is exactly where answering threads matters most.
+    var showingThreads: (MyPullRequest) -> Bool = { _ in false }
+    var onToggleThreads: ((MyPullRequest) -> Void)?
+    var resolveRecord: (MyPullRequest) -> ResolveRecord? = { _ in nil }
+    var resolveBlock: (MyPullRequest) -> ResolveBlock? = { _ in nil }
+    var showingResolve: (MyPullRequest) -> Bool = { _ in false }
+    var acting: (MyPullRequest) -> Bool = { _ in false }
+    var onResolve: ((MyPullRequest, ResolveScope) -> Void)?
+    var onUpdateBranch: ((MyPullRequest) -> Void)?
+    var onStop: ((MyPullRequest) -> Void)?
+    var onToggleResolve: ((MyPullRequest) -> Void)?
+    var onResolveAction: ((MyPullRequest, ResolveCoordinator.Action) -> Void)?
+    var onSetResolveRow: ((MyPullRequest, String, Bool) -> Void)?
 
     var body: some View {
         VStack(spacing: Layout.rowSpacing) {
@@ -25,7 +45,25 @@ struct MyPRStackView: View {
                             onOpen: { onOpen(item) },
                             stackPosition: stack.position(of: item),
                             stackDepth: stack.depth,
-                            width: Layout.stackRowWidth)
+                            width: Layout.stackRowWidth,
+                            showingThreads: showingThreads(item),
+                            onToggleThreads: onToggleThreads.map { act in { act(item) } },
+                            resolve: resolveRecord(item),
+                            resolveBlock: resolveBlock(item),
+                            showingResolve: showingResolve(item),
+                            onResolve: onResolve.map { act in
+                                { scope in act(item, scope) }
+                            },
+                            onUpdateBranch: onUpdateBranch.map { act in { act(item) } },
+                            onStop: onStop.map { act in { act(item) } },
+                            onToggleResolve: onToggleResolve.map { act in { act(item) } },
+                            onResolveAction: onResolveAction.map { act in
+                                { action in act(item, action) }
+                            },
+                            onSetResolveRow: onSetResolveRow.map { act in
+                                { id, selected in act(item, id, selected) }
+                            },
+                            acting: acting(item))
             }
         }
         .padding(Layout.stackGroupPadding)

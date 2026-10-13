@@ -18,6 +18,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private enum Category {
         static let review = "review-request"
         static let update = "app-update"
+        static let comment = "pr-comment"
     }
 
     private enum Action {
@@ -39,6 +40,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                 identifier: Category.update,
                 actions: [UNNotificationAction(identifier: Action.open,
                                                title: "Open Release",
+                                               options: [.foreground])],
+                intentIdentifiers: []),
+            UNNotificationCategory(
+                identifier: Category.comment,
+                actions: [UNNotificationAction(identifier: Action.open,
+                                               title: "Open PR",
                                                options: [.foreground])],
                 intentIdentifiers: []),
         ])
@@ -69,6 +76,98 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
         for item in fresh { post(item) }
         return true
+    }
+
+    /// Notifies about comments on your own pull requests that have not been
+    /// announced before.
+    ///
+    /// The same shape as `notifyNewPings`, including the part that matters
+    /// most: **the first run seeds the store silently.** A new install with
+    /// four pull requests and thirty bot comments between them would otherwise
+    /// open with thirty banners describing a backlog the user has already read,
+    /// which is how somebody learns to turn a feature off in its first minute.
+    ///
+    /// Collapsed per pull request rather than one banner per comment. A push
+    /// wakes three bot reviewers at once and they answer within seconds of each
+    /// other; eleven banners for one push is the feature making the problem it
+    /// was built to solve worse.
+    ///
+    /// Returns whether anything fired, so the caller can react to the same edge
+    /// rather than working it out again — which is what the mascot's startle
+    /// hangs off for the review list.
+    @discardableResult
+    func notifyNewComments(in pullRequests: [MyPullRequest]) -> Bool {
+        guard Prefs.notifyComments else { return false }
+
+        let all = PRComment.harvest(from: pullRequests,
+                                    includingBots: Prefs.notifyBotComments)
+        var seen = Prefs.seenComments
+        let fresh = all.filter { !seen.contains($0.id) }
+        guard !fresh.isEmpty else { return false }
+
+        let isFirstRun = seen.isEmpty
+        // Everything currently visible is marked seen, not just what fired.
+        // A comment filtered out by the bot switch must not arrive in a burst
+        // the moment that switch is turned back on.
+        for comment in all { seen.insert(comment.id) }
+        Prefs.seenComments = seen
+        guard !isFirstRun else { return false }
+
+        for (_, group) in Dictionary(grouping: fresh, by: \.number) {
+            post(group)
+        }
+        return true
+    }
+
+    /// One banner for one pull request's worth of new comments.
+    private func post(_ comments: [PRComment]) {
+        // The newest is the one worth naming: `harvest` sorts oldest first, so
+        // a conversation reads to its latest turn rather than its first.
+        guard let latest = comments.last else { return }
+
+        let title = comments.count == 1
+            ? latest.headline
+            : "\(comments.count) new on #\(latest.number)"
+        let body = comments.count == 1
+            ? latest.body
+            : "\(spokenAuthors(of: comments)) · \(latest.body)"
+
+        guard isBundled, authorized else {
+            postViaOsascript(title: title, body: body)
+            return
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.userInfo = ["url": latest.url.absoluteString]
+        content.categoryIdentifier = Category.comment
+        // One stack per repository, matching the review banner's rule.
+        content.threadIdentifier = latest.repo
+        // Changes requested is the one that stops you shipping, so it is the
+        // one allowed to break through. Everything else can wait for the next
+        // time the drawer is opened.
+        if comments.contains(where: { $0.kind == .review(.changesRequested) }) {
+            content.interruptionLevel = .timeSensitive
+        }
+
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: latest.id, content: content, trigger: nil))
+    }
+
+    /// "alice and 2 others", for a banner with one line to say who.
+    private func spokenAuthors(of comments: [PRComment]) -> String {
+        var seen: [String] = []
+        for comment in comments where !seen.contains(comment.author) {
+            seen.append(comment.author)
+        }
+        switch seen.count {
+        case 0: return ""
+        case 1: return seen[0]
+        case 2: return "\(seen[0]) and \(seen[1])"
+        default: return "\(seen[0]) and \(seen.count - 1) others"
+        }
     }
 
     /// Announces a new PR Radar release. Clicking opens the release page.
