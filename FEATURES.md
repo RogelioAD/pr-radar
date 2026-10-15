@@ -927,11 +927,32 @@ The **author's name is never translated and never qualified** — who said it is
 fact. The 👓 sits on the text, so the row says *benjaminrevelo, rephrased* and
 never pretends to quote him. The original is one hover away, every time.
 
+### What you wait for
+
+The rows you have open, and nothing else. A collapsed row shows none of this,
+so translating everything in one undifferentiated pass meant the first thing
+back was as likely to be a comment you could not see as the one you were
+reading — the press appeared to do nothing for a minute, then changed something
+out of sight. Open rows go first; the rest follow, so that opening a row
+afterwards is instant.
+
+It runs at **low effort**, which is measured rather than assumed. At the default
+a batch of twenty came back in **83 seconds** having spent 8,028 tokens
+*thinking* about how to say things more plainly — deliberation over a job the
+model already knows. At low effort the same twenty take **25 seconds** and 1,830
+thinking tokens, cost a third as much, and read better: less hedged, more
+concrete, because there is no room left to qualify.
+
+Batches are eight rather than twenty for the same reason. The overhead is about
+ten seconds a call and then roughly seven tenths of a second an item, so a
+bigger batch is marginally cheaper per item and much worse to wait behind —
+twenty take 25 seconds before anything appears, eight take 14.
+
 ### What it costs
 
 Nearly nothing, which is why it is a toggle and not a budget line. It runs
-Haiku, needs no clone, no `gh` and no tools, and a batch of twenty rewrites is
-one call. A realistic drawer-full measured at **under three cents**.
+Haiku, needs no clone, no `gh` and no tools. A realistic drawer-full measured at
+**under three cents**.
 
 Readings are cached by a hash of the text they came from, so:
 

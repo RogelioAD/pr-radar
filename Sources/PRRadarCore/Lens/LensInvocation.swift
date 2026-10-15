@@ -118,6 +118,19 @@ public enum LensInvocation {
         ]
         arguments += disallowedTools
 
+        // Low, and measured rather than guessed. The default spends its time
+        // *thinking* about the rewrites: a batch of twenty came back in 83
+        // seconds having burnt 8,028 thinking tokens, which for "say this more
+        // plainly" is the model deliberating over a job it already knows how to
+        // do. At low effort the same twenty take 25 seconds and 1,830 thinking
+        // tokens, cost a third as much, and read better — less hedged and more
+        // concrete, because there is no room to qualify.
+        //
+        // This is the one place in the app where the cheap setting is also the
+        // right one, for the same reason the model is Haiku: there is no
+        // judgement here, only a transformation.
+        arguments += ["--effort", "low"]
+
         if let model = request.model, !model.isEmpty {
             arguments += ["--model", model]
         }
@@ -131,11 +144,16 @@ public enum LensInvocation {
 
     /// How many items go in one call.
     ///
-    /// Batched because the overhead is per-call, not per-item: a row with five
-    /// findings is one request. Capped because a pull request with forty
-    /// threads in one prompt is a long tail risk for no gain — two calls of
-    /// twenty cost the same and fail half as expensively.
-    public static let batchSize = 20
+    /// Eight, which is a latency choice rather than a cost one. The overhead is
+    /// per-call — around ten seconds of it — and then roughly seven tenths of a
+    /// second per item, so bigger batches are marginally cheaper per item and
+    /// much worse to wait for: twenty take 25 seconds before *anything* appears
+    /// on screen, eight take 14.
+    ///
+    /// What the reader actually waits for is the first batch covering what they
+    /// are looking at, so the right size is the smallest one that still
+    /// amortises the overhead.
+    public static let batchSize = 8
 
     public static func batches(of sources: [String]) -> [[String]] {
         guard !sources.isEmpty else { return [] }

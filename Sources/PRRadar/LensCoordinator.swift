@@ -22,6 +22,15 @@ final class LensCoordinator {
 
     private let state: AppState
     private var task: Task<Void, Never>?
+    /// Which run the current `task` is.
+    ///
+    /// Bumped whenever a run starts or is stopped, and checked before a
+    /// finishing run touches anything. Without it a run that was cancelled and
+    /// replaced still cleared `task` and `lensTranslating` on its way out —
+    /// so toggling the lens off and on again while a batch was in flight left
+    /// the new run with no handle, a spinner that had already stopped, and a
+    /// press that appeared to do nothing.
+    private var generation = 0
 
     /// Generous for what it is. A batch of twenty short rewrites through Haiku
     /// is seconds, and the ceiling exists for a hung process rather than a slow
@@ -35,7 +44,7 @@ final class LensCoordinator {
     /// `claude` process and the drawer is a menu-bar app; four of them starting
     /// at once because somebody opened the lens on a busy day is a visible
     /// stutter for a feature that is meant to feel like turning on a light.
-    private static let concurrency = 2
+    private static let concurrency = 3
 
     init(state: AppState) {
         self.state = state
@@ -52,9 +61,7 @@ final class LensCoordinator {
             // Nothing is thrown away. The readings stay cached, so switching
             // back is instant and free — and the run in flight is stopped,
             // because nobody is looking at what it would produce.
-            task?.cancel()
-            task = nil
-            state.lensTranslating = false
+            stop()
         }
     }
 
@@ -66,7 +73,14 @@ final class LensCoordinator {
     func translateVisible() {
         guard state.lensOn, state.claudePath != nil else { return }
 
-        let missing = state.lensStore.missing(from: state.lensSources)
+        // What is on screen first, then everything else. The second list is
+        // still worth asking for — a reading is cached by its text, so having
+        // it ready is what makes opening a row afterwards instant — but it must
+        // never be what the reader is waiting behind.
+        let visible = state.lensStore.missing(from: state.lensVisibleSources)
+        let rest = state.lensStore.missing(from: state.lensSources)
+            .filter { !visible.contains($0) }
+        let missing = visible + rest
         guard !missing.isEmpty else { return }
 
         // A run already going is left alone rather than restarted. Its batches
@@ -74,14 +88,20 @@ final class LensCoordinator {
         // grows — so restarting would re-ask for everything already in flight.
         guard task == nil else { return }
 
+        generation += 1
+        let mine = generation
         task = Task { [weak self] in
-            await self?.run(missing)
-            self?.task = nil
-            self?.state.lensTranslating = false
+            await self?.run(missing, generation: mine)
+            // Only if this is still the current run. A cancelled one that
+            // finishes late must not clear its successor's handle.
+            guard let self, self.generation == mine else { return }
+            self.task = nil
+            self.state.lensTranslating = false
         }
     }
 
     func stop() {
+        generation += 1
         task?.cancel()
         task = nil
         state.lensTranslating = false
@@ -89,7 +109,7 @@ final class LensCoordinator {
 
     // MARK: - Running
 
-    private func run(_ sources: [String]) async {
+    private func run(_ sources: [String], generation mine: Int) async {
         guard let claude = state.claudePath else { return }
         state.lensTranslating = true
 
@@ -102,7 +122,7 @@ final class LensCoordinator {
         // group would start all of them at once, and the throttle is the point.
         var index = 0
         while index < batches.count {
-            if Task.isCancelled { return }
+            if Task.isCancelled || generation != mine { return }
             let window = batches[index..<min(index + Self.concurrency, batches.count)]
 
             let results = await withTaskGroup(
@@ -119,7 +139,7 @@ final class LensCoordinator {
                 return collected
             }
 
-            if Task.isCancelled { return }
+            if Task.isCancelled || generation != mine { return }
             // Filed as each window lands rather than all at the end, so a long
             // run fills the drawer in as it goes instead of changing nothing
             // for a minute and then everything at once.
