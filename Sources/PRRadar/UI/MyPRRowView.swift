@@ -30,10 +30,20 @@ struct MyPRRowView: View {
     var onUpdateBranch: (() -> Void)?
     /// The plain-English reading for a comment, or nil for its own words.
     var lensReading: (String) -> String? = { _ in nil }
+    /// This row's key in the measurement maps, so the comments on it can report
+    /// where the drawer may stop. Empty when the row is not being measured.
+    var rowKey: String = ""
     /// Whether something on this row is mid-round-trip.
     var acting = false
 
     @State private var hovering = false
+    /// Which threads have their code open, by thread id.
+    ///
+    /// Local to the row and not persisted, exactly as the findings list's is.
+    /// Opening code changes the row's height and nothing else — unlike opening
+    /// the threads themselves, which widens the drawer and so has to live on
+    /// `AppState` where the panel can see it.
+    @State private var openCode: Set<String> = []
 
     var body: some View {
         HStack(alignment: .top, spacing: Self.gap) {
@@ -58,6 +68,7 @@ struct MyPRRowView: View {
                 pancakes(position: position)
             }
         }
+        .rowCutSpace(rowKey)
         .padding(.horizontal, Self.padding)
         .padding(.vertical, 8)
         // Definite, not `maxWidth: .infinity`: chips are `.fixedSize()`, so a
@@ -217,6 +228,39 @@ struct MyPRRowView: View {
         }
     }
 
+    /// Where a thread is, and what is worth saying about where it is.
+    ///
+    /// Drawn only when it has something in it: a thread GitHub named no path
+    /// for, which is not outdated, would otherwise contribute an empty row and
+    /// the gap above it.
+    @ViewBuilder
+    private func threadLocation(_ thread: UnresolvedThread) -> some View {
+        if thread.location != nil || thread.isOutdated {
+            HStack(spacing: 4) {
+                if let location = thread.location {
+                    CodeToggle(location: location,
+                               hasCode: thread.excerpt != nil,
+                               isOpen: openCode.contains(thread.id)) {
+                        if openCode.contains(thread.id) {
+                            openCode.remove(thread.id)
+                        } else {
+                            openCode.insert(thread.id)
+                        }
+                    }
+                }
+                // GitHub folds these away and so does the eye: still
+                // unresolved and still counted, but far likelier to be stale
+                // than unanswered.
+                if thread.isOutdated {
+                    Text("outdated")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .help("The code this was written against has changed since")
+                }
+            }
+        }
+    }
+
     /// The unresolved threads themselves, under the count that opened them.
     ///
     /// The count was always the whole of it — `3 open` tells you post has
@@ -234,31 +278,9 @@ struct MyPRRowView: View {
                 // not a decision; the thread put its location first and its
                 // diff hunk *always* on, so three threads was three hunks of
                 // code before a word of the conversation.
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        if let location = thread.location {
-                            Text(location)
-                                .font(.system(size: 9, design: .monospaced))
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(1)
-                                .truncationMode(.head)
-                        }
-                        // GitHub folds these away and so does the eye: still
-                        // unresolved and still counted, but far likelier to be
-                        // stale than unanswered.
-                        if thread.isOutdated {
-                            Text("outdated")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(.tertiary)
-                                .help("The code this was written against has "
-                                      + "changed since")
-                        }
-                    }
-                    if let excerpt = thread.excerpt {
-                        DiffHunkView(excerpt: excerpt)
-                    }
+                VStack(alignment: .leading, spacing: 3) {
                     ForEach(Array(thread.comments.enumerated()), id: \.offset) { _, comment in
-                        VStack(alignment: .leading, spacing: 0) {
+                        VStack(alignment: .leading, spacing: 1) {
                             // The name is never translated and never
                             // qualified. Who said it is a fact; the lens only
                             // ever touches what was said, and says so with its
@@ -266,10 +288,22 @@ struct MyPRRowView: View {
                             Text(comment.author)
                                 .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(.secondary)
+                            // Bounded the way a finding's summary is, at twice
+                            // the lines because this is prose rather than a
+                            // one-line verdict. The body is already cut to
+                            // `UnresolvedThread.bodyLimit` upstream, so this is
+                            // about one comment not dominating a thread rather
+                            // than about length — and the whole of it is on the
+                            // tooltip either way.
                             LensText(source: comment.body,
-                                     reading: lensReading(comment.body))
+                                     reading: lensReading(comment.body),
+                                     lineLimit: 4)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        // Each comment is a place the drag may land, so the
+                        // drawer snaps to the nearest comment rather than
+                        // treating six of them as one indivisible row.
+                        .rowCut(rowKey)
                     }
                     // Said rather than dropped: a thread cut off mid-argument
                     // reads as settled.
@@ -277,6 +311,12 @@ struct MyPRRowView: View {
                         Text("+\(thread.moreComments) more")
                             .font(.system(size: 9))
                             .foregroundStyle(.tertiary)
+                    }
+
+                    threadLocation(thread)
+
+                    if openCode.contains(thread.id), let excerpt = thread.excerpt {
+                        DisclosedCode(excerpt: excerpt)
                     }
                 }
                 .padding(.horizontal, 7)

@@ -12,6 +12,9 @@ import CoreGraphics
 ///   once the default is "fit everything".
 /// - A settled height lands on a row boundary. A drawer that ends halfway
 ///   through a row looks broken, and hides the fact that there is more below.
+///   The one exception is a row too tall to fit the screen at all, where no row
+///   boundary is reachable and the screen's cap becomes a stop of its own —
+///   see `stops(rowHeights:itemCount:limit:)`.
 /// - While a drag is *in progress* it is clamped but **not** snapped, so the
 ///   edge tracks the pointer smoothly. Snapping every frame makes the drag
 ///   lurch from row to row instead of following the hand.
@@ -70,32 +73,90 @@ public struct DrawerSizing: Sendable {
         return (1...itemCount).map { contentHeight(rowHeights: rowHeights, rows: $0) }
     }
 
-    /// Largest boundary that fits inside `limit`, or the smallest boundary when
-    /// even one row will not fit — one clipped row beats an empty drawer.
+    /// Each row's height, with the estimate standing in for rows that have not
+    /// reported one yet.
+    public func heights(rowHeights: [CGFloat], itemCount: Int) -> [CGFloat] {
+        guard itemCount > 0 else { return [] }
+        return (0..<itemCount).map {
+            $0 < rowHeights.count ? rowHeights[$0] : estimatedRowHeight
+        }
+    }
+
+    /// The heights the drawer may actually settle at, given a ceiling.
+    ///
+    /// The row boundaries that fit — **plus the ceiling itself, but only when
+    /// some single row is too tall to be shown inside it at all.**
+    ///
+    /// That qualification is the whole of this method. Snapping to row edges is
+    /// the behaviour to keep: a drawer ending halfway through a row looks
+    /// broken, and giving up a few points of screen to land on an edge is the
+    /// trade that buys it. What is *not* acceptable is giving up most of the
+    /// screen.
+    ///
+    /// The failure this fixes: a pull request with six comments open makes one
+    /// row around 900 points tall. With rows of 80, 900 and 80 under a
+    /// 700-point ceiling the boundaries are 86, 990 and 1074, and only the
+    /// first fits. The drawer defaulted to 86 — one row — and a drag out to 690
+    /// snapped all the way back to it on release. Six comments were reachable
+    /// only by scrolling a drawer one row high.
+    ///
+    /// The test is whether a row could *ever* be landed on, not whether it
+    /// happens to fit right now. A row taller than the entire ceiling can never
+    /// be shown whole however far the drawer opens, so no boundary past it is
+    /// reachable and scrolling is already the only way to read it. Admitting
+    /// the ceiling there lets the drawer open as far as the screen allows,
+    /// which is what the cap was always for.
+    ///
+    /// Where every row *can* fit, this is the boundary list unchanged — so a
+    /// list of ordinary rows still lands on edges exactly as before, including
+    /// when the ceiling falls between two of them.
+    public func stops(rowHeights: [CGFloat],
+                      itemCount: Int,
+                      limit: CGFloat) -> [CGFloat] {
+        let boundaries = rowBoundaries(rowHeights: rowHeights, itemCount: itemCount)
+        let fitting = boundaries.filter { $0 <= limit }
+        // Not even the first row fits. One clipped row beats a sliver of
+        // drawer, and the window is capped to the screen downstream anyway.
+        guard !fitting.isEmpty else { return [boundaries[0]] }
+        // Showing a row on its own still costs the list's padding, so that is
+        // what "could this row ever be landed on" has to measure against.
+        let tallest = heights(rowHeights: rowHeights, itemCount: itemCount).max() ?? 0
+        guard tallest + listPadding > limit else { return fitting }
+        return fitting + [limit]
+    }
+
+    /// Largest height that fits inside `limit`, which is the default: show
+    /// everything the screen can hold.
     public func largestBoundary(within limit: CGFloat,
                                 rowHeights: [CGFloat],
                                 itemCount: Int) -> CGFloat {
-        let boundaries = rowBoundaries(rowHeights: rowHeights, itemCount: itemCount)
-        return boundaries.last { $0 <= limit } ?? boundaries[0]
+        stops(rowHeights: rowHeights, itemCount: itemCount, limit: limit).last
+            ?? rowBoundaries(rowHeights: rowHeights, itemCount: itemCount)[0]
     }
 
-    /// Snaps to whichever boundary is closest, so a drag settles on a row edge.
+    /// Snaps to whichever stop is closest, so a drag settles on a row edge —
+    /// or, where no row edge is reachable, on the screen's cap.
     public func snap(_ requested: CGFloat,
                      rowHeights: [CGFloat],
                      itemCount: Int,
                      limit: CGFloat? = nil) -> CGFloat {
         let ceiling = limit ?? (maxHeight - chromeHeight)
-        let boundaries = rowBoundaries(rowHeights: rowHeights, itemCount: itemCount)
-            .filter { $0 <= ceiling }
-        guard let first = boundaries.first else {
-            // Not even one row fits; the cap is all there is.
+        let candidates = stops(rowHeights: rowHeights, itemCount: itemCount,
+                               limit: ceiling)
+        guard let first = candidates.first else {
+            // A ceiling of zero or less, which nothing on screen can honour.
             return rowBoundaries(rowHeights: rowHeights, itemCount: itemCount)[0]
         }
-        return boundaries.min { abs($0 - requested) < abs($1 - requested) } ?? first
+        return candidates.min { abs($0 - requested) < abs($1 - requested) } ?? first
     }
 
     /// Clamps a height to between one row and the whole list, without snapping.
     /// Used while dragging, where the edge should follow the pointer.
+    ///
+    /// Deliberately *not* routed through `stops`. Mid-drag the edge tracks the
+    /// hand, so every height in the range is legal — the stops only decide
+    /// where it settles on release. Clamping to them made the edge stick at the
+    /// last whole row and fight the pointer for the rest of the screen.
     public func clamp(_ requested: CGFloat,
                       rowHeights: [CGFloat],
                       itemCount: Int,

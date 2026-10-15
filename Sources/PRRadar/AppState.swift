@@ -936,6 +936,13 @@ final class AppState: ObservableObject {
 
     /// Measured height of each row, keyed by a surface-namespaced row id.
     @Published var rowHeights: [String: CGFloat] = [:]
+
+    /// Where inside each row the drawer may stop, keyed as the heights are.
+    ///
+    /// Offsets from a row's own top — the bottom edge of each comment or
+    /// finding showing on it. Empty for a closed row, which is then a single
+    /// stop exactly as before.
+    @Published var rowCuts: [String: [CGFloat]] = [:]
     /// Row-list height the user dragged to, per surface: My PR rows are far
     /// taller than review rows and a shelf row is shorter than either, so a
     /// single shared height would fight itself.
@@ -1140,8 +1147,13 @@ final class AppState: ObservableObject {
     /// while the pancake filter is the only thing showing.
     func rowCount(for surface: DrawerSurface) -> Int {
         switch surface {
-        case .reviews: return displayedItems.count
-        case .mine: return displayedMyPRs.count
+        // The number of *stops*, which is no longer the number of pull
+        // requests: a row with its findings or threads open is split into one
+        // stop per thing showing. `max` rather than the measured count alone,
+        // so a list that has not reported yet still gets a boundary per row
+        // from the estimates.
+        case .reviews: return max(displayedItems.count, rowHeights(for: .reviews).count)
+        case .mine: return max(displayedMyPRs.count, rowHeights(for: .mine).count)
         // A grid row, not a trophy. The drawer snaps to what the eye reads as
         // a line, and nobody reads a shelf a trophy at a time.
         case .trophies: return trophyRows.count
@@ -1167,15 +1179,21 @@ final class AppState: ObservableObject {
             // middle of it had not been drawn yet. Keeping every position and
             // filling the gaps with the estimate is what makes the index mean
             // what the sizing thinks it means.
-            return displayedItems.map {
-                rowHeights[rowKey(.reviews, $0.id)]
-                    ?? Layout.estimatedRowHeight(for: .reviews)
+            return displayedItems.flatMap { item -> [CGFloat] in
+                let key = rowKey(.reviews, item.id)
+                guard let measured = rowHeights[key] else {
+                    return [Layout.estimatedRowHeight(for: .reviews)]
+                }
+                return segments(of: measured, key: key)
             }
         case .mine:
             return MyPRGrouping.stopHeights(
                 units: displayedMyPRUnits,
                 stackChrome: Layout.stackGroupPadding * 2,
-                height: { rowHeights[rowKey(.mine, $0.id)] })
+                height: { rowHeights[rowKey(.mine, $0.id)] },
+                segments: { item, measured in
+                    segments(of: measured, key: rowKey(.mine, item.id))
+                })
         case .trophies:
             return trophyRows.indices.compactMap {
                 rowHeights[rowKey(.trophies, TrophyGrid.rowID($0))]
@@ -1193,6 +1211,16 @@ final class AppState: ObservableObject {
                 rowHeights[rowKey(.review, $0.id)]
             }
         }
+    }
+
+    /// One row, split into the pieces the drag may land between.
+    ///
+    /// The row itself when nothing on it is open, which is every row on four of
+    /// the six surfaces and most rows on the other two.
+    private func segments(of measured: CGFloat, key: String) -> [CGFloat] {
+        guard let cuts = rowCuts[key], !cuts.isEmpty else { return [measured] }
+        return RowSegments.split(height: measured, cuts: cuts,
+                                 spacing: Layout.rowSpacing)
     }
 
     var activeRowCount: Int { rowCount(for: activeSurface) }

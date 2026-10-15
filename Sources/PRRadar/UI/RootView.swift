@@ -10,6 +10,7 @@ struct RootView: View {
     let onCollapse: () -> Void
     let onRefresh: () -> Void
     let onRowHeights: ([String: CGFloat]) -> Void
+    let onRowCuts: ([String: [CGFloat]]) -> Void
     let onSelectTab: (DrawerTab) -> Void
     let onToggleFindings: (String) -> Void
     let onToggleThreads: (String) -> Void
@@ -28,6 +29,7 @@ struct RootView: View {
                            onCollapse: onCollapse,
                            onRefresh: onRefresh,
                            onRowHeights: onRowHeights,
+                           onRowCuts: onRowCuts,
                            onSelectTab: onSelectTab,
                            onToggleFindings: onToggleFindings,
                            onToggleThreads: onToggleThreads,

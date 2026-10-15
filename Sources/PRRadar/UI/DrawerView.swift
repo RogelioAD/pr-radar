@@ -10,6 +10,27 @@ struct RowHeightsKey: PreferenceKey {
     }
 }
 
+/// Where inside a row the drawer may stop, keyed the same way heights are.
+///
+/// Offsets from the row's own top, one per comment or finding on it. A row with
+/// nothing open reports none and stays a single stop; an open one becomes as
+/// many stops as it has things showing, so a drag can settle on the nearest
+/// comment instead of choosing between a collapsed row and all six.
+///
+/// Separate from `RowHeightsKey` rather than folded into it because the two are
+/// measured against different things — a height is the row, a cut is a position
+/// inside it — and because every surface reports heights while only two report
+/// cuts.
+struct RowCutsKey: PreferenceKey {
+    static var defaultValue: [String: [CGFloat]] = [:]
+    static func reduce(value: inout [String: [CGFloat]],
+                       nextValue: () -> [String: [CGFloat]]) {
+        // Appended, not replaced: each comment reports its own cut under the
+        // row's key, so the row's list is built from several contributions.
+        value.merge(nextValue()) { $0 + $1 }
+    }
+}
+
 /// Frames of the controls the header carries, in the drawer's own coordinate
 /// space. The header doubles as the window's drag handle, so the panel needs to
 /// know where they are to leave their clicks to SwiftUI.
@@ -32,6 +53,10 @@ struct DrawerView: View {
     let onCollapse: () -> Void
     let onRefresh: () -> Void
     let onRowHeights: ([String: CGFloat]) -> Void
+    /// Where inside each row the drawer may stop. Reported with the heights
+    /// because they are read together and a stale pairing sizes the list to
+    /// cuts that belong to a layout it no longer has.
+    let onRowCuts: ([String: [CGFloat]]) -> Void
     let onSelectTab: (DrawerTab) -> Void
     /// Opening a findings list resizes the drawer, so it goes through the panel
     /// rather than straight into the state the way the ticks do.
@@ -696,7 +721,8 @@ struct DrawerView: View {
                                 onRemoveComment: {
                                     state.removeAuthoredComment($0, on: item)
                                 },
-                                lensReading: { state.lensReading(for: $0) }) {
+                                lensReading: { state.lensReading(for: $0) },
+                                rowKey: state.rowKey(.reviews, item.id)) {
                             onOpen(item)
                         }
                     }
@@ -705,6 +731,7 @@ struct DrawerView: View {
                 .padding(.vertical, 6)
             }
             .onPreferenceChange(RowHeightsKey.self, perform: onRowHeights)
+            .onPreferenceChange(RowCutsKey.self, perform: onRowCuts)
         }
     }
 
@@ -734,6 +761,7 @@ struct DrawerView: View {
                                         onToggleThreads: { onToggleThreads(item.id) },
                                         onUpdateBranch: { state.updateBranch(item) },
                                         lensReading: { state.lensReading(for: $0) },
+                                        rowKey: state.rowKey(.mine, item.id),
                                         acting: state.rowActions.isActing(on: item.id))
                         case .stack(let stack):
                             MyPRStackView(stack: stack, now: state.clock,
@@ -748,7 +776,8 @@ struct DrawerView: View {
                                           onToggleThreads: { onToggleThreads($0.id) },
                                           acting: { state.rowActions.isActing(on: $0.id) },
                                           onUpdateBranch: { state.updateBranch($0) },
-                                          lensReading: { state.lensReading(for: $0) })
+                                          lensReading: { state.lensReading(for: $0) },
+                                          rowKey: { state.rowKey(.mine, $0.id) })
                         }
                     }
                 }
@@ -756,6 +785,7 @@ struct DrawerView: View {
                 .padding(.vertical, 6)
             }
             .onPreferenceChange(RowHeightsKey.self, perform: onRowHeights)
+            .onPreferenceChange(RowCutsKey.self, perform: onRowCuts)
         }
     }
 

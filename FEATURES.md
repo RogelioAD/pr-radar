@@ -237,7 +237,12 @@ terminal runs better. Naming the state turned out to be the useful half.
 ### Everything else on the row
 
 - **Open threads** — unresolved review threads, or a grey count when all are
-  resolved.
+  resolved. Opening one reads like a findings list on the Reviews tab, because
+  a review thread and a finding are the same kind of thing: what was said,
+  then `file:line`, then — if you click it — the code. The two share one
+  control (`CodeToggle`) rather than agreeing twice. They did not, and the
+  difference was never a decision: a thread showed its diff hunk permanently,
+  so three threads was three hunks of code before a word of the conversation.
 - **Merge blocker** — `ready`, `needs review`, `draft`.
 - **Changes requested**, naming who.
 - **Stack position** — `stacked on #100` on a child, and `restacks #101` on its
@@ -395,6 +400,20 @@ hidden until it has to be.
   onto the nearest whole row** when you let go, so the drawer never ends
   halfway through an item. Snapping during the drag was tried first and felt
   like lurching; quantising every frame stops it tracking your hand.
+- **A row taller than the screen gets the screen.** Landing on row edges means
+  giving up a few points at the bottom, which is the trade that buys it — but
+  one row can be much taller than the rest, and a pull request with six
+  comments open is exactly that. With rows of 50, 600 and 50 under a 400-point
+  ceiling, every row boundary past the first is out of reach, and the drawer
+  used to collapse back to a single 62-point row however far you dragged it.
+  So when a row is too tall to ever be shown whole, the screen's own cap
+  becomes a stop alongside the row edges: the drawer opens the whole way and
+  that row scrolls. Lists of ordinary rows are untouched and still give up the
+  odd few points to land on an edge.
+- **Open comments are stops of their own.** A row with its threads open is one
+  row to the layout and several to the eye — the same thing a stack card is,
+  and flattened the same way, one entry per comment. Without it the drag had
+  nothing to land on between "closed" and "all six".
 - The handle is **always available**, since there is always something to
   adjust. The pointer becomes **up/down arrows** over it and a plain arrow
   either side of it, so the two halves of the edge never look the same, and a
