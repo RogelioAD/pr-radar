@@ -32,6 +32,7 @@ struct MyPRStackView: View {
     var onToggleThreads: ((MyPullRequest) -> Void)?
     var acting: (MyPullRequest) -> Bool = { _ in false }
     var onUpdateBranch: ((MyPullRequest) -> Void)?
+    var lensReading: (String) -> String? = { _ in nil }
 
     var body: some View {
         VStack(spacing: Layout.rowSpacing) {
@@ -46,6 +47,7 @@ struct MyPRStackView: View {
                             showingThreads: showingThreads(item),
                             onToggleThreads: onToggleThreads.map { act in { act(item) } },
                             onUpdateBranch: onUpdateBranch.map { act in { act(item) } },
+                            lensReading: lensReading,
                             acting: acting(item))
             }
         }

@@ -320,6 +320,7 @@ struct DrawerView: View {
             Text("PR Radar")
                 .font(.system(size: 12.5, weight: .semibold))
             Spacer()
+            lensToggle
             updateChip
             Button(action: onCollapse) {
                 Image(systemName: "xmark")
@@ -333,6 +334,52 @@ struct DrawerView: View {
         .padding(.horizontal, 12)
         .frame(height: Layout.headerHeight - Layout.resizeEdge)
         .contentShape(Rectangle())
+    }
+
+    /// The lens: review language in plain English, for reading only.
+    ///
+    /// In the header rather than on each row because it is a statement about
+    /// how you are reading, not an action on one pull request — the same reason
+    /// the mascot cycles from up here. Pressing it translates everything on
+    /// screen that has no reading yet; pressing it again puts the original
+    /// words back without discarding anything, so the second press and every
+    /// one after it is free.
+    ///
+    /// Absent in a room, where there is no list to put a lens over. Absent
+    /// rather than disabled: a control that cannot do anything in four of the
+    /// five places it appears is chrome you learn to ignore in the fifth.
+    @ViewBuilder
+    private var lensToggle: some View {
+        if state.room == nil {
+            Button { state.toggleLens() } label: {
+                // One glyph in three states, rather than three glyphs: off is
+                // grey, on is tinted, and working pulses. A second symbol for
+                // the working state would read as a different control arriving
+                // for a few seconds and leaving again.
+                Image(systemName: "eyeglasses")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(state.lensOn ? Color.accentColor : .secondary)
+                    .symbolEffect(.pulse, isActive: state.lensTranslating)
+                    .frame(width: 18, height: Layout.headerHeight - Layout.resizeEdge)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(state.claudePath == nil)
+            .help(lensHelp)
+            .headerControl()
+        }
+    }
+
+    private var lensHelp: String {
+        if state.claudePath == nil {
+            return "Claude Code was not found, so there is nothing to translate with."
+        }
+        if state.lensTranslating { return "Reading it back in plain English…" }
+        return state.lensOn
+            ? "Showing plain English. Hover any line for the original. "
+                + "Click to put the original words back."
+            : "Read the findings and comments back in plain English. "
+                + "Nothing posted ever changes — this is a lens, not an edit."
     }
 
     /// The shelf's way in, beside the title.
@@ -649,7 +696,7 @@ struct DrawerView: View {
                                 onRemoveComment: {
                                     state.removeAuthoredComment($0, on: item)
                                 },
-                                ) {
+                                lensReading: { state.lensReading(for: $0) }) {
                             onOpen(item)
                         }
                     }
@@ -686,6 +733,7 @@ struct DrawerView: View {
                                         showingThreads: state.openThreads.contains(item.id),
                                         onToggleThreads: { onToggleThreads(item.id) },
                                         onUpdateBranch: { state.updateBranch(item) },
+                                        lensReading: { state.lensReading(for: $0) },
                                         acting: state.rowActions.isActing(on: item.id))
                         case .stack(let stack):
                             MyPRStackView(stack: stack, now: state.clock,
@@ -699,7 +747,8 @@ struct DrawerView: View {
                                           },
                                           onToggleThreads: { onToggleThreads($0.id) },
                                           acting: { state.rowActions.isActing(on: $0.id) },
-                                          onUpdateBranch: { state.updateBranch($0) })
+                                          onUpdateBranch: { state.updateBranch($0) },
+                                          lensReading: { state.lensReading(for: $0) })
                         }
                     }
                 }

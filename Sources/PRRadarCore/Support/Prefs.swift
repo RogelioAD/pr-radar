@@ -47,6 +47,10 @@ public enum Prefs {
         static let reviewBudget = "review.budget"
         static let reviewMaxPerHour = "review.maxPerHour"
         static let reviewLog = "review.log"
+        static let lensOn = "lens.on"
+        static let lensModel = "lens.model"
+        static let lensBudget = "lens.budget"
+        static let lensStore = "lens.store"
 
     }
 
@@ -491,6 +495,62 @@ public enum Prefs {
             let trimmed = newValue.count > 600 ? Set(newValue.prefix(600)) : newValue
             defaults.set(Array(trimmed), forKey: Key.seenComments)
         }
+    }
+
+    // MARK: - The plain-English lens
+
+    /// Whether the drawer is currently showing plain-English readings.
+    ///
+    /// Persisted, unlike most view state, because it is a statement about how
+    /// somebody reads rather than about this minute: a developer who wants
+    /// review language unpacked wants it unpacked tomorrow too, and a lens that
+    /// switched itself off at every launch would be a setting pretending to be
+    /// a toggle.
+    public static var lensOn: Bool {
+        get { defaults.bool(forKey: Key.lensOn) }
+        set { defaults.set(newValue, forKey: Key.lensOn) }
+    }
+
+    /// The model that does the rewriting.
+    ///
+    /// Haiku by default, and this is the one place in the app where the cheap
+    /// model is also the right one. Reviewing is judgement and resolving was
+    /// surgery; this is a mechanical transformation of a paragraph with no code
+    /// to read and no decision to make. Paying Opus prices to simplify a
+    /// sentence would be the kind of cost nobody notices until the month's bill.
+    public static var lensModel: String {
+        get { defaults.string(forKey: Key.lensModel) ?? "claude-haiku-4-5-20251001" }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { defaults.removeObject(forKey: Key.lensModel) }
+            else { defaults.set(trimmed, forKey: Key.lensModel) }
+        }
+    }
+
+    /// The ceiling on one lens run, in dollars. Zero means no ceiling.
+    ///
+    /// Low on purpose, and low in a way the other two budgets are not: a run
+    /// here is a few thousand tokens through the cheapest model, so a ceiling
+    /// of one dollar is roughly a hundred times what a batch should cost. It is
+    /// here to catch a runaway, not to ration a feature.
+    public static var lensBudget: Double {
+        get {
+            guard defaults.object(forKey: Key.lensBudget) != nil else { return 1 }
+            return defaults.double(forKey: Key.lensBudget)
+        }
+        set { defaults.set(max(0, newValue), forKey: Key.lensBudget) }
+    }
+
+    /// The readings themselves.
+    ///
+    /// Persisted because they are expensive to make and never go stale: a
+    /// reading is keyed by a hash of its source text, so the only thing that
+    /// invalidates one is the text changing, and changed text keys elsewhere.
+    /// Carrying them across a relaunch means the lens comes back instantly on
+    /// everything already read, and costs nothing to do so.
+    public static var lensStore: LensStore {
+        get { LensStore.decoded(from: defaults.data(forKey: Key.lensStore)) }
+        set { defaults.set(newValue.encoded(), forKey: Key.lensStore) }
     }
 
     // MARK: - Retired settings

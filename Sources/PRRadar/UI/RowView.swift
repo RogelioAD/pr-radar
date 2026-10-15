@@ -33,6 +33,12 @@ struct RowView: View {
     /// keep what was typed when it did not.
     var onAddComment: ((PreparedFinding) -> Bool)?
     var onRemoveComment: ((String) -> Void)?
+    /// The plain-English reading for a piece of text, or nil for its own words.
+    ///
+    /// A lookup rather than a flag and a store, so this row cannot accidentally
+    /// read one while the lens is off: `AppState.lensReading` returns nil then,
+    /// and there is nothing else here to consult.
+    var lensReading: (String) -> String? = { _ in nil }
     let onOpen: () -> Void
 
     @State private var hovering = false
@@ -461,17 +467,16 @@ struct RowView: View {
                 Button {
                     onSetFinding?(prepared.id, !prepared.isSelected)
                 } label: {
-                    Text(prepared.finding.summary)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(prepared.isSelected ? .primary : .secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // The tick beside this still posts the finding's own words.
+                    // What the lens changes is what you read, never what goes.
+                    LensText(source: prepared.finding.summary,
+                             reading: lensReading(prepared.finding.summary),
+                             lineLimit: 2,
+                             dimmed: !prepared.isSelected)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(prepared.finding.recommendation)
 
                     HStack(spacing: 4) {
                         if let location = prepared.location {

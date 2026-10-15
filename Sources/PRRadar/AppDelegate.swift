@@ -40,6 +40,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return coordinator
     }()
 
+    private lazy var lens: LensCoordinator = {
+        let coordinator = LensCoordinator(state: state)
+        state.lens = coordinator
+        return coordinator
+    }()
+
     private let pathMonitor = NWPathMonitor()
     /// Assumed true until the monitor says otherwise, so a slow first callback
     /// cannot swallow the launch fetch.
@@ -74,6 +80,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notifier.prepare()
         installStatusItem()
         state.onWidgetVisibilityChanged = { [weak self] in self?.panel.syncVisibility() }
+        // Touched so the lazy initialiser runs and `state.lens` is set before
+        // the header button can be pressed. Otherwise the first press of the
+        // lens does nothing, and only a poll would fix it.
+        _ = lens
 
         panel = PanelController(state: state)
         panel.onOpen = { [weak self] item in
@@ -364,6 +374,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // every time be reading the *previous* poll's comments.
         notifier.notifyNewComments(in: mine)
         validateRepoFilter()
+        // Costs nothing when the lens is off, and one set lookup per visible
+        // item when it is on and nothing new arrived. Only genuinely new text
+        // starts a process.
+        lens.translateVisible()
+        // Readings for text nobody can see again are dropped. Keyed by their
+        // source, so this is the only thing that ever shrinks the store.
+        state.lensStore.prune(keeping: state.lensKeepable)
         Log.debug("my PRs: \(mine.count), ready to merge: \(state.myPRsReadyToMerge)")
 
         // Once both tabs have landed, never between them: a third of the rules
