@@ -15,6 +15,13 @@ struct MyPRStackView: View {
     /// first would be quietly wrong about the rest.
     var accountLabel: (MyPullRequest) -> String? = { _ in nil }
     let onOpen: (MyPullRequest) -> Void
+    /// The width the card is laid out at, which follows the drawer's.
+    ///
+    /// Told rather than inferred, exactly as a loose row is: opening a review
+    /// thread on any PR doubles the drawer, including one inside a card, and a
+    /// card that assumed the standard width stayed narrow while the drawer
+    /// around it grew.
+    var width: CGFloat = Layout.listContentWidth
     /// Everything a row inside a card can do, forwarded per member.
     ///
     /// None of this was here, and that was a bug waiting to be noticed: a card
@@ -45,7 +52,7 @@ struct MyPRStackView: View {
                             onOpen: { onOpen(item) },
                             stackPosition: stack.position(of: item),
                             stackDepth: stack.depth,
-                            width: Layout.stackRowWidth,
+                            width: Layout.stackRowWidth(in: width),
                             showingThreads: showingThreads(item),
                             onToggleThreads: onToggleThreads.map { act in { act(item) } },
                             resolve: resolveRecord(item),

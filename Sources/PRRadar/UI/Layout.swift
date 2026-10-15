@@ -267,9 +267,18 @@ enum Layout {
 
     /// Breathing room inside a stack group's outline.
     static let stackGroupPadding: CGFloat = 6
-    /// What a row gets inside a stack card, which is the above less the card's
-    /// own padding — so the card lands at exactly `listContentWidth`.
-    static var stackRowWidth: CGFloat { listContentWidth - stackGroupPadding * 2 }
+    /// What a row gets inside a stack card: the width the card was given, less
+    /// the card's own padding — so the card lands at exactly that width.
+    ///
+    /// Takes the width rather than reading `listContentWidth` itself, because
+    /// the list's width is not a constant. Open a review thread and the drawer
+    /// doubles; a card that had computed its rows from the standard width drew
+    /// them at the old one and left half the drawer empty beside it. The
+    /// single rows never had this bug — they are handed the live width — and
+    /// the cards now get theirs the same way.
+    static func stackRowWidth(in contentWidth: CGFloat) -> CGFloat {
+        contentWidth - stackGroupPadding * 2
+    }
     /// Rounder than a row's 7, so the card reads as holding the rows rather
     /// than as one more of them.
     static let stackGroupRadius: CGFloat = 12
