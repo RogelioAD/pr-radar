@@ -28,6 +28,8 @@ struct MyPRRowView: View {
 
     /// Merges the base branch in, server-side. nil when the row cannot act.
     var onUpdateBranch: (() -> Void)?
+    /// The plain-English reading for a comment, or nil for its own words.
+    var lensReading: (String) -> String? = { _ in nil }
     /// Whether something on this row is mid-round-trip.
     var acting = false
 
@@ -257,14 +259,15 @@ struct MyPRRowView: View {
                     }
                     ForEach(Array(thread.comments.enumerated()), id: \.offset) { _, comment in
                         VStack(alignment: .leading, spacing: 0) {
+                            // The name is never translated and never
+                            // qualified. Who said it is a fact; the lens only
+                            // ever touches what was said, and says so with its
+                            // own mark rather than by hedging the author.
                             Text(comment.author)
                                 .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(.secondary)
-                            Text(comment.body)
-                                .font(.system(size: 10.5))
-                                .foregroundStyle(.primary)
-                                .multilineTextAlignment(.leading)
-                                .fixedSize(horizontal: false, vertical: true)
+                            LensText(source: comment.body,
+                                     reading: lensReading(comment.body))
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }

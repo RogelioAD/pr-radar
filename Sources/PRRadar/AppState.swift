@@ -331,6 +331,91 @@ final class AppState: ObservableObject {
         autoReviewLog[item.pingKey] = record
     }
 
+    // MARK: - The plain-English lens
+
+    /// Whether the drawer is showing plain-English readings.
+    ///
+    /// Flipped through `LensCoordinator.toggle()` rather than set directly from
+    /// a view, because switching it on is also what starts the translating.
+    @Published var lensOn: Bool = Prefs.lensOn {
+        didSet { Prefs.lensOn = lensOn }
+    }
+
+    /// Whether a lens run is in flight, for the header to say so.
+    ///
+    /// Live and never persisted: a run does not survive the app that started
+    /// it, and a spinner restored at launch would spin for ever.
+    @Published var lensTranslating = false
+
+    @Published var lensStore: LensStore = Prefs.lensStore {
+        didSet { Prefs.lensStore = lensStore }
+    }
+
+    weak var lens: LensCoordinator?
+
+    func toggleLens() { lens?.toggle() }
+
+    /// Every piece of text the lens would translate, for what is on screen now.
+    ///
+    /// Drawn from the *displayed* lists rather than everything fetched, which
+    /// is the difference between translating what you are looking at and
+    /// translating a filtered-out backlog you are not. A filter that hides
+    /// twenty rows should not spend anything on them.
+    ///
+    /// Only what a row actually renders: a finding's `summary` and a comment's
+    /// `body`. `detail` and `recommendation` are hover text, and hover text
+    /// stays in the original words by design — the reading is the lens, the
+    /// tooltip is the source.
+    var lensSources: [String] {
+        var sources: [String] = []
+        for item in displayedItems {
+            guard let record = review(for: item) else { continue }
+            for prepared in record.prepared + record.authored {
+                sources.append(prepared.finding.summary)
+            }
+        }
+        for pr in displayedMyPRs {
+            for thread in pr.unresolvedThreads {
+                for comment in thread.comments {
+                    sources.append(comment.body)
+                }
+            }
+        }
+        return sources
+    }
+
+    /// Everything fetched, filtered or not — what pruning keeps.
+    ///
+    /// Deliberately wider than `lensSources`. Translating is driven by what is
+    /// on screen, but *keeping* must not be: an author filter hides rows for as
+    /// long as it is set, and pruning against the visible list would throw away
+    /// their readings and buy them again the moment it is cleared.
+    var lensKeepable: [String] {
+        var sources: [String] = []
+        for item in items {
+            guard let record = review(for: item) else { continue }
+            for prepared in record.prepared + record.authored {
+                sources.append(prepared.finding.summary)
+            }
+        }
+        for pr in myPRs {
+            for thread in pr.unresolvedThreads {
+                for comment in thread.comments { sources.append(comment.body) }
+            }
+        }
+        return sources
+    }
+
+    /// The reading for a piece of text, or nil when there is not one.
+    ///
+    /// nil whenever the lens is off, so a view asking this question does not
+    /// also have to ask whether the feature is on. One place to get it wrong
+    /// instead of every call site.
+    func lensReading(for source: String) -> String? {
+        guard lensOn else { return nil }
+        return lensStore.reading(for: source)
+    }
+
     // MARK: - Finding things on disk
 
     /// One git call, for the two questions this type answers about the disk.

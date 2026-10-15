@@ -858,6 +858,85 @@ request, under your own name, that cannot be taken back.
 every row, because the state this feature exists to produce is otherwise
 reachable only by spending real money on somebody's real PR.
 
+## The plain-English lens
+
+Review language is written by people and bots who already know the codebase.
+*"Violates the residency invariant when a teardown races an acquisition"* is
+precise, correct, and takes a minute to unpack if you have not been living in
+that file. The lens unpacks it.
+
+The glasses in the drawer header turn it on. Every finding on Reviews and every
+thread comment on My PRs is rewritten in plain English, in place, marked with a
+👓 so you always know you are reading a paraphrase. Hovering any line gives you
+the original, in full. Pressing the glasses again puts the original words back.
+
+**Nothing you post ever changes.** This is the point of the feature and the
+thing it is built around rather than the thing it promises. The posted review is
+composed at post time out of `Finding` — `AutoReviewComment.threadBody` and
+`summaryLine` — and the readings live in a separate `LensStore` that the
+composer has never heard of. A reading cannot reach GitHub by any path, not
+because the posting code is careful but because it cannot see them. There is a
+test that fails if that ever stops being true.
+
+### What it will not do
+
+Every one of these is a way a reading could be worse than the sentence it
+replaced, so each is stated to the model rather than hoped for:
+
+- **It keeps the facts.** File names, identifiers, numbers and the condition
+  that triggers the bug all survive. Plain is not vague, and a reading that
+  drops *when* something goes wrong is worse than the jargon it simplified.
+- **It does not take a side.** No softening, no sharpening, no agreeing. If the
+  original is blunt the reading is blunt; if the original is wrong, the reading
+  is wrong in the same way. It is not a second reviewer.
+- **It does not add advice.** Nothing the original did not say.
+- **It does not invent an accusation.** A reading never says "you" where the
+  original did not. These are frequently one person's words about another
+  person's code, and "the pool can hand back a released player" becoming "you
+  released a player twice" is a different sentence about a different thing.
+- **It treats every item as untrusted.** A comment saying *ignore all previous
+  instructions* is text to translate, never a request to follow — and the run
+  has no tools at all, so a sentence that talked it into something would have
+  nothing to talk it into.
+
+### On your own PRs, the words are a colleague's
+
+The My PRs side translates thread comments, which real people wrote. Two rules
+follow, and both are visible rather than assumed:
+
+The **author's name is never translated and never qualified** — who said it is a
+fact. The 👓 sits on the text, so the row says *benjaminrevelo, rephrased* and
+never pretends to quote him. The original is one hover away, every time.
+
+### What it costs
+
+Nearly nothing, which is why it is a toggle and not a budget line. It runs
+Haiku, needs no clone, no `gh` and no tools, and a batch of twenty rewrites is
+one call. A realistic drawer-full measured at **under three cents**.
+
+Readings are cached by a hash of the text they came from, so:
+
+- The same sentence on two pull requests is translated once.
+- Switching the lens off and on again is free and instant.
+- They survive a relaunch, because a reading never goes stale — the text it came
+  from is immutable.
+- **Edited text misses the cache**, which is the one that matters. Somebody who
+  rewrites a comment has written something else, and serving the old reading
+  would be the single way this feature could actively mislead: confidently
+  plain, and about something that is no longer there.
+
+Readings are pruned to what is still in the fetch, not to what is on screen — an
+author filter hides rows without throwing away what they cost.
+
+### When it fails, nothing happens
+
+A lens run that times out, exits non-zero or comes back unreadable leaves the
+original words where they were. There is no error chip, no retry button and no
+failed state on a row, because the fallback is not a degraded experience — it is
+the app exactly as it was before the feature existed. A reading the parser
+cannot confidently place against the text it was made from is dropped for the
+same reason.
+
 ## Conflicts and being behind
 
 The two things a branch can need doing to it before it can merge, and the row
@@ -914,7 +993,39 @@ with no number rather than inventing one, exactly as a missing compare leaves
 says: an empty result means the two sources disagree, never that there is
 nothing to fix.
 
----
+## Resolve, and why it is gone
+
+PR Radar used to answer the threads on your own pull requests. A **Resolve**
+button on every My PRs row ran a skill in your own checkout of the branch: it
+read every unresolved thread, fixed what it could, ran the gates covering what
+it touched, committed, pushed, and replied — with a second mode that posted the
+replies itself and a third that only reported. It had an ordered guard over the
+checkout, a lease so two runs could not share a worktree, and a table you ticked
+before anything was posted.
+
+It was removed because **the thing it saved was never the slow part.**
+
+The run had to commit, and committing runs your repository's pre-commit hook.
+In the repository this was built for that hook is `cargo fmt --all`, then
+`cargo clippy --workspace --all-targets -- -D warnings`, then the rules doors,
+then `cargo nextest run --workspace`, then `cargo test --doc --workspace` —
+every one of them across the whole workspace, whatever the diff touched. A
+Kotlin-only change paid for the entire Rust workspace twice over.
+
+None of the settings could reach that. **How much it checks** scoped what the
+*session* ran and said so in as many words; the hook is the repository's and
+runs regardless. The only way past one is `--no-verify`, and that is a
+quality-gate bypass the feature refused to perform at any setting — correctly.
+So a run cost what doing it by hand costs, plus the model's time and the money,
+and handed back a table to read on top.
+
+What is left is everything that did not depend on it: the thread counts and the
+threads themselves on every row, the conflict count above, **Update base**, and
+automatic review, which only ever reads and never commits.
+
+The git-porcelain readers it rested on outlived it, in
+`Sources/PRRadarCore/Git/` — `GitWorktrees` still answers which of your trees
+holds a branch, and `MergeTree` still counts the conflicts above.
 
 ## The menu bar item
 
@@ -1002,39 +1113,7 @@ Forks can point the check at their own releases:
 defaults write com.yourname.prradar update.repo -string "you/your-fork"
 ```
 
-## Resolve, and why it is gone
-
-PR Radar used to answer the threads on your own pull requests. A **Resolve**
-button on every My PRs row ran a skill in your own checkout of the branch: it
-read every unresolved thread, fixed what it could, ran the gates covering what
-it touched, committed, pushed, and replied — with a second mode that posted the
-replies itself and a third that only reported. It had an ordered guard over the
-checkout, a lease so two runs could not share a worktree, and a table you ticked
-before anything was posted.
-
-It was removed because **the thing it saved was never the slow part.**
-
-The run had to commit, and committing runs your repository's pre-commit hook.
-In the repository this was built for that hook is `cargo fmt --all`, then
-`cargo clippy --workspace --all-targets -- -D warnings`, then the rules doors,
-then `cargo nextest run --workspace`, then `cargo test --doc --workspace` —
-every one of them across the whole workspace, whatever the diff touched. A
-Kotlin-only change paid for the entire Rust workspace twice over.
-
-None of the settings could reach that. **How much it checks** scoped what the
-*session* ran and said so in as many words; the hook is the repository's and
-runs regardless. The only way past one is `--no-verify`, and that is a
-quality-gate bypass the feature refused to perform at any setting — correctly.
-So a run cost what doing it by hand costs, plus the model's time and the money,
-and handed back a table to read on top.
-
-What is left is everything that did not depend on it: the thread counts and the
-threads themselves on every row, the conflict count above, **Update base**, and
-automatic review, which only ever reads and never commits.
-
-The git-porcelain readers it rested on outlived it, in
-`Sources/PRRadarCore/Git/` — `GitWorktrees` still answers which of your trees
-holds a branch, and `MergeTree` still counts the conflicts above.
+---
 
 ## Deliberate non-features
 
