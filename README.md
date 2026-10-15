@@ -278,6 +278,9 @@ anything**, which is what makes it pleasant to hand to an agent:
   them into a Swift literal, then writes a PNG to look at. Authoring a 48x48
   sprite by hand and getting it symmetric to the pixel is not realistic; the
   script is also where the non-obvious rules are written down.
+  `--dragon` draws the personal one, whose flame is deliberately *not* in the
+  drawing: it is painted per frame from the mood's `Breath`, so how far he is
+  breathing is a readout of what the app is doing.
 - `PRRADAR_DEBUG=1` prints a hit-test zone map of the real laid-out drawer, and
   of the collapsed badge's four corner grips — including a probe of the panel
   corner outside the art, which must read `move` — so drag, resize and click
@@ -298,12 +301,15 @@ Sources/PRRadarCore/Mascots/
                        the pixel-art characters as data — sprite grids, the
                        mood derivation, counter chips, and the layout rules
                        for composing them
-Sources/PRRadarCore/Resolve/
-                       answering threads on your own PRs: the ordered guard
-                       over a real checkout, the git-porcelain readers it
-                       rests on, the tool sets and framing for a headless
-                       session that writes, and the rules applied to what it
-                       returns
+Sources/PRRadarCore/Lens/
+                       the plain-English lens: the reading store keyed by
+                       source text, and the tool-less invocation that makes
+                       one. Kept apart from AutoReview/ on purpose — nothing
+                       that composes a posted review can see this
+Sources/PRRadarCore/Git/
+                       the git-porcelain readers: which worktree holds a
+                       branch, and what a merge of base into head would
+                       conflict on
 Sources/PRRadarCore/Trophies/
                        the thirty trophies: the roster, the drawings and the
                        composer that builds one from a frame, a metal and a

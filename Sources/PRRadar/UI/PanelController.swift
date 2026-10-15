@@ -176,7 +176,6 @@ final class PanelController {
             onSelectTab: { [weak self] in self?.selectTab($0) },
             onToggleFindings: { [weak self] in self?.toggleFindings($0) },
             onToggleThreads: { [weak self] in self?.toggleThreads($0) },
-            onToggleResolve: { [weak self] in self?.toggleResolve($0) },
             onToggleRoom: { [weak self] in self?.toggleRoom($0) },
             onResetBadgeSize: { [weak self] in self?.resetBadgeSize() },
             onBadgeSize: { [weak self] in self?.setBadgeSize($0) },
@@ -906,19 +905,6 @@ final class PanelController {
         resettle(into: state.drawerWidth(room: state.room, tab: state.selectedTab,
                                          openKeys: opened)) {
             state.openThreads = opened
-        }
-    }
-
-    /// The resolve table, which widens the drawer the same way and so has to be
-    /// opened through here rather than straight onto the state: the window and
-    /// its contents have to be told to travel at once, and a change made
-    /// outside this would resize the contents under a window that stayed put.
-    func toggleResolve(_ id: String) {
-        var opened = state.openResolve
-        if opened.contains(id) { opened.remove(id) } else { opened.insert(id) }
-        resettle(into: state.drawerWidth(room: state.room, tab: state.selectedTab,
-                                         openKeys: state.openThreads.union(opened))) {
-            state.openResolve = opened
         }
     }
 

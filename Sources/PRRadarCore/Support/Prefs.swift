@@ -48,15 +48,6 @@ public enum Prefs {
         static let reviewMaxPerHour = "review.maxPerHour"
         static let reviewLog = "review.log"
 
-        static let resolveSkill = "resolve.skill"
-        static let resolveMode = "resolve.mode"
-        static let resolveRepos = "resolve.repos"
-        static let resolveOutOfScope = "resolve.outOfScope"
-        static let resolvePending = "resolve.pending"
-        static let resolveGates = "resolve.gates"
-        static let resolveBudget = "resolve.budget"
-        static let resolveTimeout = "resolve.timeoutMinutes"
-        static let resolveLog = "resolve.log"
     }
 
     public static var badgeOrigin: CGPoint? {
@@ -502,116 +493,26 @@ public enum Prefs {
         }
     }
 
-    // MARK: - Resolve
+    // MARK: - Retired settings
 
-    /// The skill that answers threads on your own pull requests.
+    /// Clears what the resolve feature left behind.
     ///
-    /// Its own setting rather than the review skill reused, because they are
-    /// opposite jobs: one reads and reports, the other edits and pushes. A
-    /// developer who has both has two skills, and the one that writes is not a
-    /// mode of the one that reads.
-    public static var resolveSkill: String? {
-        get { defaults.string(forKey: Key.resolveSkill) }
-        set {
-            if let newValue { defaults.set(newValue, forKey: Key.resolveSkill) }
-            else { defaults.removeObject(forKey: Key.resolveSkill) }
+    /// Resolve ran a skill against your own pull requests, in your own
+    /// checkout, and was removed because the thing it saved was never the slow
+    /// part: the pre-commit hook it had to sit through is the same hook you sit
+    /// through, so the run cost what doing it by hand costs and spent money on
+    /// top.
+    ///
+    /// Worth clearing rather than leaving orphaned, because one of these keys
+    /// is not a flag. `resolve.log` held every run's table — drafted replies,
+    /// shas, failure text — and that is somebody's work sitting in a plist no
+    /// code reads any more.
+    public static func clearRetiredResolveKeys() {
+        for key in ["resolve.skill", "resolve.mode", "resolve.repos",
+                    "resolve.outOfScope", "resolve.pending", "resolve.gates",
+                    "resolve.budget", "resolve.timeoutMinutes", "resolve.log"] {
+            defaults.removeObject(forKey: key)
         }
-    }
-
-    /// How much of a resolve run happens without being looked at.
-    ///
-    /// Defaults to `.curated`, and an unrecognised value reads as `.triage`
-    /// rather than as anything else. A build that cannot understand the stored
-    /// mode must not resolve that doubt by editing somebody's checkout.
-    public static var resolveMode: ResolveMode {
-        get {
-            guard let raw = defaults.string(forKey: Key.resolveMode) else { return .curated }
-            return ResolveMode(rawValue: raw) ?? .triage
-        }
-        set { defaults.set(newValue.rawValue, forKey: Key.resolveMode) }
-    }
-
-    /// The repositories resolve is allowed to write in.
-    ///
-    /// **A second allowlist, not the review one reused.** Safe-to-read and
-    /// safe-to-write are different questions, and sharing one list would answer
-    /// the second with an answer given to the first: ticking a repo so a review
-    /// could read it would silently also let an unattended session commit and
-    /// push there. Resolve ticks therefore start empty even for a repo already
-    /// ticked for review.
-    public static var resolveRepos: [String] {
-        get { defaults.stringArray(forKey: Key.resolveRepos) ?? [] }
-        set { defaults.set(newValue, forKey: Key.resolveRepos) }
-    }
-
-    /// What a run does about work outside the pull request's stated job.
-    public static var resolveOutOfScope: ResolveOutOfScope {
-        get {
-            guard let raw = defaults.string(forKey: Key.resolveOutOfScope)
-            else { return .deferWithReasoning }
-            return ResolveOutOfScope(rawValue: raw) ?? .leaveOpen
-        }
-        set { defaults.set(newValue.rawValue, forKey: Key.resolveOutOfScope) }
-    }
-
-    /// What a run does about an unsubmitted draft review of your own.
-    ///
-    /// Defaults to leaving it, because publishing one releases every comment in
-    /// somebody's draft at once — including ones written weeks ago — rather
-    /// than this run's replies.
-    public static var resolvePending: ResolvePendingPolicy {
-        get {
-            guard let raw = defaults.string(forKey: Key.resolvePending) else { return .leave }
-            return ResolvePendingPolicy(rawValue: raw) ?? .leave
-        }
-        set { defaults.set(newValue.rawValue, forKey: Key.resolvePending) }
-    }
-
-    /// How much checking a run does before committing.
-    ///
-    /// Defaults to `.full`, which is the thorough answer and the slow one. An
-    /// unrecognised value also reads as `.full`: a build that cannot understand
-    /// the stored setting must not resolve that doubt by checking less.
-    public static var resolveGates: ResolveGates {
-        get {
-            guard let raw = defaults.string(forKey: Key.resolveGates) else { return .full }
-            return ResolveGates(rawValue: raw) ?? .full
-        }
-        set { defaults.set(newValue.rawValue, forKey: Key.resolveGates) }
-    }
-
-    /// The ceiling on one resolve run, in dollars. Zero means no ceiling.
-    ///
-    /// Higher than a review's, because the work is longer: this one reads every
-    /// thread, writes the fixes, and runs the repository's own gates.
-    public static var resolveBudget: Double {
-        get {
-            guard defaults.object(forKey: Key.resolveBudget) != nil else { return 25 }
-            return defaults.double(forKey: Key.resolveBudget)
-        }
-        set { defaults.set(max(0, newValue), forKey: Key.resolveBudget) }
-    }
-
-    /// How long one run may take, in minutes.
-    ///
-    /// Ninety, where a review gets fifteen. Not a near miss: a run here applies
-    /// fixes, runs the whole test suite for the platform it touched, and then
-    /// commits behind a pre-commit hook that runs the suite again. Fifteen
-    /// minutes would time out mid-commit on every real repository.
-    ///
-    /// Surfaced rather than hardcoded, for the reason the hourly review limit
-    /// was: a ceiling nobody can see reads as the feature having broken.
-    public static var resolveTimeoutMinutes: Int {
-        get {
-            guard defaults.object(forKey: Key.resolveTimeout) != nil else { return 90 }
-            return max(5, defaults.integer(forKey: Key.resolveTimeout))
-        }
-        set { defaults.set(max(5, newValue), forKey: Key.resolveTimeout) }
-    }
-
-    public static var resolveLog: ResolveLog {
-        get { ResolveLog.decoded(from: defaults.data(forKey: Key.resolveLog)) }
-        set { defaults.set(newValue.encoded(), forKey: Key.resolveLog) }
     }
 
     public static var seenPings: Set<String> {

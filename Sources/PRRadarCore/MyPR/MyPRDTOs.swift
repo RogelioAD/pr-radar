@@ -195,14 +195,3 @@ public struct ComparisonNode: Decodable {
     public let behindBy: Int?
     public let status: String?
 }
-
-/// The narrow threads-only query's payload.
-public struct ThreadsPayload: Decodable {
-    public struct Repository: Decodable {
-        public let pullRequest: PullRequest?
-    }
-    public struct PullRequest: Decodable {
-        public let reviewThreads: ThreadConn?
-    }
-    public let repository: Repository?
-}

@@ -60,38 +60,6 @@ public enum Query {
         """
     }
 
-    /// Every unresolved thread on one pull request, with the whole conversation.
-    ///
-    /// A second, narrower query rather than widening `myPullRequests`, and the
-    /// difference is what it costs. That one runs on the sixty-second poll for
-    /// every pull request you have at once, which is why it fetches three
-    /// comments per thread and the row truncates each to 320 characters. This
-    /// runs on a button press, for one pull request, and asks for everything —
-    /// because a session being asked to rule on an argument must not be handed
-    /// a truncated copy of it.
-    public static func threads(owner: String, name: String, number: Int,
-                               first: Int = 100) -> String {
-        """
-        query {
-          repository(owner: "\(owner)", name: "\(name)") {
-            pullRequest(number: \(number)) {
-              reviewThreads(first: \(first)) {
-                totalCount
-                nodes {
-                  id isResolved isOutdated path line
-                  comments(first: 50) {
-                    totalCount
-                    nodes { id createdAt author { login } body }
-                  }
-                  hunk: comments(first: 1) { nodes { diffHunk } }
-                }
-              }
-            }
-          }
-        }
-        """
-    }
-
     /// The viewer's own open pull requests, with everything a My PRs row needs.
     ///
     /// Sent as its own request rather than another alias on the reviews

@@ -858,78 +858,17 @@ request, under your own name, that cannot be taken back.
 every row, because the state this feature exists to produce is otherwise
 reachable only by spending real money on somebody's real PR.
 
-## Resolving your own threads
+## Conflicts and being behind
 
-The other half of the job. Automatic review answers the PRs waiting on *you*;
-this answers the threads waiting on everybody else — the ones on your own pull
-requests.
-
-Every My PRs row with open threads grows a **Resolve** button. It runs the
-resolve skill you name in the wand room against that PR: reads every unresolved
-thread, decides what to do about each, and replies.
-
-**It is never automatic, and that is deliberate.** Review bots comment again
-after every push, so a resolver on a timer would spend its life answering its
-own fixes. There is no switch; there is a button.
-
-### Two jobs, one feature
-
-The Resolve button answers review threads. A second button, **Resolve
-conflicts**, appears instead when the branch conflicts with its base — and it is
-the *same run*: same skill, same checkout, same guards, same lease, with one
-sentence different in its prompt. Making it a second feature would have meant a
-second coordinator, a second set of guards and a second lease — three copies of
-the dangerous part, to express a difference that is really one instruction.
-
-While there are conflicts, the threads button is hidden. That is the skill's own
-ordering, and the reason it gives for it: a fix applied to a branch that cannot
-merge gets re-resolved by hand later, and an *already done* verdict proved
-against a pre-merge head is simply wrong. One button at a time, and it is the
-one to press first.
-
-The button is **Rebase & resolve · N files**, and it does the whole sequence in
-order: brings the checkout up to the pull request if it has fallen behind,
-merges the base in, resolves what conflicts, and pushes. One press.
-
-(It says *rebase* because that is the word the row has always used for bringing
-a branch up to its base — the `needs rebase` chip predates all of this. The
-mechanism is a merge: base **into** the branch, never a rebase of a branch that
-is already pushed, which is the one thing the run is forbidden to do.)
-
-It says how many files, the way **Update base · 3 behind** says how far behind. GitHub does not report that — `mergeStateStatus` says *that* a PR is
-dirty and never what or how much — so it is computed locally with
-`git merge-tree --write-tree --name-only`, which works out the merge without a
-checkout, an index or a clean tree. Hovering lists the files.
-
-It asks against whatever `origin/<base>` your clone already has, which is nearly
-always right and costs nothing — **and fetches that one ref when the answer
-disagrees with GitHub.** A local merge that comes back clean on a pull request
-GitHub has called dirty cannot both be true, and the local base is the thing
-more likely to be a day old, so it is fetched and the question asked again.
-
-That is not hypothetical: this shipped saying **"Resolve conflicts · 0 files"**
-on a pull request GitHub was showing a conflict on, because the clone's copy of
-the base was from the day before and the branches had not diverged yet at that
-commit. Fetching only on disagreement keeps the common path free and settles
-itself — once the ref is current the next poll agrees and fetches nothing.
-
-When the count still cannot be had, the button says **Resolve conflicts** with
-no number rather than inventing one, exactly as a missing compare leaves
-`needs rebase` without a count. `conflicts · 0 files` is not a thing the row
-says: an empty result means the two sources disagree, never that there is
-nothing to fix.
-
-A conflicts run merges base **into** the branch, never the reverse and never a
-rebase of a branch that is already pushed. Conflicts in generated output, lock
-files and goldens are regenerated rather than resolved by picking a side. If
-both sides changed the same logic incompatibly it stops and says so rather than
-guessing — the same bar as *needs you*.
+The two things a branch can need doing to it before it can merge, and the row
+says which — offering to do the one GitHub will do for you, and naming the one
+it will not.
 
 ### Update base, which is not the rebase button
 
-A branch that is merely **behind** needs no skill and no checkout. The row
-offers **Update base · N behind**, which is one GraphQL mutation: GitHub merges
-the base into the head on its own servers, exactly as its own *Update branch*
+A branch that is merely **behind** needs no checkout. The row offers
+**Update base · N behind**, which is one GraphQL mutation: GitHub merges the
+base into the head on its own servers, exactly as its own *Update branch*
 button does.
 
 This is worth distinguishing from the rebase button that was built here once and
@@ -944,123 +883,36 @@ count rides the button's own title. A row saying `needs rebase · 3 behind` next
 to a button saying `Update base` was stating a problem and offering its answer
 as two separate things to read.
 
-### Where it runs, and what it refuses
+### Conflicts, counted but not fixed
 
-In **your own checkout of the PR's branch** — not a throwaway worktree, because
-the fixes have to be pushed from somewhere you can push from. Which means every
-run starts by proving the tree is safe to work in, and refuses with a sentence
-rather than tidying up on your behalf:
+A branch that **conflicts** gets a chip, not a button: **conflicts · N files**.
+Fixing one needs a checkout, and PR Radar does not have one to offer any more —
+see *Resolve, and why it is gone* below. The merge is yours to do; the row's job
+is to tell you it is waiting and how big it is.
 
-| It says | Because |
-|---|---|
-| `feat/x is not checked out anywhere` | it will not `gh pr checkout` into your clone |
-| `4 uncommitted changes in app-feat` | that is somebody's work in progress |
-| `that checkout is at a1b2c3d; the PR is at e4f5a6b` | it could not be fast-forwarded there — the branch has commits of its own |
-| `a merge is in progress` | a half-finished rebase is not a base to build on |
-| `feat/x has no upstream to push to` | a reply citing a commit is false until it is pushed |
-| `the branch is on their fork` | it cannot push there |
+It says how many files, the way **Update base · 3 behind** says how far behind.
+GitHub does not report that — `mergeStateStatus` says *that* a PR is dirty and
+never what or how much — so it is computed locally with
+`git merge-tree --write-tree --name-only`, which works out the merge without a
+checkout, an index or a clean tree. Hovering lists the files.
 
-### It catches up on its own
+It asks against whatever `origin/<base>` your clone already has, which is nearly
+always right and costs nothing — **and fetches that one ref when the answer
+disagrees with GitHub.** A local merge that comes back clean on a pull request
+GitHub has called dirty cannot both be true, and the local base is the thing
+more likely to be a day old, so it is fetched and the question asked again.
 
-A branch that has moved — usually a bot pushing after a review — leaves your
-checkout a commit or two behind the pull request, and a run started there would
-merge into code older than the pull request and then write replies citing it.
+That is not hypothetical: this shipped saying **"conflicts · 0 files"** on a
+pull request GitHub was showing a conflict on, because the clone's copy of the
+base was from the day before and the branches had not diverged yet at that
+commit. Fetching only on disagreement keeps the common path free and settles
+itself — once the ref is current the next poll agrees and fetches nothing.
 
-That was a second button for about an hour. It is now the first thing every run
-does, because two buttons to press in a fixed order is a worse answer than one
-that knows the order — and this step has no decision in it: a checkout that is
-simply behind is a fetch and a pointer move.
-
-**Only ever a fast-forward.** If the branch turns out to have commits of its own
-the run stops and says how many, because a reset would make it work and would
-throw those away — whether to rebase, push or discard them is yours to decide,
-not something to settle at a button press. The tree is re-checked for
-uncommitted work at that moment too, rather than trusted from a poll.
-
-Untracked files do **not** block it. Generated bindings, `target/`, `build/` —
-every real checkout has them, and none of them is work a run could destroy.
-
-### Three modes
-
-| | |
-|---|---|
-| **Just tell me** | Reads and reports. Nothing is edited, committed, pushed or posted. |
-| **Fix it, then let me post** | Applies fixes, runs the gates, commits and pushes — then stops. You tick the replies and PR Radar sends them. |
-| **Fix it and post it** | The whole thing, as your skill runs it from a terminal. |
-
-The middle one is the default, and its label is careful on purpose. Curated
-*review* promises nothing has happened yet. Curated *resolve* cannot: a reply
-saying "fixed in `a1b2c3d`" is false until that commit is pushed, so the code
-has already landed by the time you read the table.
-
-### What it will not be talked out of
-
-The pull request's own comments reach the model, so these are denials rather
-than instructions:
-
-- A thread needing a product or design call is **never resolved**.
-- A thread is **never resolved without a reply**, and never over a reply that
-  did not actually land — a draft review of your own silently swallows replies,
-  and that is checked.
-- A reply citing a commit is **held back until that commit is on the remote**.
-- **Nothing is ever written to Asana.** A ticket nobody approved is worse than
-  a gap, so gaps are reported instead.
-- The session cannot `checkout`, `switch`, `rebase`, `reset`, `stash` or
-  force-push. It works in the tree it was given.
-
-### The gates, answered in advance
-
-A skill with interactive menus does not fail headlessly — it *waits*, and then
-times out having done nothing. So the wand room has a **Resolve answers**
-section holding the answers to the questions your skill would stop at: what to
-do with out-of-scope work, and what to do about an unsubmitted draft review.
-They are passed into the session so it never reaches the menu.
-
-### How much it checks, and stopping it
-
-A conflict in a single Kotlin test fixture took **sixteen minutes**. Almost all
-of it was `./gradlew testDevelopmentDebugUnitTest lintDevelopmentDebug`, then a
-pre-commit hook running the whole Rust workspace again. Both were correct — the
-skill says to run the whole suite, and that is right when nobody is watching.
-Somebody *was* watching, and in a terminal they would have said "it is a
-fixture, build the test module".
-
-**Checking** is how you say that without being there:
-
-| | |
-|---|---|
-| Run the full suite | Thorough and slow. Minutes, not seconds. |
-| Only what it touched | The crate or module the change is in. Much faster, blind to what it broke elsewhere. |
-| Leave it to CI | Runs nothing. The pull request's own checks are the only judge. |
-
-It scopes what the **session** runs and nothing else. Your repository's own
-commit hooks still run at every setting, because the way to skip one is
-`--no-verify` and that is a quality-gate bypass this will not perform however it
-is configured. Running fewer checks is your choice; defeating one that runs is
-not, and the framing says so at every level.
-
-And there is a **Stop** button on a running row, which there was not at first —
-the only ways out of a quarter-hour you had changed your mind about were
-quitting the app or finding the pid. It asks the session to stop rather than
-killing it, so a commit in flight finishes instead of leaving `index.lock` in
-your repository. That makes stopping not instant, and the row says *Stopping…*
-while it waits. A run stopped after it had already pushed is reported as having
-landed unreported, not as stopped: there are commits on the branch either way.
-
-### When it is interrupted
-
-A resolve run is **never restarted**. An interrupted review had only read, so
-asking again is safe. This one may have edited, committed and pushed, and
-nothing can tell from outside which — so the row becomes evidence instead:
-
-- *interrupted* — nothing had landed. Press it again.
-- *N commits landed unreported* — code reached the branch and nobody read the
-  table. The row hands you the `git log` that shows what. **Never pruned**, and
-  never offered a retry.
-- *still running elsewhere* — a run from a previous launch is still going.
-
-Quitting while one is in flight asks first, which is the only place this app
-interrupts a quit.
+When the count still cannot be had, the chip says **conflicts · needs rebase**
+with no number rather than inventing one, exactly as a missing compare leaves
+`needs rebase` without a count. `conflicts · 0 files` is not a thing the row
+says: an empty result means the two sources disagree, never that there is
+nothing to fix.
 
 ---
 
@@ -1150,7 +1002,39 @@ Forks can point the check at their own releases:
 defaults write com.yourname.prradar update.repo -string "you/your-fork"
 ```
 
----
+## Resolve, and why it is gone
+
+PR Radar used to answer the threads on your own pull requests. A **Resolve**
+button on every My PRs row ran a skill in your own checkout of the branch: it
+read every unresolved thread, fixed what it could, ran the gates covering what
+it touched, committed, pushed, and replied — with a second mode that posted the
+replies itself and a third that only reported. It had an ordered guard over the
+checkout, a lease so two runs could not share a worktree, and a table you ticked
+before anything was posted.
+
+It was removed because **the thing it saved was never the slow part.**
+
+The run had to commit, and committing runs your repository's pre-commit hook.
+In the repository this was built for that hook is `cargo fmt --all`, then
+`cargo clippy --workspace --all-targets -- -D warnings`, then the rules doors,
+then `cargo nextest run --workspace`, then `cargo test --doc --workspace` —
+every one of them across the whole workspace, whatever the diff touched. A
+Kotlin-only change paid for the entire Rust workspace twice over.
+
+None of the settings could reach that. **How much it checks** scoped what the
+*session* ran and said so in as many words; the hook is the repository's and
+runs regardless. The only way past one is `--no-verify`, and that is a
+quality-gate bypass the feature refused to perform at any setting — correctly.
+So a run cost what doing it by hand costs, plus the model's time and the money,
+and handed back a table to read on top.
+
+What is left is everything that did not depend on it: the thread counts and the
+threads themselves on every row, the conflict count above, **Update base**, and
+automatic review, which only ever reads and never commits.
+
+The git-porcelain readers it rested on outlived it, in
+`Sources/PRRadarCore/Git/` — `GitWorktrees` still answers which of your trees
+holds a branch, and `MergeTree` still counts the conflicts above.
 
 ## Deliberate non-features
 

@@ -61,27 +61,15 @@ final class AppState: ObservableObject {
     func expanded(on tab: DrawerTab) -> Set<String> {
         switch tab {
         case .reviews: return openFindings
-        // Both disclosures a My PR row has. A resolve table carries a drafted
-        // reply per thread and needs the width for the same reason a findings
-        // list does — and the two are keyed the same way, by row id, so they
-        // can share one set without colliding.
-        case .mine: return openThreads.union(openResolve)
+        case .mine: return openThreads
         }
     }
 
     func expandable(on tab: DrawerTab) -> [String] {
         switch tab {
         case .reviews: return keysAwaitingSelection
-        case .mine: return idsWithUnresolvedThreads + idsAwaitingResolveSelection
+        case .mine: return idsWithUnresolvedThreads
         }
-    }
-
-    /// Pull requests of yours with a resolve table there is something to show
-    /// for. The same guard `idsWithUnresolvedThreads` applies, and for the same
-    /// reason: a key left behind after a table retires would hold the drawer at
-    /// double width over a list with nothing open in it.
-    var idsAwaitingResolveSelection: [String] {
-        scopedMyPRs.filter { resolveLog[$0.id]?.isAwaitingSelection == true }.map(\.id)
     }
 
     /// Pull requests of yours with a thread there is something to show for.
@@ -140,7 +128,6 @@ final class AppState: ObservableObject {
             // open on it, and a key left behind would hold the drawer wide.
             let live = Set(myPRs.map(\.id))
             if !openThreads.isSubset(of: live) { openThreads.formIntersection(live) }
-            if !openResolve.isSubset(of: live) { openResolve.formIntersection(live) }
         }
     }
     @Published var myPRSortOrder: MyPRSortOrder = Prefs.myPRSortOrder {
@@ -344,87 +331,13 @@ final class AppState: ObservableObject {
         autoReviewLog[item.pingKey] = record
     }
 
-    // MARK: - Resolve
-
-    @Published var resolveLog: ResolveLog = Prefs.resolveLog {
-        didSet { Prefs.resolveLog = resolveLog }
-    }
-    @Published var resolveMode: ResolveMode = Prefs.resolveMode {
-        didSet { Prefs.resolveMode = resolveMode }
-    }
-    @Published var resolveOutOfScope: ResolveOutOfScope = Prefs.resolveOutOfScope {
-        didSet { Prefs.resolveOutOfScope = resolveOutOfScope }
-    }
-    @Published var resolvePending: ResolvePendingPolicy = Prefs.resolvePending {
-        didSet { Prefs.resolvePending = resolvePending }
-    }
-    @Published var resolveGates: ResolveGates = Prefs.resolveGates {
-        didSet { Prefs.resolveGates = resolveGates }
-    }
-    @Published var resolveBudget: Double = Prefs.resolveBudget {
-        didSet { Prefs.resolveBudget = resolveBudget }
-    }
-    @Published var resolveTimeoutMinutes: Int = Prefs.resolveTimeoutMinutes {
-        didSet { Prefs.resolveTimeoutMinutes = resolveTimeoutMinutes }
-    }
-    /// Typed, and committed the way the review skill is — see `commitResolveSkill`.
-    @Published var resolveSkillDraft: String = Prefs.resolveSkill ?? ""
-    @Published var resolveRepos: [String] = Prefs.resolveRepos {
-        didSet { Prefs.resolveRepos = resolveRepos }
-    }
-
-    /// Rows whose resolve table is open, by `MyPullRequest.id`.
-    @Published var openResolve: Set<String> = []
-
-    var resolveAllowlist: Set<String> { Set(resolveRepos.map { $0.lowercased() }) }
-
-    func isResolveAllowed(_ repo: String) -> Bool {
-        resolveAllowlist.contains(repo.lowercased())
-    }
-
-    func setResolveAllowed(_ repo: String, _ allowed: Bool) {
-        var repos = Set(resolveRepos)
-        if allowed { repos.insert(repo) } else { repos.remove(repo) }
-        resolveRepos = repos.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-    }
-
-    /// Whether resolve has everything it needs to run at all.
-    var canResolve: Bool {
-        claudePath != nil && ReviewSkill.normalized(resolveSkillDraft) != nil
-    }
-
-    func commitResolveSkill() {
-        if let skill = ReviewSkill.normalized(resolveSkillDraft) {
-            Prefs.resolveSkill = skill
-        }
-        resolveSkillDraft = Prefs.resolveSkill ?? ""
-    }
-
-    func resolveRecord(for pr: MyPullRequest) -> ResolveRecord? {
-        resolveLog[pr.id]
-    }
-
-    /// Why the Resolve button is not offered, from configuration alone.
-    ///
-    /// Configuration only, deliberately. The rest of the guards need to ask git
-    /// about a worktree, and asking that for every row on every sixty-second
-    /// poll would be a subprocess storm. So the row offers the press, and the
-    /// press is where the tree is actually inspected.
-    func resolveBlock(for pr: MyPullRequest) -> ResolveBlock? {
-        var probe = ResolveProbe()
-        probe.claudePath = claudePath
-        probe.skill = ReviewSkill.normalized(resolveSkillDraft)
-        probe.isAllowed = isResolveAllowed(pr.repo)
-        return ResolveGuard.configuration(probe, pr: pr)
-    }
-
     // MARK: - Finding things on disk
 
     /// One git call, for the two questions this type answers about the disk.
     ///
-    /// A copy of the coordinators' own, and deliberately so: those run a review
-    /// or a resolve and throw their own failures, and this one only ever asks a
-    /// checkout what its origin is. Routing that through either coordinator's
+    /// A copy of the review coordinator's own, and deliberately so: that one
+    /// runs a review and throws its own failures, and this one only ever asks a
+    /// checkout what its origin is. Routing that through the coordinator's
     /// error vocabulary would make a nil answer here look like a failed run.
     /// Where git is, or nil. The same three candidates every caller here uses,
     /// asked in one place so a fourth does not get its own list.
@@ -443,10 +356,11 @@ final class AppState: ObservableObject {
         return result.stdout
     }
 
-    // Shared by both coordinators. They started on the review one and were
-    // private there; resolve needs the same two answers — where a repository is
-    // checked out, and which directories a helper might live in — and a second
-    // copy of a forty-line list of Node install layouts is how the two drift.
+    // Started on the review coordinator and were private there. They answer
+    // two questions the app asks from more than one place — where a repository
+    // is checked out, and which directories a helper might live in — and a
+    // second copy of a forty-line list of Node install layouts is how such
+    // things drift.
 
     /// A checkout of `repo` somewhere under `root`, found by asking git.
     ///
@@ -605,36 +519,46 @@ final class AppState: ObservableObject {
         autoReviewer?.act(action, on: item)
     }
 
-    /// Held weakly for the same reason the reviewer is.
-    weak var resolver: ResolveCoordinator?
-
-    func resolve(_ pr: MyPullRequest, scope: ResolveScope = .threads) {
-        resolver?.resolve(pr, scope: scope)
-    }
-
+    /// Merges the base branch into the pull request, through GitHub rather than
+    /// the local checkout.
+    ///
+    /// Lived on the resolve coordinator until that feature was removed, and had
+    /// no business there: it touches no worktree, runs no skill and spends
+    /// nothing. It is one mutation and the sentence to say when it fails.
     func updateBranch(_ pr: MyPullRequest) {
-        resolver?.updateBranch(pr)
+        let key = pr.id
+        guard rowActions.begin(key) else { return }
+        Task {
+            await performUpdateBranch(pr)
+            rowActions.end(key)
+        }
     }
 
-    func stopResolve(_ pr: MyPullRequest) {
-        resolver?.stop(pr)
-    }
-
-    func isResolving(_ pr: MyPullRequest) -> Bool {
-        resolver?.isRunning(pr) ?? false
-    }
-
-
-    func actResolve(_ action: ResolveCoordinator.Action, on pr: MyPullRequest) {
-        resolver?.act(action, on: pr)
-    }
-
-    func setResolveRow(_ threadID: String, on pr: MyPullRequest, selected: Bool) {
-        resolver?.setRow(threadID, on: pr, selected: selected)
-    }
-
-    func toggleResolve(_ id: String) {
-        if openResolve.contains(id) { openResolve.remove(id) } else { openResolve.insert(id) }
+    private func performUpdateBranch(_ pr: MyPullRequest) async {
+        guard let account = accounts.first(where: { $0.id == pr.account })
+                ?? accounts.first,
+              let token = Accounts.token(for: account),
+              let nodeID = pr.nodeID,
+              // Required, not optional. Without it GitHub would merge whatever
+              // the branch happens to be now, which may be several pushes past
+              // the row that offered the button.
+              let headOid = pr.headOid
+        else {
+            lastError = "That PR arrived without the ids a merge needs."
+            return
+        }
+        do {
+            _ = try await GitHubClient(token: token)
+                .updateBranch(pullRequestID: nodeID, expectedHeadOid: headOid)
+            Log.debug("updated \(pr.repo)#\(pr.number) from \(pr.baseRefName)")
+        } catch {
+            // Said out loud rather than logged. The two interesting failures
+            // both need the user to do something: the branch moved under them,
+            // or the merge conflicts.
+            lastError = "Could not update #\(pr.number) from "
+                + "\(pr.baseRefName). It may have moved, or it may conflict — "
+                + "you will have to merge it yourself."
+        }
     }
 
     /// The skill to run, as the settings field holds it — an edit buffer for
