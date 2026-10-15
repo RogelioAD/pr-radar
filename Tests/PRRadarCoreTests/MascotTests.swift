@@ -102,12 +102,138 @@ final class MascotTests: XCTestCase {
 
     /// Only the ones with nothing under them.
     func testTheFloatersBobFurther() {
-        for mascot in [Mascot.scoot, .wobble, .boo, .flit] {
+        for mascot in [Mascot.scoot, .wobble, .boo, .flit, .ember] {
             XCTAssertEqual(mascot.bobScale, 2, "\(mascot.name) floats")
         }
         for mascot in [Mascot.blip, .bloop, .gourd, .rattle] {
             XCTAssertEqual(mascot.bobScale, 1, "\(mascot.name) stands on something")
         }
+    }
+
+    // MARK: - The fire
+
+    /// How many rows of fire there are, over a whole cycle, counting the
+    /// part that runs off the bottom of the art.
+    ///
+    /// Measured from `flameLip` and not from the bottom of the drawing:
+    /// the bottom of the drawing is the underside of his jaw, which the
+    /// fire comes out well above.
+    private func reach(_ breath: Breath) -> Int {
+        let ember = Mascot.ember
+        let lip = ember.flameLip
+        return (0..<12).map { frame -> Int in
+            let grid = ember.frame(eyes: .open, frame: frame, breath: breath)
+            let inArt = grid.litPoints
+                .filter { $0.y >= lip && ember.isTell(grid[$0.x, $0.y]) }
+                .map(\.y).max()
+            let past = ember.flameOverflow(frame: frame, breath: breath)
+                .flatMap { spill in spill.litPoints.map(\.y).max() }
+                .map { $0 + ember.sprite.height }
+            guard let last = [inArt, past].compactMap({ $0 }).max() else { return 0 }
+            return last - lip + 1
+        }.max() ?? 0
+    }
+
+    /// The whole claim the character makes: you can read the state off the
+    /// length of the fire without knowing the colours. If this ordering ever
+    /// stops holding, the flame is decoration rather than a readout.
+    func testTheFireReadsLongerTheMoreTheAppWants() {
+        XCTAssertEqual(reach(.out), 0, "out should put nothing past the teeth")
+        let ladder: [Breath] = [.pilot, .steady, .flare, .blast]
+        for (shorter, longer) in zip(ladder, ladder.dropFirst()) {
+            XCTAssertLessThan(reach(shorter), reach(longer),
+                              "\(longer) should out-reach \(shorter)")
+        }
+    }
+
+    /// Guttering is the one that is not on the ladder: short, like a pilot
+    /// light, but never the same two frames running. A steady short flame
+    /// reads as quiet, and `lost` is not quiet.
+    func testGutteringIsShortButNeverStill() {
+        XCTAssertLessThan(reach(.gutter), reach(.flare))
+        // `Sprite` is Equatable but not Hashable, so counted the long way.
+        var distinct: [Sprite] = []
+        for frame in (0..<6).map({ Mascot.ember.frame(eyes: .open, frame: $0, breath: .gutter) })
+        where !distinct.contains(frame) {
+            distinct.append(frame)
+        }
+        XCTAssertGreaterThan(distinct.count, 2,
+                             "a gutter that repeats every other frame is a blinking light")
+    }
+
+    /// The fire is not sized to fit the character's own 48 rows: the
+    /// longest breath runs off the bottom of him and the layout carries it.
+    /// If this starts failing, the flame has been trimmed to the grid —
+    /// which is shortening the readout to suit the frame.
+    func testTheLongestBreathRunsOffTheBottomOfHim() {
+        XCTAssertGreaterThan(Mascot.ember.overflowRows, 0,
+                             "nothing reaches past the art, so the room is dead")
+        XCTAssertNotNil(Mascot.ember.flameOverflow(frame: 0, breath: .blast),
+                        "a blast should spill past the art")
+        XCTAssertNil(Mascot.ember.flameOverflow(frame: 0, breath: .out),
+                     "an unlit dragon should spill nothing")
+
+        // And the room is reserved whether he is using it or not, so the
+        // badge does not reflow every time the mood changes.
+        let heights = Mood.allCases.map { mood in
+            SpriteLayout.perch(mascot: .ember, style: mood.style,
+                               frame: 0, blink: false).height
+        }
+        XCTAssertEqual(Set(heights).count, 1,
+                       "the block changes height with the mood")
+    }
+
+    /// Nobody else pays for the dragon's room.
+    func testOnlyTheOneWithAFlameReservesRoomForOne() {
+        for mascot in Mascot.all where !mascot.breathes {
+            XCTAssertEqual(mascot.overflowRows, 0, "\(mascot.name)")
+            XCTAssertNil(mascot.flameOverflow(frame: 0, breath: .blast),
+                         "\(mascot.name) has no flame to spill")
+        }
+    }
+
+    /// Even with the fire out he has to show something, or the one state
+    /// where nothing is wrong is also the state where he has no tell at all.
+    func testTheCoalIsLitEvenWithTheFireOut() {
+        let grid = Mascot.ember.frame(eyes: .open, frame: 0, breath: .out)
+        let lit = grid.litPoints.filter { Mascot.ember.isTell(grid[$0.x, $0.y]) }
+        XCTAssertFalse(lit.isEmpty, "nothing of him is alight")
+    }
+
+    /// Every setting is somebody's. One nobody reaches is a drawing that
+    /// never gets drawn.
+    func testEveryBreathBelongsToAMood() {
+        let used = Set(Mood.allCases.map(\.style.breath))
+        for breath in Breath.allCases {
+            XCTAssertTrue(used.contains(breath), "\(breath.rawValue) belongs to no mood")
+        }
+    }
+
+    /// The fire may not eat his face. It is allowed over the lower jaw —
+    /// fire out of a mouth passes in front of the jaw it came through, and
+    /// sparing the jaw pinches every flame to the gap between the jawbones
+    /// — but nothing above the lip may move.
+    func testTheFireNeverPaintsAboveTheLip() {
+        let lip = Mascot.ember.flameLip
+        let plain = Mascot.ember.frame(eyes: .open, frame: 0, breath: .out)
+        let blast = Mascot.ember.frame(eyes: .open, frame: 0, breath: .blast)
+        for point in plain.litPoints where point.y < lip {
+            XCTAssertEqual(plain[point.x, point.y], blast[point.x, point.y],
+                           "the blast reached up to (\(point.x), \(point.y))")
+        }
+    }
+
+    /// And he has a jaw under that mouth rather than stopping where the
+    /// drawing ran out. A silhouette that ends on a straight line across
+    /// the bottom reads as a crop, because that is what it looks like.
+    func testHeHasAJawRatherThanAFlatBottom() {
+        let art = Mascot.ember.sprite
+        let bottom = Mascot.ember.litRows.upperBound
+        let widths = ((bottom - 5)...bottom).map { y in
+            (0..<art.width).filter { art[$0, y] != nil }.count
+        }
+        XCTAssertTrue(zip(widths, widths.dropFirst()).contains { $0 > $1 },
+                      "the last rows do not taper — the jaw is cut off flat")
     }
 
     // MARK: - The sweep
@@ -553,9 +679,16 @@ final class MascotCycleTests: XCTestCase {
     /// it goes — it would just turn up in somebody's personal row. This is the
     /// only thing that catches that.
     func testEveryBuiltInMascotDeclaresItsSection() {
-        for mascot in Mascot.all {
+        let personal: Set<MascotID> = [.ember]
+        for mascot in Mascot.all where !personal.contains(mascot.id) {
             XCTAssertNotEqual(mascot.cohort, .custom,
                               "\(mascot.name) ships with the app but claims no shelf")
+        }
+        // Named, so the check keeps its teeth: a built-in that drops its
+        // `cohort:` still lands in `.custom` and still fails above.
+        for id in personal {
+            XCTAssertEqual(Mascot.named(id).cohort, .custom,
+                           "\(id.rawValue) is meant to be on the personal shelf")
         }
     }
 
@@ -563,7 +696,8 @@ final class MascotCycleTests: XCTestCase {
         XCTAssertEqual(Mascot.cohort(.og).map(\.id), [.pip, .byte, .widget, .nimbus])
         XCTAssertEqual(Mascot.cohort(.space).map(\.id), [.blip, .scoot, .wobble, .bloop])
         XCTAssertEqual(Mascot.cohort(.october2026).map(\.id), [.boo, .flit, .gourd, .rattle])
-        XCTAssertTrue(Mascot.cohort(.custom).isEmpty, "this build ships nobody's fork")
+        XCTAssertEqual(Mascot.cohort(.custom).map(\.id), [.ember],
+                       "the personal shelf holds the one character drawn for it")
     }
 
     /// The guarantee the whole `.custom` default exists for, written as the

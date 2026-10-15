@@ -44,7 +44,12 @@ AUTHORING ALPHABET — what you put in the half:
     .   empty            #   body, to be shaded into the six chassis rungs
     k   outline you want *inside* the silhouette (a seam, a strut)
     a   accent — the live mood colour. This is the character's tell.
+    N M accent at 72% and 42%, blended toward the dark behind it. A tell
+        with any depth to it is drawn in all three.
     V   visor / glass    P   cheek      f   leaf green (a stalk)
+    c   bone — fixed, and not off the character's ramp. Teeth and the like:
+        in `X` they come out the ramp's lightest tone, which on a red
+        animal is salmon and at size is no tooth at all.
     D S B H W            a chassis rung you are placing yourself
 
 The output alphabet is `Slot` in `Sprite.swift`. Nothing here needs to know
@@ -66,11 +71,17 @@ def blank():
     return [['.'] * HALF for _ in range(H)]
 
 
+
 def put(half, spans, ch):
-    """Paint `ch` into {row: [(from, to), ...]} spans, inclusive, clipped."""
+    """Paint `ch` into {row: [(from, to), ...]} spans, inclusive, clipped.
+
+    Clips to the width of the grid it is handed, so this works on a half and
+    on a whole grid without being told which it has.
+    """
+    wide = len(half[0]) - 1
     for y, runs in spans.items():
         for a, b in runs:
-            for x in range(max(0, a), min(HALF - 1, b) + 1):
+            for x in range(max(0, a), min(wide, b) + 1):
                 half[y][x] = ch
 
 
@@ -98,7 +109,7 @@ def mirror(half):
     return [row + row[::-1] for row in half]
 
 
-def outline(full, quiet=('a', 'f', 'P', 'V')):
+def outline(full, quiet=('a', 'N', 'M', 'f', 'P', 'V')):
     """Ink the silhouette's boundary. 4-connected — see the header."""
     lit = [[c != '.' for c in row] for row in full]
 
@@ -168,6 +179,34 @@ def specular(full, points):
     return full
 
 
+def traced(name, half, down=True):
+    """A half that is already *drawn* -> finished 48 rows, mirrored and
+    nothing else.
+
+    No outline and no shading pass, and that is the whole point of it: the
+    tones came off a drawing somebody else lit, and running `shade` over
+    them would relight a face that is already lit and flatten every plane
+    it was drawn with. `outline` has nothing to do here either — there are
+    no `#` cells for it to find.
+
+    `down` steps the mirrored half one rung darker. The silhouette has to
+    come back symmetric to the pixel, which the test suite insists on; the
+    *colours* do not, and a face lit identically from both sides reads as
+    flat. One rung is enough to say where the light is.
+    """
+    print(f"-- {name}", file=sys.stderr)
+    darker = {'W': 'H', 'H': 'B', 'B': 'S', 'S': 'D', 'D': 'D'}
+    rows = []
+    for r in half:
+        right = r[::-1]
+        if down:
+            right = ''.join(darker.get(c, c) for c in right)
+        rows.append(r + right)
+    assert all(len(r) == W for r in rows), "a row came out the wrong width"
+    assert len(rows) == H
+    return rows
+
+
 def build(name, half, specs=()):
     """Half -> finished 48 rows."""
     print(f"-- {name}", file=sys.stderr)
@@ -200,6 +239,7 @@ def png(path, rows, ramp, scale=7, pad=3, bg=(0.11, 0.12, 0.14),
     fixed = {'k': (.055, .055, .055), 'a': tint, 'N': blend(tint, .72),
              'M': blend(tint, .42), 'f': (.329, .710, .420),
              'P': (.878, .561, .659), 'V': (.020, .035, .075),
+             'c': (.949, .922, .843),
              'U': (.071, .125, .235), 'w': (.969, .973, .980)}
     order = 'DSBHWX'
 
@@ -253,13 +293,103 @@ def demo():
     return build("demo", g, specs=[(13, 10), (14, 10)])
 
 
+# Ember's left half, traced cell for cell off the reference drawing and
+# resampled from its 60-wide grid onto this cast's 24. Not authored in the
+# usual sense and not run through the passes — see `traced`.
+#
+# `E` is the reference's red: both eyes and the inside of the mouth. It
+# becomes `a` on the way out, so the live mood tint lands on them and the
+# mouth doubles as the coal `breathe` starts its flame from.
+_DRAGON = [
+        '.......................H',
+        '.............Sk........H',
+        'S............Skk.......H',
+        'H............SWk......SS',
+        'HHD..........SWk.....SHW',
+        'SHWk.........HWSk...HHSS',
+        'SWWWSk.......HWSk.kkWHSW',
+        '.kWWSSkk....SHWkDkBWWHWW',
+        '.kkWWWHHkkk.SHWHkkWWHBSH',
+        '..kSWWWWSkkkBHHHkSSWHDHH',
+        '...kHHWWWkHkkHHHkHHWHSSH',
+        '....kkHHSWHHSkkkkHWHHHHH',
+        '.....kSHkWWHHSkkWHWWHHHH',
+        '......kSkWWWWHSkWWWWHHHH',
+        '.......kSWWWWWHHkWkkHBHW',
+        '.......SkHWWWWWSDkHHHBSH',
+        '.......SkSWWWWWWSDkHHHHH',
+        '....HHSSSkSSWWWWHSDkHHHH',
+        '....HWkWHSSkkHWWWSSkkHHW',
+        '.....SkWHWWSkkWWWWSSkHkW',
+        '....H.SHSWWSkkkkWHSSkHkW',
+        '...HWkSHSWWWSkEEkSBBSkWk',
+        '....HkkHHWWWDkEccEkkkkSW',
+        '.....kkkHkWWHkEEcEkkkkSW',
+        '......kkHSkWWSkESkkkkWBk',
+        '....kkkkHHSkWWWBHSkkWkDW',
+        '.......kSHSSkWWHHSkWWHWW',
+        '.....HHkSHHSkkkkkkWWWWWW',
+        '......kkkHHHSSkkkWWWWkkk',
+        '........kkHHHHDkDWWHWWHk',
+        '.........kSHHHSSHWWBWWWH',
+        '..........kkSHHHHWSWkkWW',
+        '............kHBBkWkkkkkH',
+        '............kkSSkWWkWkkH',
+        '.............kSHkWWWWkkH',
+        '..............kkHkkWkkkH',
+        '................HkkEkWSk',
+        '................SSEEkkkk',
+        '.................WEcESkk',
+        '.................WkckEkk',
+        '.................BWEEEES',
+        '.................SWEcEEE',
+        '..................kHcEcS',
+        '..................kWEEcc',
+        '...................WWWkc',
+        '...................kBHWW',
+        '....................kkkk',
+        '.....................kkk',
+]
+
+
+def dragon():
+    """Ember: the reference dragon's head, traced, mirrored and reddened.
+
+    This one is a copy rather than a drawing of my own, and it is built
+    differently from the rest of the cast because of that. `_DRAGON` is the
+    left half of the reference lifted cell for cell — its grid was 60 wide
+    against this cast's 48, so it is resampled, with teeth and eyes given
+    priority in the vote: a tooth that loses a majority to the jaw around
+    it is a tooth that is not there.
+
+    What is deliberately *not* done to it:
+
+      * No shading pass. The reference is already lit, from the upper left,
+        and relighting a lit face flattens every plane it was drawn with.
+      * No outline pass. There are no `#` cells for it to find — every cell
+        here is already a tone or an outline.
+      * No wings, no crest of my own, no brow of my own. All of that is in
+        the reference and comes across with it.
+
+    The one liberty is the mirror. The silhouette has to come back
+    symmetric to the pixel and the reference is not quite, so the left half
+    is mirrored over the right — and the mirrored side is stepped a rung
+    darker, because a face lit the same from both sides reads as flat.
+    """
+    return traced("dragon", [r.replace('E', 'a') for r in _DRAGON])
+
+
 if __name__ == '__main__':
-    rows = demo() if '--demo' in sys.argv else None
+    rows = dragon() if '--dragon' in sys.argv else (demo() if '--demo' in sys.argv else None)
     if rows is None:
         print(__doc__)
-        raise SystemExit("nothing to draw: pass --demo, or import this module")
+        raise SystemExit("nothing to draw: pass --demo or --dragon, or import this module")
     print(swift(rows))
     if '--png' in sys.argv:
         grey = [(.13, .15, .17), (.27, .29, .33), (.44, .46, .50),
                 (.64, .67, .71), (.84, .86, .89), (.97, .98, .98)]
-        png(sys.argv[sys.argv.index('--png') + 1], rows, grey)
+        ember = [(.169, .051, .047), (.286, .090, .071), (.431, .153, .098),
+                 (.616, .251, .129), (.800, .408, .180), (.957, .729, .349)]
+        png(sys.argv[sys.argv.index('--png') + 1], rows,
+            ember if '--dragon' in sys.argv else grey,
+            tint=(.98, .62, .16))

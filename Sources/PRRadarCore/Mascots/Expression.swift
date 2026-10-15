@@ -56,9 +56,11 @@ extension Mascot {
     /// than under it where the eye would swallow the beam whole.
     public func frame(eyes pattern: EyePattern,
                       frame: Int = 0,
-                      sweeping: Bool = false) -> Sprite {
+                      sweeping: Bool = false,
+                      breath: Breath = .steady) -> Sprite {
         var grid = sprite
-        tic(&grid, frame: frame)
+        tic(&grid, frame: frame, breath: breath)
+        if breathes { breathe(&grid, frame: frame, breath: breath) }
         for box in eyes { drawEye(&grid, at: box, pattern: pattern) }
         if sweeping { sweep(&grid, frame: frame) }
         return grid
@@ -117,7 +119,7 @@ extension Mascot {
 
     /// The small thing each character does whatever the mood is, so nobody is
     /// ever perfectly still.
-    private func tic(_ grid: inout Sprite, frame: Int) {
+    private func tic(_ grid: inout Sprite, frame: Int, breath: Breath) {
         let f = abs(frame)
         switch id {
         case .blip:
@@ -212,6 +214,115 @@ extension Mascot {
             // is a thing to add rather than a reason not to compile. Every
             // built-in having one is pinned by a test.
             break
+        }
+    }
+
+    /// One cell of flame, before it is placed: where it goes and what it is
+    /// drawn in. `y` is measured from the top of the art and is *allowed*
+    /// to run past the bottom of it — see `flameOverflow`.
+    struct Spark {
+        let x: Int
+        let y: Int
+        let tone: Slot
+    }
+
+    /// The flame for one frame, cell by cell: the breath's drawing, stamped
+    /// centred under the jaw. Shared by the part that lands on the art and
+    /// the part that does not, so the two cannot disagree about where the
+    /// fire is.
+    func sparks(frame: Int, breath: Breath) -> [Spark] {
+        var rows = breath.rows
+        guard !rows.isEmpty else { return [] }
+
+        // The tip guts. One row on and off the end reads as fire; more than
+        // that reads as the state itself changing, which would make the one
+        // honest readout on the badge a liar. The dying one is allowed to
+        // move further, because being unsteady is what it is saying.
+        let f = abs(frame)
+        let trim = breath == .gutter ? [0, 1, 0, 2, 1, 0][f % 6]
+                                     : [0, 1, 0, 0][f % 4]
+        rows.removeLast(min(trim, rows.count - 1))
+
+        // And the root of it dips. The tip flicker above is not enough on
+        // its own: his jaw is four rows off the bottom of the art, so all
+        // but the first rows of any flame are overflow, and a flicker that
+        // only moved the tip left the badge itself perfectly still. The
+        // dying one dips through all three strengths, because unsteadiness
+        // is the whole of what it is saying.
+        let dip = breath == .gutter ? [0, 1, 2, 0, 2, 1][f % 6]
+                                    : [0, 0, 1, 0][f % 4]
+
+        let lip = flameLip
+        let left = sprite.width / 2 - (rows[0].count / 2)
+        var out: [Spark] = []
+        for (step, row) in rows.enumerated() {
+            for (i, ch) in row.enumerated() {
+                var tone: Slot
+                switch ch {
+                case "a": tone = .accent
+                case "N": tone = .accentMid
+                case "M": tone = .accentDim
+                default:  continue
+                }
+                if step < 2 {
+                    for _ in 0..<dip { tone = cooler(tone) }
+                }
+                let x = left + i
+                guard x >= 0 && x < sprite.width else { continue }
+                out.append(Spark(x: x, y: lip + step, tone: tone))
+            }
+        }
+        return out
+    }
+
+    /// The flame, painted per frame instead of drawn into the sprite.
+    ///
+    /// Only the coal in his throat is in the art. A baked flame cannot be
+    /// taken away again for `.out`, and the length of the fire *is* the
+    /// state readout — see `Breath`.
+    ///
+    /// Over whatever is already there, which can only be his lower jaw: the
+    /// flame never starts above the lip, and the lip is under the coal.
+    /// Fire out of a mouth passes in front of the jaw it came through.
+    private func breathe(_ grid: inout Sprite, frame: Int, breath: Breath) {
+        for spark in sparks(frame: frame, breath: breath)
+        where spark.y >= 0 && spark.y < grid.height {
+            grid.plot(spark.x, spark.y, spark.tone)
+        }
+    }
+
+    /// The flame that falls past the bottom of the art, as a sprite of its
+    /// own for the layout to place underneath.
+    ///
+    /// This is the whole reason the fire is not clipped to the character's
+    /// own 48 rows. A blast is longer than the room under his jaw, and the
+    /// choice is to shorten the fire or to let it out of the frame —
+    /// shortening it is the one thing that cannot happen, because the
+    /// length is the readout. The layout reserves `overflowRows` under him
+    /// whether he is breathing or not, for the same reason a perch reserves
+    /// the mark gutter: a block that grows and shrinks with the mood
+    /// reflows the badge every time the state changes.
+    public func flameOverflow(frame: Int, breath: Breath) -> Sprite? {
+        let room = overflowRows
+        guard room > 0 else { return nil }
+        let past = sparks(frame: frame, breath: breath)
+            .filter { $0.y >= sprite.height && $0.y - sprite.height < room }
+        guard !past.isEmpty else { return nil }
+
+        var grid = Sprite(Array(repeating: String(repeating: ".", count: sprite.width),
+                                count: room))
+        for spark in past {
+            grid.plot(spark.x, spark.y - sprite.height, spark.tone)
+        }
+        return grid
+    }
+
+    /// One strength down the accent ramp, and no further.
+    private func cooler(_ slot: Slot) -> Slot {
+        switch slot {
+        case .accent:    return .accentMid
+        case .accentMid: return .accentDim
+        default:         return slot
         }
     }
 
@@ -319,7 +430,15 @@ extension Mascot {
     /// a lantern actually leaves.
     private func candle(_ grid: inout Sprite, frame: Int) {
         let step = abs(frame) % 6
-        let carved: [Slot] = [.light, .accent, .accent, .accentMid, .accent, .light]
+        // The white steps are the carving's. `light` is a fixed near-white,
+        // off every character's ramp and out of reach of the tint — so on
+        // the one whose fire carries a *length* as well as a hue, two frames
+        // in six would wash the readout to white and take the state with
+        // them. A jack-o'-lantern has nothing to read but mood and can
+        // flare as white as it likes.
+        let carved: [Slot] = breathes
+            ? [.accent, .accent, .accentMid, .accent, .accentMid, .accent]
+            : [.light, .accent, .accent, .accentMid, .accent, .light]
         let spill = [2, 1, 1, 0, 1, 2][step]
         let lit = grid.litPoints.filter { isTell(grid[$0.x, $0.y]) }
         for point in lit { grid.plot(point.x, point.y, carved[step]) }

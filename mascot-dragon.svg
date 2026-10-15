@@ -1,0 +1,204 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -30 680 350" width="680" height="350" role="img" aria-labelledby="t d">
+  <title id="t">Flying fire-breathing dragon mascot</title>
+  <desc id="d">An original molten-red western dragon in side profile, wings beating, breathing a cone of fire.</desc>
+
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0"    stop-color="#e87a31"/>
+      <stop offset="0.38" stop-color="#c3391a"/>
+      <stop offset="1"    stop-color="#6b1110"/>
+    </linearGradient>
+    <linearGradient id="bodyDark" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#93271a"/>
+      <stop offset="1" stop-color="#480c0b"/>
+    </linearGradient>
+    <linearGradient id="belly" x1="0" y1="0" x2="0.1" y2="1">
+      <stop offset="0" stop-color="#f9d577"/>
+      <stop offset="1" stop-color="#c9832a"/>
+    </linearGradient>
+    <linearGradient id="membrane" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0"   stop-color="#c84a26"/>
+      <stop offset="0.6" stop-color="#8d2113"/>
+      <stop offset="1"   stop-color="#5e100e"/>
+    </linearGradient>
+    <linearGradient id="membraneFar" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#6f1d12"/>
+      <stop offset="1" stop-color="#3d0a09"/>
+    </linearGradient>
+    <radialGradient id="flameOuter" cx="0.08" cy="0.5" r="1.05">
+      <stop offset="0"    stop-color="#ff9220"/>
+      <stop offset="0.55" stop-color="#f4541a"/>
+      <stop offset="1"    stop-color="#c0280f" stop-opacity="0.2"/>
+    </radialGradient>
+    <radialGradient id="flameMid" cx="0.04" cy="0.5" r="1">
+      <stop offset="0" stop-color="#ffcb45"/>
+      <stop offset="1" stop-color="#ff7a18" stop-opacity="0.8"/>
+    </radialGradient>
+    <radialGradient id="flameCore" cx="0" cy="0.5" r="1">
+      <stop offset="0" stop-color="#fffdf0"/>
+      <stop offset="1" stop-color="#ffd84d" stop-opacity="0.92"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-120%" width="220%" height="360%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft" x="-25%" y="-25%" width="160%" height="170%">
+      <feDropShadow dx="5" dy="10" stdDeviation="9" flood-color="#290604" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#soft)">
+    <animateTransform attributeName="transform" type="translate" additive="sum"
+      values="0,0; 0,-10; 0,0" keyTimes="0;.5;1" dur="2.4s"
+      calcMode="spline" keySplines=".42 0 .58 1;.42 0 .58 1" repeatCount="indefinite"/>
+
+    <!-- ================= far wing ================= -->
+    <g transform="translate(336,166)">
+      <animateTransform attributeName="transform" type="rotate" additive="sum"
+        values="-22;12;-22" keyTimes="0;.5;1" dur="2.4s" begin="-.5s"
+        calcMode="spline" keySplines=".42 0 .58 1;.42 0 .58 1" repeatCount="indefinite"/>
+      <g transform="scale(.88)" opacity=".95">
+        <path fill="url(#membraneFar)" d="M0,0 C-30,-52 -74,-96 -130,-120 L-176,-62
+          C-148,-52 -140,-34 -166,-8 C-140,-2 -126,14 -140,38
+          C-114,36 -94,46 -88,64 C-62,46 -32,24 -6,12 Z"/>
+        <g fill="none" stroke="#320807" stroke-width="4" stroke-linecap="round" opacity=".5">
+          <path d="M0,0 C-30,-52 -74,-96 -130,-120"/>
+          <path d="M-130,-120 L-176,-62"/><path d="M-130,-120 L-166,-8"/>
+          <path d="M-130,-120 L-140,38"/><path d="M-130,-120 L-88,64"/>
+        </g>
+      </g>
+    </g>
+
+    <!-- ================= body: neck + torso + tail in one outline ================= -->
+    <path fill="url(#body)" d="M442,104
+      C412,100 384,114 362,136 C344,154 324,168 300,178
+      C258,196 214,210 172,226 C128,242 86,254 44,260
+      C88,270 132,264 176,252 C216,241 252,232 282,226
+      C296,244 322,252 344,240 C364,228 376,204 390,180
+      C404,156 422,132 446,120 Z"/>
+
+    <!-- tail fin -->
+    <path fill="url(#bodyDark)" d="M58,252 C40,238 20,234 4,240
+      C20,248 28,258 30,270 C42,264 52,260 60,262 Z"/>
+
+    <!-- belly plating -->
+    <path fill="url(#belly)" d="M346,228 C326,242 302,238 288,224
+      C256,232 216,242 178,250 C136,259 94,264 52,262
+      C92,272 134,264 176,252 C216,241 252,232 282,226
+      C296,244 322,252 344,240 Z"/>
+    <g stroke="#b9772a" stroke-width="2" opacity=".5" fill="none">
+      <path d="M300,232 l-4,12"/><path d="M272,230 l-3,10"/><path d="M240,236 l-3,10"/>
+      <path d="M208,243 l-3,9"/><path d="M176,250 l-2,8"/><path d="M144,257 l-2,7"/>
+      <path d="M112,261 l-1,6"/>
+    </g>
+
+    <!-- spine ridge -->
+    <g fill="#f2bf55">
+      <path d="M416,100 l1,-17 l9,14 Z"/><path d="M388,112 l-2,-17 l11,12 Z"/>
+      <path d="M358,137 l-5,-17 l13,11 Z"/><path d="M328,160 l-7,-16 l14,9 Z"/>
+      <path d="M298,178 l-8,-15 l14,8 Z"/><path d="M258,195 l-8,-14 l14,7 Z"/>
+      <path d="M218,209 l-7,-13 l13,6 Z"/><path d="M178,225 l-6,-12 l12,5 Z"/>
+      <path d="M138,239 l-5,-11 l11,5 Z"/><path d="M100,250 l-4,-9 l9,4 Z"/>
+      <path d="M68,256 l-3,-8 l8,4 Z"/>
+    </g>
+
+    <!-- ================= legs ================= -->
+    <g fill="url(#bodyDark)">
+      <path d="M282,222 C268,240 266,258 274,272 C280,282 294,288 306,284
+        C296,278 290,268 292,256 C294,244 298,234 300,226 Z"/>
+      <path d="M344,222 C338,238 342,252 354,262 C362,268 372,266 374,258
+        C366,256 358,248 356,238 C355,230 356,224 358,218 Z"/>
+    </g>
+    <g fill="#f6e2b4">
+      <path d="M304,284 l-13,4 l12,3 Z"/><path d="M306,288 l-11,7 l12,0 Z"/>
+      <path d="M373,259 l11,5 l-9,5 Z"/><path d="M374,264 l7,9 l-9,0 Z"/>
+    </g>
+
+    <!-- ================= head ================= -->
+    <g>
+      <!-- horns -->
+      <path fill="url(#bodyDark)" d="M434,106 C420,88 400,76 378,70 C394,84 408,96 420,114 Z"/>
+      <path fill="url(#bodyDark)" d="M430,118 C414,104 394,96 374,94 C392,102 406,112 418,126 Z"/>
+      <!-- cheek spike -->
+      <path fill="url(#bodyDark)" d="M438,138 C426,148 412,153 398,153 C412,144 424,137 434,130 Z"/>
+
+      <!-- lower jaw, dropped open -->
+      <path fill="url(#bodyDark)" d="M440,130 C452,142 470,152 492,160
+        C502,164 501,172 492,171 C470,168 448,158 436,147 C430,141 433,128 440,130 Z"/>
+      <g fill="#f8eed6">
+        <path d="M462,152 l-2,-9 l7,7 Z"/><path d="M478,159 l-2,-9 l7,7 Z"/>
+      </g>
+
+      <!-- skull + upper jaw -->
+      <path fill="url(#body)" d="M428,112 C434,96 456,88 478,92
+        C500,96 518,108 530,120 C536,126 534,133 526,133
+        C512,133 496,130 482,128 C466,126 448,130 438,136
+        C428,142 422,134 423,124 C424,118 425,114 428,112 Z"/>
+      <g fill="#f8eed6">
+        <path d="M498,129 l3,9 l5,-8 Z"/><path d="M512,130 l3,8 l5,-7 Z"/>
+      </g>
+
+      <!-- brow + eye -->
+      <path fill="#5c0f0c" d="M444,110 C453,104 466,103 475,107 C466,108 454,112 446,117 Z"/>
+      <ellipse cx="459" cy="117" rx="8" ry="5.4" fill="#ffd34a"/>
+      <path d="M459,112 C461,114.6 461,119.4 459,122 C457,119.4 457,114.6 459,112 Z" fill="#2a0705"/>
+      <circle cx="517" cy="122" r="2.6" fill="#4a0d0c"/>
+    </g>
+
+    <!-- ================= near wing ================= -->
+    <g transform="translate(340,168)">
+      <animateTransform attributeName="transform" type="rotate" additive="sum"
+        values="-14;15;-14" keyTimes="0;.5;1" dur="2.4s"
+        calcMode="spline" keySplines=".42 0 .58 1;.42 0 .58 1" repeatCount="indefinite"/>
+      <path fill="url(#membrane)" d="M0,0 C-30,-52 -74,-96 -130,-120 L-176,-62
+        C-148,-52 -140,-34 -166,-8 C-140,-2 -126,14 -140,38
+        C-114,36 -94,46 -88,64 C-62,46 -32,24 -6,12 Z"/>
+      <g fill="none" stroke="#5a1210" stroke-width="4.5" stroke-linecap="round" opacity=".55">
+        <path d="M0,0 C-30,-52 -74,-96 -130,-120"/>
+        <path d="M-130,-120 L-176,-62"/><path d="M-130,-120 L-166,-8"/>
+        <path d="M-130,-120 L-140,38"/><path d="M-130,-120 L-88,64"/>
+      </g>
+      <path fill="#f2bf55" d="M-130,-120 l-10,-14 l17,5 Z"/>
+    </g>
+
+    <!-- ================= fire ================= -->
+    <g transform="translate(505,145)" filter="url(#glow)">
+      <animateTransform attributeName="transform" type="scale" additive="sum"
+        values="1,.92; 1.07,1.08; 1,.92" keyTimes="0;.5;1" dur="1.6s"
+        calcMode="spline" keySplines=".42 0 .58 1;.42 0 .58 1" repeatCount="indefinite"/>
+      <g>
+        <animateTransform attributeName="transform" type="scale" additive="sum"
+          values="1,1; .97,1.06; 1,1" keyTimes="0;.5;1" dur="0.3s" repeatCount="indefinite"/>
+        <g transform="translate(-505,-145)">
+          <path fill="url(#flameOuter)" d="M506,132
+            C544,116 578,104 612,96 C600,112 614,116 640,110
+            C624,124 636,132 658,134 C634,146 640,156 656,166
+            C628,166 622,176 630,190 C596,176 562,172 528,166
+            C506,162 496,142 506,132 Z"/>
+          <path fill="url(#flameMid)" d="M508,136
+            C540,124 568,116 594,110 C585,122 596,126 614,122
+            C600,133 610,140 626,142 C606,151 612,159 624,168
+            C596,160 566,160 536,160 C514,158 502,146 508,136 Z"/>
+          <path fill="url(#flameCore)" d="M512,140
+            C538,132 562,126 582,124 C574,132 582,136 594,134
+            C582,142 588,147 598,150 C576,154 548,154 528,152
+            C514,150 508,146 512,140 Z"/>
+        </g>
+      </g>
+      <g fill="#ffb63a" transform="translate(-505,-145)">
+        <circle cx="636" cy="104" r="4">
+          <animateTransform attributeName="transform" type="translate" values="0,0; 34,-26" dur="2.1s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values=".9;0" dur="2.1s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="624" cy="186" r="3">
+          <animateTransform attributeName="transform" type="translate" values="0,0; 30,-18" dur="2.7s" begin="-.9s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values=".9;0" dur="2.7s" begin="-.9s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="656" cy="150" r="2.5">
+          <animateTransform attributeName="transform" type="translate" values="0,0; 24,-30" dur="1.7s" begin="-1.3s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values=".9;0" dur="1.7s" begin="-1.3s" repeatCount="indefinite"/>
+        </circle>
+      </g>
+    </g>
+  </g>
+</svg>

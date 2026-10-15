@@ -42,6 +42,143 @@ public enum Mark: String, CaseIterable, Sendable {
     public var sprite: Sprite { Sprite(rows) }
 }
 
+
+/// How hard the one character with a mouthful of fire is breathing.
+///
+/// Declared per mood rather than worked out from the tint, for the reason
+/// `SweepKind` is declared: two moods can share a colour and have nothing
+/// else in common. `idle` and `working` are both blue, and one of them is the
+/// app actually doing something.
+///
+/// The reach is a readout, and that is the point of it. It tracks how much
+/// the app wants you to look — out when there is nothing to say, a pilot
+/// light when it is only keeping a queue warm, everything he has when
+/// something has gone stale. Every other character's tell is a colour and
+/// nothing else; this one has a length too, and a length is legible across a
+/// desk at a glance, which a hue at this size is not.
+public enum Breath: String, CaseIterable, Sendable {
+    /// Out. The coal in his throat, and nothing past the teeth.
+    case out
+    /// A pilot light.
+    case pilot
+    /// Steady.
+    case steady
+    /// Up.
+    case flare
+    /// Everything he has.
+    case blast
+    /// Guttering: pilot length and never twice the same. The one setting
+    /// here that reads as something being *wrong* rather than as quiet.
+    case gutter
+
+    /// The flame, drawn.
+    ///
+    /// Left half only, mirrored on the way out, so it comes back symmetric
+    /// by construction. `a` is the hot core, `N` the body of it, `M` the
+    /// cool outside; the last column is the centre line and is always the
+    /// hottest thing in its row.
+    ///
+    /// Drawn rather than computed, after several goes at computing it. A
+    /// flame generated from leans and tapers came out, in order: a cone, a
+    /// bell, a splash, a bundle of roots and a glowing blob — each fixing
+    /// the last one's artefact and introducing its own. The rest of this
+    /// cast's art is drawn by hand and its rules written down, for exactly
+    /// this reason.
+    ///
+    /// Two things about the shape, both learnt by getting them wrong:
+    ///
+    ///   * It bulges just below the jaw and then tapers a long way to a
+    ///     point. Widest in the middle — the obvious symmetric thing to
+    ///     draw — is a leaf, and at a glance it reads as one.
+    ///   * The bands are nested inside the outline rather than graded from
+    ///     the mouth down. A smooth top-to-bottom gradient is what a
+    ///     *liquid* looks like, and the version that had one read as
+    ///     something being brought up rather than breathed out.
+    public var half: [String] {
+        switch self {
+        case .out:
+            return []
+        case .pilot:
+            return [
+                    "........MNa",
+                    ".......MNaa",
+                    ".......MNaa",
+                    "........MNa",
+                    "........MMN",
+                    ".........MM",
+                    "..........M"]
+        case .gutter:
+            return [
+                    "........MNa",
+                    ".......MNaa",
+                    "........M.a",
+                    ".........MN",
+                    ".........MN",
+                    "..........M"]
+        case .steady:
+            return [
+                    ".......MNaa",
+                    "......MNaaa",
+                    "......MNaaa",
+                    "......MNaaa",
+                    ".......MNaa",
+                    ".......MNaa",
+                    "........MMN",
+                    "........MMN",
+                    ".........MN",
+                    ".........MM",
+                    "..........M"]
+        case .flare:
+            return [
+                    ".......MNaa",
+                    ".....MNaaaa",
+                    ".....MNaaaa",
+                    ".....MNaaaa",
+                    ".....MNaaaa",
+                    "......MNaaa",
+                    "......MNaaa",
+                    ".......M.aa",
+                    ".......M.NN",
+                    ".......MMNN",
+                    "........MMN",
+                    "........MMN",
+                    ".........MN",
+                    ".........MM",
+                    "..........M",
+                    "..........M"]
+        case .blast:
+            return [
+                    ".......MNaa",
+                    ".....MNaaaa",
+                    "....MNaaaaa",
+                    "...MNaaaaaa",
+                    "...MNaaaaaa",
+                    "...MNaaaaaa",
+                    "....MNaaaaa",
+                    "....MNaaaaa",
+                    ".....M.aaaa",
+                    ".....M.aaaa",
+                    "......MNaaa",
+                    "......MMNNN",
+                    ".......M.NN",
+                    ".......M.NN",
+                    "........MMN",
+                    "........MMN",
+                    ".........MN",
+                    ".........MM",
+                    "..........M",
+                    "..........M",
+                    "..........M"]
+        }
+    }
+
+    /// The whole flame, mirrored.
+    public var rows: [String] { half.map { $0 + String($0.reversed()) } }
+
+    /// How many rows it runs for.
+    public var reach: Int { half.count }
+}
+
 /// How a character looks and moves for one state. Shared by `Mood` and
 /// `Reaction` so the renderer only ever knows about this.
 public struct SpriteStyle: Sendable {
@@ -51,6 +188,15 @@ public struct SpriteStyle: Sendable {
     public let health: Health
     /// Vertical offset per animation frame, in units.
     public let bob: [Int]
+    /// How hard the one character with a flame is breathing in this state.
+    ///
+    /// Carried here rather than read off `health` because the renderer is
+    /// only ever given a `SpriteStyle`, and because two states can share a
+    /// tint and want different fires out of it. Defaulted for the reason
+    /// `Mascot.cohort` is: a caller building a style with the arguments this
+    /// type had before the dragon existed keeps compiling, and gets a dragon
+    /// breathing normally.
+    public let breath: Breath
     /// Whether the character runs its sweep in this state.
     ///
     /// Tied to the tint rather than picked per mood: the sweep belongs to
@@ -61,11 +207,13 @@ public struct SpriteStyle: Sendable {
     /// like the one you can ignore.
     public var sweeps: Bool { health == .running }
 
-    public init(eyes: EyePattern, marks: [Mark], health: Health, bob: [Int]) {
+    public init(eyes: EyePattern, marks: [Mark], health: Health, bob: [Int],
+                breath: Breath = .steady) {
         self.eyes = eyes
         self.marks = marks
         self.health = health
         self.bob = bob
+        self.breath = breath
     }
 
     public func mark(frame: Int) -> Mark { marks[abs(frame) % marks.count] }
@@ -104,20 +252,24 @@ public enum Mood: String, CaseIterable, Sendable {
         switch self {
         case .asleep:
             return SpriteStyle(eyes: .shut, marks: [.zzz, .zzz, .zzz, .none],
-                               health: .good, bob: [0, 0, 0, 1, 1, 1])
+                               health: .good, bob: [0, 0, 0, 1, 1, 1],
+                               breath: .out)
         case .idle:
             // The one mood with a longer cycle than it strictly needs: the
             // sweep runs off the frame counter, so a one-frame bob would hold
             // the body still while the beam crossed it.
             return SpriteStyle(eyes: .open, marks: [.none],
                                health: .running,
-                               bob: [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0])
+                               bob: [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0],
+                               breath: .pilot)
         case .nudging:
             return SpriteStyle(eyes: .glance, marks: [.bang, .bang, .none],
-                               health: .attention, bob: [0, 0, 1, 1])
+                               health: .attention, bob: [0, 0, 1, 1],
+                               breath: .flare)
         case .alarmed:
             return SpriteStyle(eyes: .wide, marks: [.bang, .none],
-                               health: .bad, bob: [0, 1])
+                               health: .bad, bob: [0, 1],
+                               breath: .blast)
         case .working:
             // The one state that is literally a scan. The mark sweeps the
             // gutter and the beam sweeps the character, and a longer cycle so
@@ -125,13 +277,21 @@ public enum Mood: String, CaseIterable, Sendable {
             return SpriteStyle(eyes: .shut,
                                marks: [.scanLeft, .scanMiddle, .scanRight],
                                health: .running,
-                               bob: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1])
+                               bob: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
+                               breath: .steady)
         case .proud:
+            // Shares `steady` with `working`, which is the one collision the
+            // six settings force on seven moods. Picked here because these
+            // two are the pair that least needs telling apart by the fire:
+            // nothing is wrong in either, and they are already a different
+            // colour, eye, mark and sweep from each other.
             return SpriteStyle(eyes: .open, marks: [.spark, .none],
-                               health: .good, bob: [0, 0, 1, 1])
+                               health: .good, bob: [0, 0, 1, 1],
+                               breath: .steady)
         case .lost:
             return SpriteStyle(eyes: .dead, marks: [.query],
-                               health: .neutral, bob: [0])
+                               health: .neutral, bob: [0],
+                               breath: .gutter)
         }
     }
 

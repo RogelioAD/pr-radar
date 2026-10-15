@@ -51,7 +51,8 @@ public enum SweepKind: Sendable {
     case wisp
     /// Sonar: arcs thrown forward and down, out of the muzzle.
     case echo
-    /// A candle guttering behind a carving, and the light it spills.
+    /// A flame guttering, and the light it spills — a candle behind a
+    /// carving, or the fire a dragon is holding in his mouth.
     case flicker
     /// A pulse stepping down the spine, one rib at a time.
     case marrow
@@ -103,6 +104,10 @@ public enum MascotID: String, CaseIterable, Sendable {
     case pip, byte, widget, nimbus
     case blip, scoot, wobble, bloop
     case boo, flit, gourd, rattle
+
+    /// The personal shelf. Last in the lap, which is where `MascotCohort`
+    /// says yours goes.
+    case ember
 
     /// The picker, for anyone who finds it by clicking: each character in
     /// turn, then off, then round again.
@@ -162,6 +167,11 @@ public struct Mascot: Identifiable, Sendable, Equatable {
     /// it had asked for. The compile-time nudge is not worth that; a test
     /// keeps the built-in cast honest instead.
     public let bobScale: Int
+    /// Whether this character has a flame painted past its art, out of the
+    /// `Breath` its mood declares. Declared rather than derived, like
+    /// `sweep` and `cohort`, and defaulted so a fork that added a character
+    /// before the dragon existed keeps compiling.
+    public let breathes: Bool
     /// Rows to keep for a small perch: the head, and nothing it stands on.
     ///
     /// Sized so the crop still carries a tell. Cropping past the antenna
@@ -175,7 +185,8 @@ public struct Mascot: Identifiable, Sendable, Equatable {
     public init(id: MascotID, name: String, tellName: String, blurb: String,
                 sprite: Sprite, eyes: [Point], eyeSize: Int, eyeInk: Slot,
                 sweep: SweepKind, ramp: ChassisRamp, headRows: Int,
-                cohort: MascotCohort = .custom, bobScale: Int = 1) {
+                cohort: MascotCohort = .custom, bobScale: Int = 1,
+                breathes: Bool = false) {
         self.id = id
         self.name = name
         self.tellName = tellName
@@ -189,6 +200,37 @@ public struct Mascot: Identifiable, Sendable, Equatable {
         self.headRows = headRows
         self.cohort = cohort
         self.bobScale = bobScale
+        self.breathes = breathes
+    }
+
+    /// The row the fire leaves by: just under the coal in his throat.
+    ///
+    /// Taken off the lowest lit cell of the tell rather than off the bottom
+    /// of the art, because the bottom of the art is now the underside of
+    /// his jaw — and fire out from under the chin is not fire out of the
+    /// mouth. Derived either way, so it moves when anyone redraws the head.
+    public var flameLip: Int {
+        let coal = sprite.litPoints.filter { isTell(sprite[$0.x, $0.y]) }
+        return (coal.map(\.y).max() ?? litRows.upperBound) + 1
+    }
+
+    /// Rows the layout keeps under the art for a flame that runs past it.
+    ///
+    /// The longest breath there is, measured from the lip, less whatever
+    /// room is left under the jaw. Reserved whether he is breathing or not:
+    /// a block whose height moved with the mood would reflow the badge
+    /// every time the state changed, which is the thing the mark gutter is
+    /// already reserved to avoid.
+    public var overflowRows: Int {
+        guard breathes else { return 0 }
+        // Measured off the drawing rather than off `reach`: the outer licks
+        // curl back up, so the deepest row is nowhere near the end of the
+        // longest tongue and reserving by length would leave a band of
+        // empty rows under him.
+        let deepest = Breath.allCases.flatMap { breath in
+            (0..<4).map { sparks(frame: $0, breath: breath).map(\.y).max() ?? 0 }
+        }.max() ?? 0
+        return max(0, deepest + 1 - sprite.height)
     }
 
     /// Always drawn in the live tint, whatever the eyes are doing.
@@ -825,12 +867,103 @@ extension Mascot {
         headRows: 26, cohort: .october2026)
 }
 
+// MARK: - The personal shelf
+//
+// Not a cohort the app ships a set of: one character, on the row the room
+// titles with whoever is signed in. `.custom` was always the shelf for this
+// — see `MascotCohort` — and this is the first build to put anybody on it.
+
+extension Mascot {
+    /// A dragon's head, filling the frame, and the only character whose
+    /// tell has a *length* as well as a colour.
+    ///
+    /// The fire is not in his sprite. All that is drawn is the coal in his
+    /// throat; everything past the lip is painted per frame by `breathe`
+    /// out of the `Breath` the mood declares, so how far he is breathing is
+    /// a readout of what the app is doing — out when asleep, a pilot light
+    /// when the queue is warm, everything he has when something has gone
+    /// stale. A baked flame could not be taken away again for `.out`, which
+    /// is why none of it is baked.
+    ///
+    /// He has no wings, and he is a head rather than a whole animal, for
+    /// the same reason in both cases: room. Drawn full-length head-on he is
+    /// a moth — there is a torso under the head and the flame lands in its
+    /// place, read as a body however it is cut. Drawn as a head with wings
+    /// either side, the wings take the width and the head comes down to
+    /// twenty-six columns, which is not enough for a brow, a crest,
+    /// nostrils and a jaw with teeth in it — so what is left is a mask with
+    /// two lamps on it. `Scripts/mascot.py` has the long version under
+    /// `dragon()`, including which of those were drawn and thrown away.
+    public static let ember = Mascot(
+        id: .ember, name: "Ember", tellName: "the fire",
+        blurb: "Yours. Four horns, a mouthful of teeth, and however much fire the moment calls for.",
+        sprite: Sprite([
+            ".......................HB.......................",
+            ".............Sk........HB........kD.............",
+            "S............Skk.......HB.......kkD............D",
+            "H............SWk......SSDD......kHD............B",
+            "HHD..........SWk.....SHWHBD.....kHD..........DBB",
+            "SHWk.........HWSk...HHSSDDBB...kDHB.........kHBD",
+            "SWWWSk.......HWSk.kkWHSWHDBHkk.kDHB.......kDHHHD",
+            ".kWWSSkk....SHWkDkBWWHWWHHBHHSkDkHBD....kkDDHHk.",
+            ".kkWWWHHkkk.SHWHkkWWHBSHBDSBHHkkBHBD.kkkBBHHHkk.",
+            "..kSWWWWSkkkBHHHkSSWHDHHBBDBHDDkBBBSkkkDHHHHDk..",
+            "...kHHWWWkHkkHHHkHHWHSSHBDDBHBBkBBBkkBkHHHBBk...",
+            "....kkHHSWHHSkkkkHWHHHHHBBBBBHBkkkkDBBHDBBkk....",
+            ".....kSHkWWHHSkkWHWWHHHHBBBBHHBHkkDBBHHkBDk.....",
+            "......kSkWWWWHSkWWWWHHHHBBBBHHHHkDBHHHHkDk......",
+            ".......kSWWWWWHHkWkkHBHWHBSBkkHkBBHHHHHDk.......",
+            ".......SkHWWWWWSDkHHHBSHBDSBBBkDDHHHHHBkD.......",
+            ".......SkSWWWWWWSDkHHHHHBBBBBkDDHHHHHHDkD.......",
+            "....HHSSSkSSWWWWHSDkHHHHBBBBkDDBHHHHDDkDDDBB....",
+            "....HWkWHSSkkHWWWSSkkHHWHBBkkDDHHHBkkDDBHkHB....",
+            ".....SkWHWWSkkWWWWSSkHkWHkBkDDHHHHkkDHHBHkD.....",
+            "....H.SHSWWSkkkkWHSSkHkWHkBkDDBHkkkkDHHDBD.B....",
+            "...HWkSHSWWWSkaakSBBSkWkkHkDSSDkaakDHHHDBDkHB...",
+            "....HkkHHWWWDkaccakkkkSWHDkkkkaccakDHHHBBkkB....",
+            ".....kkkHkWWHkaacakkkkSWHDkkkkacaakBHHkBkkk.....",
+            "......kkHSkWWSkaSkkkkWBkkSHkkkkDakDHHkDBkk......",
+            "....kkkkHHSkWWWBHSkkWkDWHDkHkkDBSHHHkDBBkkkk....",
+            ".......kSHSSkWWHHSkWWHWWHHBHHkDBBHHkDDBDk.......",
+            ".....HHkSHHSkkkkkkWWWWWWHHHHHHkkkkkkDBBDkBB.....",
+            "......kkkHHHSSkkkWWWWkkkkkkHHHHkkkDDBBBkkk......",
+            "........kkHHHHDkDWWHWWHkkBHHBHHDkDBBBBkk........",
+            ".........kSHHHSSHWWBWWWHBHHHSHHBDDBBBDk.........",
+            "..........kkSHHHHWSWkkWWHHkkHDHBBBBDkk..........",
+            "............kHBBkWkkkkkHBkkkkkHkSSBk............",
+            "............kkSSkWWkWkkHBkkHkHHkDDkk............",
+            ".............kSHkWWWWkkHBkkHHHHkBDk.............",
+            "..............kkHkkWkkkHBkkkHkkBkk..............",
+            "................HkkakWSkkDHkakkB................",
+            "................SSaakkkkkkkkaaDD................",
+            ".................WacaSkkkkDacaH.................",
+            ".................WkckakkkkakckH.................",
+            ".................BWaaaaSDaaaaHS.................",
+            ".................SWacaaaaaacaHD.................",
+            "..................kHcacSDcacBk..................",
+            "..................kWaaccccaaHk..................",
+            "...................WWWkcckHHH...................",
+            "...................kBHWWHHBSk...................",
+            "....................kkkkkkkk....................",
+            ".....................kkkkkk.....................",
+        ]),
+        eyes: [Point(14, 21), Point(30, 21)], eyeSize: 4, eyeInk: .accent,
+        sweep: .flicker,
+        // Red, and kept dark enough that a saturated flame still reads
+        // against it. His tell is fire and the fire is the state readout,
+        // so the body has to stay under it in value whatever hue it is.
+        ramp: ChassisRamp(deep: RGB(0.149, 0.039, 0.043), shade: RGB(0.259, 0.075, 0.071), mid: RGB(0.400, 0.122, 0.102),
+                          base: RGB(0.557, 0.188, 0.141), light: RGB(0.722, 0.298, 0.204), spec: RGB(0.886, 0.510, 0.345)),
+        headRows: 48, cohort: .custom, bobScale: 2, breathes: true)
+}
+
 extension Mascot {
     /// Every character this build ships, in the order the room stacks them
     /// and the order clicking the mascot cycles them.
     public static let all: [Mascot] = [pip, byte, widget, nimbus,
                                        blip, scoot, wobble, bloop,
-                                       boo, flit, gourd, rattle]
+                                       boo, flit, gourd, rattle,
+                                       ember]
 
     /// The characters on one shelf, in cast order.
     public static func cohort(_ cohort: MascotCohort) -> [Mascot] {

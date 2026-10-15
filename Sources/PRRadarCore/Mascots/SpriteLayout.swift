@@ -99,25 +99,37 @@ extension SpriteLayout {
         let bob = min(2, style.offset(frame: frame) * mascot.bobScale) * unit
         let character = cropped(mascot.frame(eyes: blink ? .shut : style.eyes,
                                              frame: frame,
-                                             sweeping: style.sweeps),
+                                             sweeping: style.sweeps,
+                                             breath: style.breath),
                                 rows: rows)
 
         var layers = [Layer(sprite: character, origin: Point(0, bob),
                             accent: style.health, ramp: mascot.ramp)]
+        // Fire that runs off the bottom of the art, as its own layer rather
+        // than clipped to the character's own rows. Only drawn as far as
+        // the crop reaches: a cropped perch is already saying it does not
+        // want the lower half of him.
+        if rows >= mascot.sprite.height,
+           let spill = mascot.flameOverflow(frame: frame, breath: style.breath) {
+            layers.append(Layer(sprite: spill,
+                                origin: Point(0, bob + mascot.sprite.height),
+                                accent: style.health, ramp: mascot.ramp))
+        }
         let mark = style.mark(frame: frame)
         if mark != .none {
             layers.append(Layer(sprite: furniture(mark.sprite, unit: unit),
                                 origin: Point(mascot.sprite.width + unit, bob),
                                 accent: style.health, ramp: nil))
         }
+        let spillRoom = rows >= mascot.sprite.height ? mascot.overflowRows : 0
         return SpriteLayout(layers: layers,
                             width: blockWidth(for: mascot),
-                            height: rows + maxBobUnits * unit)
+                            height: rows + spillRoom + maxBobUnits * unit)
     }
 
     /// The character's rows plus the room kept under a bobbing one.
     public static func blockHeight(for mascot: Mascot) -> Int {
-        mascot.sprite.height + maxBobUnits * unit(for: mascot)
+        mascot.sprite.height + mascot.overflowRows + maxBobUnits * unit(for: mascot)
     }
 
     /// The character's own columns plus the mark gutter beside them.
@@ -171,9 +183,15 @@ extension SpriteLayout {
         let bob = min(2, style.offset(frame: frame) * mascot.bobScale) * unit
         var layers = [Layer(sprite: mascot.frame(eyes: blink ? .shut : style.eyes,
                                                  frame: frame,
-                                                 sweeping: style.sweeps),
+                                                 sweeping: style.sweeps,
+                                                 breath: style.breath),
                             origin: Point(characterX, bob),
                             accent: style.health, ramp: mascot.ramp)]
+        if let spill = mascot.flameOverflow(frame: frame, breath: style.breath) {
+            layers.append(Layer(sprite: spill,
+                                origin: Point(characterX, bob + mascot.sprite.height),
+                                accent: style.health, ramp: mascot.ramp))
+        }
         let mark = style.mark(frame: frame)
         if mark != .none {
             layers.append(Layer(sprite: furniture(mark.sprite, unit: unit),
@@ -182,7 +200,10 @@ extension SpriteLayout {
         }
 
         var x = characterX + centre - chipsWidth / 2
-        let chipY = mascot.sprite.height + (maxBobUnits + chipGapUnits) * unit
+        // Below the reserved flame room, not just below the art, or a blast
+        // lands on top of the counts.
+        let chipY = mascot.sprite.height + mascot.overflowRows
+                  + (maxBobUnits + chipGapUnits) * unit
         for chip in chips {
             layers.append(Layer(sprite: chip.sprite, origin: Point(x, chipY),
                                 accent: chip.accent, ramp: nil))
