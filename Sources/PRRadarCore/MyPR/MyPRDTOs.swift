@@ -118,6 +118,20 @@ public struct ContextConn: Decodable {
     public let nodes: [ContextNode]
 }
 
+/// Which workflow a check run belongs to, unwrapped from the two levels
+/// GraphQL wraps it in. Only the name is read: it identifies the workflow
+/// across re-runs, which is exactly what telling a superseded run from a live
+/// one needs.
+public struct CheckSuiteNode: Decodable {
+    public struct WorkflowRun: Decodable {
+        public struct Workflow: Decodable {
+            public let name: String?
+        }
+        public let workflow: Workflow?
+    }
+    public let workflowRun: WorkflowRun?
+}
+
 /// Union of CheckRun and StatusContext — the two kinds of check GitHub reports.
 /// A CheckRun carries `conclusion` once finished and `status` while running; a
 /// StatusContext only ever has `state`.
@@ -128,10 +142,16 @@ public struct ContextNode: Decodable {
     public let status: String?
     public let context: String?
     public let state: String?
+    /// When this run began, or when the status was posted. The tiebreak for
+    /// which of two runs of one check is the one GitHub is showing.
+    public let startedAt: Date?
+    public let createdAt: Date?
+    public let checkSuite: CheckSuiteNode?
 
     enum CodingKeys: String, CodingKey {
         case typename = "__typename"
         case name, conclusion, status, context, state
+        case startedAt, createdAt, checkSuite
     }
 
     /// The single verdict for this context, whichever kind it is.
@@ -141,6 +161,20 @@ public struct ContextNode: Decodable {
     }
 
     public var displayName: String { name ?? context ?? "check" }
+
+    /// What makes two contexts the same check rather than two checks.
+    ///
+    /// The workflow is part of it, not just the name. Two workflows may each
+    /// define a job called `build`, and GitHub shows both — collapsing them on
+    /// the name alone would hide one. A status context has no workflow and is
+    /// already unique by its own name, so it keys on that.
+    public var identity: String {
+        let workflow = checkSuite?.workflowRun?.workflow?.name ?? ""
+        return "\(workflow)\u{0}\(displayName)"
+    }
+
+    /// When this one happened, for picking the later of two.
+    public var occurredAt: Date { startedAt ?? createdAt ?? .distantPast }
 }
 
 // MARK: - Second-phase compare payload

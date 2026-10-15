@@ -490,4 +490,129 @@ final class LeadsTests: XCTestCase {
                        [Member(login: "mislav", name: "Mislav"),
                         Member(login: "bot", name: nil)])
     }
+
+    // MARK: - Superseded check runs
+
+    /// Decodes a rollup the way `GitHubClient` does, so the test exercises the
+    /// real `CodingKeys` and date strategy rather than a hand-built node.
+    private func rollup(_ json: String) throws -> RollupNode {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(RollupNode.self, from: Data(json.utf8))
+    }
+
+    /// One check run, as GraphQL returns it.
+    private func run(_ name: String, _ verdict: String, at started: String,
+                     workflow: String = "CI") -> String {
+        let finished = ["SUCCESS", "FAILURE", "CANCELLED", "SKIPPED"]
+            .contains(verdict)
+        return """
+        {"__typename":"CheckRun","name":"\(name)",
+         "conclusion":\(finished ? "\"\(verdict)\"" : "null"),
+         "status":\(finished ? "null" : "\"\(verdict)\""),
+         "startedAt":"\(started)",
+         "checkSuite":{"workflowRun":{"workflow":{"name":"\(workflow)"}}}}
+        """
+    }
+
+    /// The bug this guards: push while a run is in flight and GitHub cancels
+    /// it, starts a replacement seconds later, and returns *both* against the
+    /// head commit. A PR whose checks had all been re-run and passed was shown
+    /// as a dozen failures — one per cancelled run — beside a GitHub page
+    /// reporting none.
+    func testACancelledRunIsNotCountedOnceItHasBeenReRun() throws {
+        let node = try rollup("""
+        {"state":"FAILURE","contexts":{"totalCount":4,"nodes":[
+          \(run("Rust Quality Gates", "CANCELLED", at: "2026-10-15T14:29:32Z")),
+          \(run("Detect Changed Paths", "CANCELLED", at: "2026-10-15T14:29:32Z")),
+          \(run("Rust Quality Gates", "SUCCESS", at: "2026-10-15T14:29:57Z")),
+          \(run("Detect Changed Paths", "SUCCESS", at: "2026-10-15T14:29:44Z"))
+        ]}}
+        """)
+        let checks = MyPRInbox.checks(from: node)
+        XCTAssertEqual(checks.failing, 0, "cancelled runs that were replaced")
+        XCTAssertEqual(checks.passing, 2)
+        XCTAssertEqual(checks.total, 2, "two checks, not four runs")
+        XCTAssertEqual(checks.failingNames, [])
+    }
+
+    /// The other half: a failure that was *not* superseded still counts, or the
+    /// fix would have traded a false alarm for a missed one.
+    func testTheLatestRunIsWhatCountsWhicheverWayItWent() throws {
+        let node = try rollup("""
+        {"state":"FAILURE","contexts":{"totalCount":3,"nodes":[
+          \(run("CI Success", "SUCCESS", at: "2026-10-15T14:20:00Z")),
+          \(run("CI Success", "FAILURE", at: "2026-10-15T14:29:37Z")),
+          \(run("Android Unit Tests & Lint", "IN_PROGRESS",
+                 at: "2026-10-15T14:29:55Z"))
+        ]}}
+        """)
+        let checks = MyPRInbox.checks(from: node)
+        XCTAssertEqual(checks.failing, 1)
+        XCTAssertEqual(checks.failingNames, ["CI Success"])
+        XCTAssertEqual(checks.running, 1)
+        XCTAssertEqual(checks.passing, 0, "the earlier pass was superseded")
+    }
+
+    /// Two workflows may each define a job of the same name and GitHub shows
+    /// both, so the name alone cannot be the key.
+    func testTwoWorkflowsMayShareACheckNameWithoutCollapsing() throws {
+        let node = try rollup("""
+        {"state":"FAILURE","contexts":{"totalCount":2,"nodes":[
+          \(run("build", "SUCCESS", at: "2026-10-15T14:29:32Z",
+                 workflow: "CI")),
+          \(run("build", "FAILURE", at: "2026-10-15T14:29:44Z",
+                 workflow: "Nightly"))
+        ]}}
+        """)
+        let checks = MyPRInbox.checks(from: node)
+        XCTAssertEqual(checks.total, 2, "different workflows, different checks")
+        XCTAssertEqual(checks.failing, 1)
+        XCTAssertEqual(checks.passing, 1)
+    }
+
+    /// A status context carries `createdAt` rather than `startedAt`, and has no
+    /// workflow at all. It must still survive the pass intact.
+    func testAStatusContextIsKeptAndKeyedOnItsOwnName() throws {
+        let node = try rollup("""
+        {"state":"SUCCESS","contexts":{"totalCount":2,"nodes":[
+          {"__typename":"StatusContext","context":"AWS CodeBuild",
+           "state":"SUCCESS","createdAt":"2026-10-15T14:44:40Z"},
+          \(run("CI Success", "SUCCESS", at: "2026-10-15T14:29:37Z"))
+        ]}}
+        """)
+        let checks = MyPRInbox.checks(from: node)
+        XCTAssertEqual(checks.total, 2)
+        XCTAssertEqual(checks.passing, 2)
+    }
+
+    /// The whole of PR #856, which is where this was found: twenty-five runs
+    /// that GitHub was showing as fourteen checks, one of them failing.
+    func testTheRollupThatReportedTwelveFailuresReportsOne() throws {
+        var nodes: [String] = []
+        // Every CI job was cancelled at 14:29:3x and re-run seconds later.
+        for (name, verdict, at) in [
+            ("Detect Changed Paths", "SUCCESS", "2026-10-15T14:29:44Z"),
+            ("Comment on Golden Changes", "SUCCESS", "2026-10-15T14:29:36Z"),
+            ("Conventional Commit", "SUCCESS", "2026-10-15T14:29:36Z"),
+            ("Rust Quality Gates", "SUCCESS", "2026-10-15T14:29:57Z"),
+            ("Environment Variable Validation", "SUCCESS", "2026-10-15T14:29:45Z"),
+            ("Determinism (pipeline stage)", "SKIPPED", "2026-10-15T14:29:53Z"),
+            ("Xtask Tests", "SKIPPED", "2026-10-15T14:29:53Z"),
+            ("Android Rust Build", "SKIPPED", "2026-10-15T14:29:54Z"),
+            ("Android Unit Tests & Lint", "IN_PROGRESS", "2026-10-15T14:29:55Z"),
+        ] {
+            nodes.append(run(name, "CANCELLED", at: "2026-10-15T14:29:32Z"))
+            nodes.append(run(name, verdict, at: at))
+        }
+        nodes.append(run("CI Success", "FAILURE", at: "2026-10-15T14:29:37Z"))
+        let node = try rollup("""
+        {"state":"FAILURE","contexts":{"totalCount":\(nodes.count),
+         "nodes":[\(nodes.joined(separator: ","))]}}
+        """)
+        let checks = MyPRInbox.checks(from: node)
+        XCTAssertEqual(checks.failing, 1, "was 12, one per cancelled run")
+        XCTAssertEqual(checks.failingNames, ["CI Success"])
+        XCTAssertEqual(checks.total, 10)
+    }
 }

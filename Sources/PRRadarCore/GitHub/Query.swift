@@ -179,8 +179,15 @@ public enum Query {
                           totalCount
                           nodes {
                             __typename
-                            ... on CheckRun { name conclusion status }
-                            ... on StatusContext { context state }
+                            # `startedAt` and the workflow name are what let a
+                            # superseded run be told from a live one. A cancelled
+                            # run and the re-run that replaced it both come back
+                            # here, and without these two the tally counts both.
+                            ... on CheckRun {
+                              name conclusion status startedAt
+                              checkSuite { workflowRun { workflow { name } } }
+                            }
+                            ... on StatusContext { context state createdAt }
                           }
                         }
                       }

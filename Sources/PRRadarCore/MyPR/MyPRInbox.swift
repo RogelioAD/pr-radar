@@ -120,6 +120,41 @@ public struct MyPRInbox {
         return item
     }
 
+    /// The contexts GitHub is actually showing, one per check.
+    ///
+    /// The rollup returns *every* run against the head commit, not the current
+    /// one per check. Push while a run is in flight and the first is cancelled
+    /// and replaced seconds later — and both come back here, so a PR whose
+    /// checks had all been re-run and passed was reported as a dozen failures,
+    /// one per cancelled run, against a GitHub page showing none. Superseded
+    /// runs are dropped the way GitHub drops them: latest wins, per check.
+    ///
+    /// Keyed on workflow *and* name rather than name alone, so two workflows
+    /// that each define a `build` keep both — see `ContextNode.identity`.
+    static func currentContexts(_ nodes: [ContextNode]) -> [ContextNode] {
+        var latest: [String: ContextNode] = [:]
+        for node in nodes {
+            guard let previous = latest[node.identity] else {
+                latest[node.identity] = node
+                continue
+            }
+            // `>=` so that when two runs carry the same timestamp — or neither
+            // carries one at all — the later arrival wins. GitHub returns a
+            // commit's contexts oldest first, so that is still the current one.
+            if node.occurredAt >= previous.occurredAt {
+                latest[node.identity] = node
+            }
+        }
+        // Back into the order they arrived, so `failingNames` reads the way the
+        // checks list does rather than in dictionary order.
+        var seen = Set<String>()
+        return nodes.compactMap { node in
+            guard !seen.contains(node.identity) else { return nil }
+            seen.insert(node.identity)
+            return latest[node.identity]
+        }
+    }
+
     /// Tallies a check rollup. CheckRun and StatusContext report their verdict
     /// in different fields, which `ContextNode.verdict` already normalises.
     static func checks(from rollup: RollupNode?) -> ChecksSummary {
@@ -127,7 +162,7 @@ public struct MyPRInbox {
         var passing = 0, failing = 0, running = 0, skipped = 0
         var failingNames: [String] = []
 
-        for context in rollup.contexts?.nodes ?? [] {
+        for context in currentContexts(rollup.contexts?.nodes ?? []) {
             switch context.verdict {
             case "SUCCESS":
                 passing += 1
