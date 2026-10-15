@@ -366,15 +366,29 @@ final class AppState: ObservableObject {
     /// `body`. `detail` and `recommendation` are hover text, and hover text
     /// stays in the original words by design — the reading is the lens, the
     /// tooltip is the source.
-    var lensSources: [String] {
+    var lensSources: [String] { lensSources(visibleOnly: false) }
+
+    /// The text you can actually read right now: the rows that are open.
+    ///
+    /// Its own list because the lens is pressed to change *what is on screen*,
+    /// and a row whose findings or threads are collapsed shows none of this.
+    /// Translating everything in one undifferentiated pass meant the first
+    /// thing to come back was as likely to be a comment on a closed row as the
+    /// one being looked at — so the press appeared to do nothing for a minute,
+    /// and then changed something out of sight.
+    var lensVisibleSources: [String] { lensSources(visibleOnly: true) }
+
+    private func lensSources(visibleOnly: Bool) -> [String] {
         var sources: [String] = []
         for item in displayedItems {
+            if visibleOnly, !openFindings.contains(item.pingKey) { continue }
             guard let record = review(for: item) else { continue }
             for prepared in record.prepared + record.authored {
                 sources.append(prepared.finding.summary)
             }
         }
         for pr in displayedMyPRs {
+            if visibleOnly, !openThreads.contains(pr.id) { continue }
             for thread in pr.unresolvedThreads {
                 for comment in thread.comments {
                     sources.append(comment.body)

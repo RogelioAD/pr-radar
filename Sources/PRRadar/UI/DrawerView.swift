@@ -401,10 +401,11 @@ struct DrawerView: View {
         }
         if state.lensTranslating { return "Reading it back in plain English…" }
         return state.lensOn
-            ? "Showing plain English. Hover any line for the original. "
-                + "Click to put the original words back."
-            : "Read the findings and comments back in plain English. "
-                + "Nothing posted ever changes — this is a lens, not an edit."
+            ? "Showing plain English in the rows you have open. Hover any line "
+                + "for the original. Click to put the original words back."
+            : "Read the findings and comments back in plain English. Changes "
+                + "the rows you have open — nothing posted ever changes, this "
+                + "is a lens, not an edit."
     }
 
     /// The shelf's way in, beside the title.

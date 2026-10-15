@@ -150,12 +150,24 @@ final class LensTests: XCTestCase {
 
     func testBatchingSplitsAtTheLimit() {
         XCTAssertTrue(LensInvocation.batches(of: []).isEmpty)
-        let sources = (0..<45).map { "s\($0)" }
+        let sources = (0..<20).map { "s\($0)" }
         let batches = LensInvocation.batches(of: sources)
         XCTAssertEqual(batches.count, 3)
-        XCTAssertEqual(batches[0].count, 20)
-        XCTAssertEqual(batches[2].count, 5)
+        XCTAssertEqual(batches[0].count, LensInvocation.batchSize)
+        XCTAssertEqual(batches[2].count, 20 - 2 * LensInvocation.batchSize)
+        // Order is preserved, which is what makes a visible-first list arrive
+        // visible-first.
         XCTAssertEqual(batches.flatMap { $0 }, sources)
+    }
+
+    /// Low effort is a measured choice, not a default: the batch of twenty
+    /// that took 83 seconds at the default took 25 at this one.
+    func testTheRunAsksForLowEffort() {
+        let arguments = LensInvocation.arguments(for: LensRequest(sources: ["one"]))
+        guard let index = arguments.firstIndex(of: "--effort") else {
+            return XCTFail("the lens must pin its effort level")
+        }
+        XCTAssertEqual(arguments[index + 1], "low")
     }
 
     // MARK: - Parsing
