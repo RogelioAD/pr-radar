@@ -218,67 +218,30 @@ extension SettingsRoomTests {
     /// whatever the drawer had been sized to.
     func testReviewSectionStoredNamesAreStable() {
         XCTAssertEqual(ReviewSection.allCases.map(\.rawValue),
-                       ["status", "skill", "resolve", "resolveAnswers",
-                        "clones", "repositories"])
+                       ["status", "skill", "clones", "repositories"])
     }
 
-    /// Resolving is configured in the same room as reviewing, because the two
-    /// share the clones folder, the claude binary and half the vocabulary — and
-    /// a second room with the same pickers in it would drift from this one.
-    /// Each feature reads as one block, and the setup they share comes after
-    /// both rather than between them.
-    func testTheSharedSetupComesAfterBothFeatures() {
+    /// The feature reads as one block, and the setup around it comes after
+    /// rather than between its parts.
+    func testTheSharedSetupComesAfterTheFeature() {
         let order = ReviewSection.allCases
         let review = order.firstIndex(of: .skill)!
-        let resolve = order.firstIndex(of: .resolve)!
-        let answers = order.firstIndex(of: .resolveAnswers)!
         let clones = order.firstIndex(of: .clones)!
         let repos = order.firstIndex(of: .repositories)!
 
-        XCTAssertLessThan(review, resolve, "reviewing comes first")
-        XCTAssertEqual(answers, resolve + 1, "resolve's answers sit with resolve")
-        XCTAssertGreaterThan(clones, answers, "shared setup comes after both")
-        XCTAssertGreaterThan(repos, answers)
+        XCTAssertGreaterThan(clones, review, "shared setup comes after the feature")
+        XCTAssertGreaterThan(repos, review)
     }
 
-    func testResolvingIsConfiguredInTheWandRoomRatherThanARoomOfItsOwn() {
+    /// Resolve was removed: it ran a skill against your own pull requests, in
+    /// your own checkout, and the pre-commit hook it had to sit through is the
+    /// same one you sit through — so it saved no time and spent money. Asserted
+    /// rather than merely deleted, because a section is a persisted row-height
+    /// key and a half-revived one would size the drawer for a room that is not
+    /// there.
+    func testResolveIsGone() {
         XCTAssertFalse(DrawerRoom.allCases.map(\.rawValue).contains("resolve"))
-        XCTAssertTrue(ReviewSection.allCases.contains(.resolve))
-        XCTAssertTrue(ReviewSection.allCases.contains(.resolveAnswers))
-    }
-}
-
-// MARK: - The two review modes
-
-extension SettingsRoomTests {
-
-    func testEveryModeIsNamedAndExplainedAndIllustrated() {
-        for mode in AutoReviewMode.allCases {
-            XCTAssertFalse(mode.title.isEmpty, mode.rawValue)
-            XCTAssertFalse(mode.detail.isEmpty, mode.rawValue)
-            XCTAssertFalse(mode.symbol.isEmpty, mode.rawValue)
-        }
-    }
-
-    /// Exactly one mode posts on its own. If both did, or neither, the picker
-    /// would be describing a distinction the code does not make.
-    func testOnlyAutomaticPostsWithoutAsking() {
-        XCTAssertTrue(AutoReviewMode.automatic.postsWithoutAsking)
-        XCTAssertFalse(AutoReviewMode.curated.postsWithoutAsking)
-        XCTAssertEqual(AutoReviewMode.allCases.filter(\.postsWithoutAsking).count, 1)
-    }
-
-    /// The raw values are persisted, so changing one silently resets somebody's
-    /// choice — to the more consequential of the two, at that.
-    func testStoredModeNamesAreStable() {
-        XCTAssertEqual(AutoReviewMode.automatic.rawValue, "automatic")
-        XCTAssertEqual(AutoReviewMode.curated.rawValue, "curated")
-    }
-
-    /// A build that cannot understand the stored mode must not resolve that
-    /// doubt by posting to somebody's pull request.
-    func testAnUnknownModeIsNotAMode() {
-        XCTAssertNil(AutoReviewMode(rawValue: "yolo"))
-        XCTAssertNil(AutoReviewMode(rawValue: ""))
+        XCTAssertFalse(ReviewSection.allCases.map(\.rawValue)
+            .contains { $0.lowercased().hasPrefix("resolve") })
     }
 }

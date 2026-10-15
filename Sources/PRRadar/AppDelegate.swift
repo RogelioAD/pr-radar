@@ -40,17 +40,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return coordinator
     }()
 
-    /// Built eagerly at launch rather than on first press, because its `init`
-    /// is what turns whatever the last run left behind into something a row can
-    /// say. A resolve abandoned by a crash has to be reported before anybody
-    /// presses anything — it is the one state that may have left commits on a
-    /// branch nobody has read a table about.
-    private lazy var resolver: ResolveCoordinator = {
-        let coordinator = ResolveCoordinator(state: state)
-        state.resolver = coordinator
-        return coordinator
-    }()
-
     private let pathMonitor = NWPathMonitor()
     /// Assumed true until the monitor says otherwise, so a slow first callback
     /// cannot swallow the launch fetch.
@@ -85,8 +74,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notifier.prepare()
         installStatusItem()
         state.onWidgetVisibilityChanged = { [weak self] in self?.panel.syncVisibility() }
-        // Touched so the lazy initialiser runs: see its own comment.
-        _ = resolver
 
         panel = PanelController(state: state)
         panel.onOpen = { [weak self] item in
@@ -130,35 +117,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !others.isEmpty else { return false }
         Log.debug("already running as pid \(others.map(\.processIdentifier)); exiting")
         return true
-    }
-
-    /// Asks before quitting out from under a resolve run.
-    ///
-    /// Quitting a menu-bar app is normally instant and should stay so, and this
-    /// is the one case that earns an interruption: a resolve run is editing
-    /// files in a checkout the user works in, and nothing about quitting stops
-    /// it. `ProcessRunner` SIGTERMs the `claude` process it started, but the
-    /// `cargo`, `gradle` or pre-commit-hook processes under it are
-    /// grandchildren and survive — so quitting without asking leaves work
-    /// happening in somebody's repository with no window left to say so.
-    ///
-    /// Quitting anyway is allowed, and the run is recorded so the next launch
-    /// can say what it did.
-    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let running = state.resolveLog.records.first(where: {
-            $0.value.status == .running
-        }) else { return .terminateNow }
-
-        let alert = NSAlert()
-        alert.messageText = "A resolve run is still working"
-        alert.informativeText = "It is editing files in "
-            + (running.value.treePath ?? "one of your checkouts")
-            + ". Quitting will not stop the work already underway, and PR Radar "
-            + "will not be here to report what it did."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Wait")
-        alert.addButton(withTitle: "Quit Anyway")
-        return alert.runModal() == .alertFirstButtonReturn ? .terminateCancel : .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -400,7 +358,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                 surface: .mine,
                                                 liveIDs: Set(mine.map(\.id)))
         state.myPRs = mine
-        pruneResolveLog(live: mine)
         countConflicts(in: mine)
         // After the assignment, not beside `notifyNewPings` above: your own
         // pull requests have not landed at that point, so a call there would
@@ -750,7 +707,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// out of date — so that one ref is fetched and the question asked again.
     ///
     /// This is not a hypothetical. It shipped reporting
-    /// **"Resolve conflicts · 0 files"** on a pull request GitHub was showing a
+    /// **"conflicts · 0 files"** on a pull request GitHub was showing a
     /// conflict on, because the clone's copy of the base branch was a day old
     /// and the branches had not diverged yet at that commit. Fetching only on
     /// disagreement keeps the common path free and is self-limiting: once the
@@ -837,15 +794,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             timeout: 60)
         guard let result else { return nil }
         return MergeTree.conflictedPaths(exitCode: result.exitCode, output: result.stdout)
-    }
-
-    /// Keeps the resolve log from growing without bound, with the one carve-out
-    /// `ResolveLog.prune` documents: evidence that commits landed unreported is
-    /// never dropped by age.
-    private func pruneResolveLog(live: [MyPullRequest]) {
-        var log = state.resolveLog
-        log.prune(liveKeys: Set(live.map(\.id)), now: Date())
-        if log != state.resolveLog { state.resolveLog = log }
     }
 
     private func validateRepoFilter() {
