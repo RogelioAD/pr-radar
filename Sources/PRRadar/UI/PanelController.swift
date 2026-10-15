@@ -173,6 +173,7 @@ final class PanelController {
             onCollapse: { [weak self] in self?.setExpanded(false) },
             onRefresh: { [weak self] in self?.onRefresh() },
             onRowHeights: { [weak self] in self?.adoptRowHeights($0) },
+            onRowCuts: { [weak self] in self?.adoptRowCuts($0) },
             onSelectTab: { [weak self] in self?.selectTab($0) },
             onToggleFindings: { [weak self] in self?.toggleFindings($0) },
             onToggleThreads: { [weak self] in self?.toggleThreads($0) },
@@ -869,6 +870,20 @@ final class PanelController {
         }
         guard changed else { return }
         state.rowHeights.merge(heights) { _, new in new }
+        if state.expanded, !isAnimatingFrame, !isResizingFrame { applyFrame() }
+    }
+
+    /// The same, for where inside a row the drawer may stop.
+    ///
+    /// Replaced per row rather than merged, unlike the heights: a row's cuts
+    /// are a complete description of what is open on it, so a row that closed
+    /// its threads has to lose them. Merging would leave the stops of a list
+    /// that is no longer drawn, and the drawer would size itself to comments
+    /// nobody can see.
+    private func adoptRowCuts(_ cuts: [String: [CGFloat]]) {
+        let tidied = cuts.mapValues { $0.sorted() }
+        guard tidied != state.rowCuts else { return }
+        state.rowCuts = tidied
         if state.expanded, !isAnimatingFrame, !isResizingFrame { applyFrame() }
     }
 

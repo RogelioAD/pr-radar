@@ -39,6 +39,9 @@ struct RowView: View {
     /// read one while the lens is off: `AppState.lensReading` returns nil then,
     /// and there is nothing else here to consult.
     var lensReading: (String) -> String? = { _ in nil }
+    /// This row's key in the measurement maps, so the findings on it can report
+    /// where the drawer may stop.
+    var rowKey: String = ""
     let onOpen: () -> Void
 
     @State private var hovering = false
@@ -66,6 +69,7 @@ struct RowView: View {
                 queueStrip(waiting)
             }
         }
+        .rowCutSpace(rowKey)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -438,9 +442,13 @@ struct RowView: View {
         VStack(alignment: .leading, spacing: 3) {
             findingTick(prepared, isAuthored: isAuthored)
             if openCode.contains(prepared.id), let excerpt = prepared.excerpt {
-                DiffHunkView(excerpt: excerpt).padding(.leading, 15).padding(.trailing, 2)
+                DisclosedCode(excerpt: excerpt)
             }
         }
+        // Each finding is a place the drag may land, the same way each comment
+        // is on My PRs. A row with eight findings open offered one stop before
+        // this, between "closed" and "all eight".
+        .rowCut(rowKey)
     }
 
     /// The tick and what it is a tick *for*.
@@ -542,28 +550,9 @@ struct RowView: View {
     /// cases a chevron would promise something the row cannot deliver.
     @ViewBuilder
     private func locationLabel(_ prepared: PreparedFinding, location: String) -> some View {
-        if prepared.excerpt != nil {
-            let open = openCode.contains(prepared.id)
-            Button {
-                if open { openCode.remove(prepared.id) } else { openCode.insert(prepared.id) }
-            } label: {
-                HStack(spacing: 2) {
-                    Image(systemName: open ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 7, weight: .bold))
-                    Text(location)
-                        .font(.system(size: 9, design: .monospaced))
-                }
-                .foregroundStyle(open ? AnyShapeStyle(Color.accentColor)
-                                      : AnyShapeStyle(.tertiary))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .pressable()
-            .help(open ? "Hide the code" : "Show the code this is about")
-        } else {
-            Text(location)
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(.tertiary)
+        let open = openCode.contains(prepared.id)
+        CodeToggle(location: location, hasCode: prepared.excerpt != nil, isOpen: open) {
+            if open { openCode.remove(prepared.id) } else { openCode.insert(prepared.id) }
         }
     }
 

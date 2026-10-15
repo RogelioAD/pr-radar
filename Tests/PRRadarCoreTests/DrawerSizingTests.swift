@@ -59,6 +59,77 @@ final class DrawerSizingTests: XCTestCase {
         XCTAssertEqual(heights, heights.sorted(), "each extra row must add height")
     }
 
+    // MARK: - A row too tall to land on
+
+    /// The case this exists for: a pull request with six comments open makes
+    /// one row several times the height of the others, and snapping stranded
+    /// everything below it.
+    ///
+    /// Rows of 50, 600 and 50 under a 400-point ceiling. The boundaries are 62,
+    /// 664 and 716 — only the first fits — so every stop past row one used to
+    /// be illegal, and the drawer could not be opened past 62 points however
+    /// far it was dragged.
+    private let tall: [CGFloat] = [50, 600, 50]
+
+    func testATallRowNoLongerStrandsTheDrawerAtTheRowBeforeIt() {
+        XCTAssertEqual(sizing.rowBoundaries(rowHeights: tall, itemCount: 3),
+                       [62, 664, 716], "the boundaries that caused this")
+        XCTAssertEqual(sizing.stops(rowHeights: tall, itemCount: 3, limit: 400),
+                       [62, 400], "the ceiling becomes a stop of its own")
+    }
+
+    func testDraggingOpenWithATallRowSettlesAtTheCeilingRatherThanCollapsing() {
+        XCTAssertEqual(sizing.snap(390, rowHeights: tall, itemCount: 3, limit: 400), 400)
+        // And the default opens as far as the screen allows, rather than
+        // showing one row and hiding the rest behind a scroll.
+        XCTAssertEqual(sizing.contentHeight(rowHeights: tall, itemCount: 3,
+                                            userContentHeight: nil, maxHeight: 500),
+                       400)
+    }
+
+    /// Still snaps. The ceiling is one more stop, not a replacement for them.
+    func testItStillLocksToTheNearestStop() {
+        XCTAssertEqual(sizing.snap(70, rowHeights: tall, itemCount: 3, limit: 400), 62)
+        XCTAssertEqual(sizing.snap(100, rowHeights: tall, itemCount: 3, limit: 400), 62)
+        XCTAssertEqual(sizing.snap(300, rowHeights: tall, itemCount: 3, limit: 400), 400)
+    }
+
+    /// The narrowness of the rule, asserted. A ceiling falling between two
+    /// ordinary rows must keep snapping down to the row edge — that is the
+    /// behaviour being preserved, not an oversight.
+    func testAnOrdinaryListStillGivesUpScreenToLandOnARowEdge() {
+        // Ceiling 150 sits between boundaries 114 and 166, and every row is
+        // small enough to be landed on, so no ceiling stop is added.
+        XCTAssertEqual(sizing.stops(rowHeights: rows, itemCount: 5, limit: 150),
+                       [62, 114])
+        XCTAssertEqual(sizing.snap(149, rowHeights: rows, itemCount: 5, limit: 150), 114)
+    }
+
+    /// A row is "unlandable" on its own terms — height plus the list's padding
+    /// — not by whether it happens to fit after the rows above it.
+    func testTheRuleMeasuresTheRowNotItsPosition() {
+        // 380 + 12 padding = 392, which fits inside 400: landable, so the
+        // boundaries are the whole story even though 2 rows overflow.
+        let nearly: [CGFloat] = [50, 380, 50]
+        XCTAssertEqual(sizing.stops(rowHeights: nearly, itemCount: 3, limit: 400), [62])
+        // One point taller and it can never be shown whole.
+        let over: [CGFloat] = [50, 389, 50]
+        XCTAssertEqual(sizing.stops(rowHeights: over, itemCount: 3, limit: 400), [62, 400])
+    }
+
+    /// Unmeasured rows use the estimate here too, or a list that has not
+    /// reported yet would be judged on heights of zero.
+    func testUnmeasuredRowsUseTheEstimate() {
+        XCTAssertEqual(sizing.heights(rowHeights: [50], itemCount: 3), [50, 80, 80])
+        XCTAssertEqual(sizing.heights(rowHeights: [], itemCount: 0), [])
+    }
+
+    /// Not even one row fits: one clipped row still beats a sliver of drawer,
+    /// and the window is capped to the screen downstream.
+    func testACeilingBelowOneRowStillYieldsOneRow() {
+        XCTAssertEqual(sizing.stops(rowHeights: tall, itemCount: 3, limit: 30), [62])
+    }
+
     // MARK: - The screen cap
 
     /// Capped, and snapped *down* to a row edge — a drawer ending mid-row looks

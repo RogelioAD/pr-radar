@@ -137,9 +137,15 @@ public enum MyPRGrouping {
     /// so the flattened run sums to precisely what the nested one did — and the
     /// boundary after a card's last member still lands on the card's own bottom
     /// edge, which is the one place a drag most wants to stop.
+    /// A row whose threads are open is flattened further still, by `segments`
+    /// — one entry per comment rather than one for the row. Same reasoning one
+    /// level down: it is one row to the layout and several to the eye, and a
+    /// drag needs something to land on between "closed" and "all six".
     public static func stopHeights(units: [MyPRUnit],
                                    stackChrome: CGFloat,
-                                   height: (MyPullRequest) -> CGFloat?) -> [CGFloat] {
+                                   height: (MyPullRequest) -> CGFloat?,
+                                   segments: (MyPullRequest, CGFloat) -> [CGFloat]
+                                    = { _, measured in [measured] }) -> [CGFloat] {
         var result: [CGFloat] = []
         for unit in units {
             // Charged to the first member that has actually reported, not the
@@ -149,7 +155,11 @@ public enum MyPRGrouping {
             var owed = unit.isStack ? stackChrome : 0
             for item in unit.pullRequests {
                 guard let measured = height(item) else { continue }
-                result.append(measured + owed)
+                // The chrome goes on the row's first piece, so the card's own
+                // top edge stays where it was.
+                for (index, piece) in segments(item, measured).enumerated() {
+                    result.append(index == 0 ? piece + owed : piece)
+                }
                 owed = 0
             }
         }
