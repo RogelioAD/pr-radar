@@ -28,7 +28,10 @@ They are kept separate so each number means exactly one thing. Both follow the
 **repository filter**: pick a repo and the counts show only that repo's work,
 because "I'm in this repo today" is a scope rather than a temporary view. The
 author and state filters deliberately do *not* affect them — the badge would
-otherwise flicker every time you poked at a menu. The red count is
+otherwise flicker every time you poked at a menu. A
+[snoozed](#snoozing) row does leave the red count, which is the one exception
+and is argued where it is made: the badge answers *what is waiting on me*, and
+a pull request parked until Monday is not. The red count is
 tinted by how stale the *oldest* request is: blue under a day, amber at 1–3
 days, red beyond 3 — so a queue that has gone unattended looks different from a
 fresh one at a glance.
@@ -136,7 +139,79 @@ to grab again.
 ## Reviews tab
 
 PRs waiting on your review. Each row shows the title, number, repository,
-author with avatar, and how long ago you were asked — colour-coded by age.
+author with avatar, and how long ago you were asked — colour-coded by age,
+over a band saying what the review will cost you.
+
+### What a review will cost
+
+The row used to answer *who asked and how long ago* and nothing else. A
+forty-line change and a fourteen-hundred-line one were the same row, a pull
+request whose CI had already failed looked exactly like one worth starting, and
+a ping aimed at you alone was indistinguishable from a team ping that went to
+six people. Four chips answer those:
+
+| Chip | What it says |
+|---|---|
+| `+120 −40 · 6f` | how much there is to read, tinted past 250 lines and again past 1,000 |
+| `checks green` · `checks failing` · `checks running` | GitHub's rollup verdict for the head commit |
+| `only you` · `3 others` | reviewers still being waited on who are not you and not a team of yours |
+| `2 approved` | live approvals already in — yours may not be the one holding it up |
+
+All of it rides the fragment the list was already fetching, so it is the same
+single round trip it has always been. The rollup's **verdict and nothing under
+it**: triage asks one word, and the per-check breakdown is the My PRs tab's job
+at a hundred context nodes per pull request — which here would be a hundred
+times thirty times one alias per team.
+
+Three rules keep it honest:
+
+- **The sizes arrive together or not at all, and missing is not zero.** A row
+  nobody measured wears no chips at all rather than claiming `+0 −0 · 0f`,
+  which is the same class of answer as a failed branch compare rendered as "up
+  to date". A row redrawn from a year-old auto-review record is exactly that
+  case.
+- **No rollup is not a passing rollup.** A repository with no CI and one whose
+  CI has not started are both honestly *nothing to say*, and neither is green.
+- **Approvals are live ones, and never yours.** A dismissed approval is not an
+  approval, by the same rule the lead chip follows, and a row telling you
+  somebody has approved this when the somebody is you is the list answering
+  itself.
+
+### What changed since you last reviewed it
+
+A re-requested pull request is the most wasteful row in the queue: you have
+already read it, and the list hands it back with nothing to say whether twelve
+lines moved or the whole thing was rewritten.
+
+So a row you have reviewed before carries **`14 commits since your review`**,
+and pressing it opens GitHub's two-commit view — the diff between the commit
+you reviewed and the head — rather than the whole thing again. Every row this
+appears on is a re-review by construction: the rule below only keeps a pull
+request whose newest ping is newer than anything you did to it.
+
+It is a link only when **both ends of the range are known**. GitHub's range
+form silently falls back to the entire diff when an end is missing, which would
+hand back the nine hundred lines this exists to avoid while looking like it had
+worked. A review whose commit was force-pushed out of the branch comes back
+with none, so that row says its piece and does not link.
+
+Three cases that had to be decided:
+
+- **Nothing new is said out loud.** `nothing new since your review` — a
+  re-request with no push behind it happens, and knowing the diff is the one
+  you already read is the most useful sentence available.
+- **A head that moved with no newer commits still counts.** A force-push can
+  rewrite committer dates so nothing looks newer than the review while the head
+  is plainly a different commit. The two commit ids settle it when the dates
+  cannot.
+- **A full page is a floor.** Twenty commits read and more behind them says
+  `20+`, never `20`.
+
+The automatic review's pin is ignored here as it is in the rule below, for a
+different reason. There it stops PR Radar's own review counting as *you* having
+dealt with the pull request; here it stops a review you did not read the code
+for from anchoring a diff labelled *since your review*. It went out under your
+name, but the sentence would not be true.
 
 ### What counts as waiting on you
 
@@ -168,12 +243,90 @@ Polling runs every 60 seconds, so a review you submit clears within a minute.
 ### Sorting and filtering
 
 Sort by oldest first (the default, so the most overdue is on top), newest
-first, or author A–Z. Filter to a single author, with a count beside each name.
+first, author A–Z, or **smallest first**, which is how a queue of six actually
+gets cleared.
 
-While filtered, the header reads `N of M` so the drawer count never silently
+Smallest-first is the one ordering with an unknown in it. A row whose signals
+never arrived has no size, and sorting it as zero would float it to the very
+top claiming to be the quickest thing in the list — so unknowns go last, among
+themselves oldest first, which is where the default would have had them anyway.
+
+Filter to a single author, with a count beside each name. Beside it sits a
+**triage filter** — *CI not failing*, *nobody has approved* — which is a second
+axis rather than another entry in the author menu, in the same sense the
+pancake button is a second axis on My PRs: *small ones nobody has looked at* is
+one question, and it takes two controls to ask it.
+
+That filter is **symbol only and conditional**, and both halves are forced. The
+bar genuinely runs out of room — with a long repository name picked its pills
+measure 405 of an available 440, and a `Menu` label carrying `.fixedSize()` is
+clipped past the edge rather than shortened — so the words live in the tooltip,
+exactly as the sort control's do. And it appears only when one of its options
+could actually hide something, which is the rule the pancake button follows: a
+filter that can only ever return everything is worse than no filter.
+
+A row whose signals never arrived **matches every filter**. Hiding it would be
+failing it for a test it was never given, and this list's whole job is to be
+the complete account of what is waiting on you.
+
+While filtered, the tab reads `N/M` so the drawer count never silently
 disagrees with the badge. An author filter is deliberately *not* persisted, and
 clears itself if that author's PRs are all reviewed — either would otherwise
-leave you staring at an empty drawer next to a non-zero badge.
+leave you staring at an empty drawer next to a non-zero badge. The triage
+filter *is* persisted, because the two are not the same kind of narrowing: an
+author filter names a person who may have nothing outstanding tomorrow, where
+"don't show me pull requests whose CI is already red" is a standing preference
+about the work.
+
+---
+
+## Snoozing
+
+A pull request leaves the Reviews list when you comment on it or review it.
+That rule is what makes the list honest, and it also leaves no way to say *not
+until Thursday* except by writing a comment you do not mean — lying to the one
+list that does not lie to you.
+
+Right-click a row and put it down: **for an hour**, **until tomorrow morning**,
+or **until Monday morning**. It comes back on its own.
+
+A snooze is keyed on the **ping key**, which carries the timestamp of the
+request it answers — so a re-request is a new key, and a row you put down last
+week comes straight back the moment somebody asks you again. That is the
+automatic review's pin making the same choice for the same reason: a key with a
+request in it cannot outlive the request.
+
+**A sleeping row leaves the badge as well as the list**, which is the part
+worth arguing. The badge answers *what is waiting on me*, and a pull request
+deliberately parked until Monday is not waiting on you now — going on nagging
+about it is the thing the snooze was pressed to stop.
+
+What the count must never be is *silently* short. So the tab strip carries
+**`2 snoozed`** whenever anything is, next to the ready-to-merge count and for
+the same two reasons: it is a fact about one tab rather than about the app, and
+that band has the room the filter bar does not. Pressing it shows exactly what
+has gone quiet, each row saying when it wakes and offering to wake now.
+
+Some details that had to be decided:
+
+- **The sleeping list is shown whole.** The triage and author filters narrow
+  the work you are choosing between, and a row you have already chosen to put
+  down is not in that choice. Hiding some of what you parked behind a filter
+  set for another purpose is how a row gets lost.
+- **"Until Monday" pressed on a Monday means next week.** The label says Monday
+  because the week is what you are putting it down until, and a nine o'clock
+  forty minutes away is not what anybody meant by it.
+- **Everything asleep is not inbox zero.** The drawer says `All snoozed` rather
+  than congratulating you for work you deferred an hour ago.
+- **Showing the sleeping list is not persisted**, where the filter beside it is.
+  It is a way of looking at the list rather than a preference about the work,
+  and leaving it on across a restart would open the drawer onto rows that are
+  all asleep beside a badge reading zero.
+- **Pruning drops two kinds of rubbish for two reasons.** A wake time in the
+  past has done its job; a key the fetch no longer returns belongs to a pull
+  request that has been reviewed, merged or closed. The second half runs only
+  on a round that reached every account — pruning against a partial list would
+  quietly wake every row belonging to the account that was unreachable.
 
 ---
 
@@ -211,6 +364,40 @@ of the approval that used to be there.
 commit, tallying both `CheckRun` and `StatusContext` entries, which report
 their verdict in different fields. Cancelled and timed-out count as failures;
 neutral and stale count as skipped. Hover for the failing check names.
+
+**And how much of it is actually in the way.** `2 failing` counted a required
+build and somebody's optional lint job identically, so a pull request could
+wear the worst chip on the tab over two failures nothing gates on. The chip now
+reads `2 failing · 1 blocking`, or `2 failing · none blocking` where nothing
+failing is required.
+
+`isRequired` takes the pull request as an argument, and a GraphQL argument
+cannot refer to a sibling field — so inside a search that has not yet told us
+the number, there is nowhere to write it. One alias per pull request with the
+number interpolated is the only shape that can ask, which makes this a second
+phase like the branch compare. It is sent **only for the rows that actually
+have a failing check**: most pull requests are green, and re-fetching a hundred
+context nodes per row per minute to learn that nothing is failing is the cost
+the conflict counter already refuses to pay. On the common round no request
+goes out at all.
+
+Three states, not two:
+
+| State | What the chip says |
+|---|---|
+| **not known** — the phase has not answered, or failed | `2 failing`, exactly as before |
+| **verified none** | `2 failing · none blocking` |
+| **named** | `2 failing · 1 blocking`, and the tooltip names it |
+
+Not knowing is where every row starts and where it stays if the phase fails,
+and then the failure is treated as the worst it could be — the honest reading
+of a question not yet asked. A *verified* empty is a different sentence and is
+earned, the same way `conflicts · 0 files` is not a thing the row is allowed to
+say.
+
+A failure nothing requires drops the row from bad to attention and leaves the
+chip unfilled. Red is still red, but filling it is the row saying *this is the
+thing stopping you*, which an ungated lint job is not.
 
 ### Branch state
 
@@ -251,12 +438,46 @@ terminal runs better. Naming the state turned out to be the useful half.
   the row directly below it.
 - **Diff size and age** — lines changed, files touched, how long it has been
   open.
+- **How long it has been waiting on them** — `waiting 4d · alice`, or
+  `waiting 4d · 3 reviewers` where several are outstanding, naming whoever has
+  had it longest. See below.
 
 Chips **wrap onto a second line** rather than running off the edge. A row can
 carry five of them on a bad day, and the alternatives are both worse: squeezing
 them truncates the words that make them worth reading, and letting the line
 overflow pushed whatever sat to its right — the stack marker — out past the
 row's edge, where it was clipped away entirely.
+
+### Waiting on them
+
+The app could say to the hour what you owe other people and nothing at all
+about the other direction. This row has carried its outstanding reviewers since
+the tab was built and never drew them, so a pull request you asked three people
+to look at four days ago looked exactly like one you opened this morning.
+
+`ReviewRequest` carries no timestamp of its own — the live set says *who* is
+outstanding and never *since when* — so the timeline is the only place the
+other half of the clock is recorded.
+
+Per reviewer it is the **last** ask that counts: being re-requested restarts
+that person's clock, exactly as a re-request restarts yours on the Reviews tab.
+Across reviewers it is the **oldest** of those the row reports, because the
+question is how long this has been waiting on somebody and the answer is the
+longest anybody has had it. A reviewer who has already reviewed is out of the
+live set, so their ask stops ageing it.
+
+It uses the Reviews tab's own staleness ladder — under a day, one to three,
+beyond three — rather than a second one, so the two tabs cannot come to mean
+different things by the same colour.
+
+An ask older than the page the timeline reads leaves no timestamp. Then the
+chip names who it is waiting on and **does not claim a duration**, and stays
+grey: a duration that was never read must not be painted as fresh, which is the
+answer `base state unknown` exists to avoid.
+
+It sits last in the row's chips, after everything the branch needs doing to it,
+because it is the one chip there about a person rather than about the pull
+request.
 
 ### Stacks
 
@@ -1174,6 +1395,14 @@ Things left out on purpose, and why:
 - **No wallpaper sampling for the icon colour.** It would need Screen Recording
   permission, which is far too much to ask. The mascot's halo solves the same
   problem without asking for anything.
+- **No per-check breakdown on a Reviews row.** The triage band carries the
+  rollup's one-word verdict and stops there. Naming which check failed on
+  somebody else's pull request would cost a hundred context nodes per row per
+  team alias, to answer a question you ask by opening the thing.
+- **Snoozing does not notify when a row wakes.** It reappears in the list and
+  the badge, which is what the badge is for. A notification for a thing you
+  already knew was coming back, at a time you chose, is the app congratulating
+  itself.
 - **No count baked into the app icon.** The `.icns` shows the default character
   idle and nothing else; a number in a static file would be wrong the moment it
   was written.
