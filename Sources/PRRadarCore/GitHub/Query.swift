@@ -210,6 +210,70 @@ public enum Query {
         return "query {\(body)\n}"
     }
 
+    /// Which of each pull request's checks are *required*, one alias per PR.
+    ///
+    /// Aliased `r<index>` against the **full** item array, exactly as
+    /// `compares` aliases `c<index>`, and emitted only for the items that have
+    /// a failing check. So the index always names the same item whether or not
+    /// it was asked about, and a missing alias reads as *not asked* — which is
+    /// the same thing as *not known*, and must not be read as *not required*.
+    ///
+    /// Only the failing ones, because most pull requests are green and a query
+    /// that re-fetches a hundred context nodes per row per minute to learn
+    /// nothing is the kind of cost the conflict counter already refuses to
+    /// pay. The common path stays free and this phase is usually absent.
+    ///
+    /// It re-fetches the contexts the main query already tallied rather than
+    /// replacing it. The main tally has to survive this phase failing, for the
+    /// reason `behindBy` is optional — and a row that said nothing about its
+    /// checks because a second request timed out would be worse than one that
+    /// says what it has always said.
+    public static func requiredChecks(
+        _ targets: [(index: Int, repo: String, number: Int)]
+    ) -> String? {
+        var body = ""
+        for target in targets {
+            let parts = target.repo.split(separator: "/")
+            guard parts.count == 2 else { continue }
+            body += """
+
+              r\(target.index): repository(owner: "\(parts[0])", name: "\(parts[1])") {
+                pullRequest(number: \(target.number)) {
+                  commits(last: 1) {
+                    nodes {
+                      commit {
+                        statusCheckRollup {
+                          contexts(first: 100) {
+                            totalCount
+                            nodes {
+                              __typename
+                              # The same fields the main tally reads, because
+                              # the same superseded-run rule has to run over
+                              # them — a cancelled run and the re-run that
+                              # replaced it both come back here too.
+                              ... on CheckRun {
+                                name conclusion status startedAt
+                                isRequired(pullRequestNumber: \(target.number))
+                                checkSuite { workflowRun { workflow { name } } }
+                              }
+                              ... on StatusContext {
+                                context state createdAt
+                                isRequired(pullRequestNumber: \(target.number))
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            """
+        }
+        guard !body.isEmpty else { return nil }
+        return "query {\(body)\n}"
+    }
+
     /// The pull requests a decision is still owed on, fetched by node id.
     ///
     /// Its own request rather than another alias on the reviews document, for

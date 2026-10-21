@@ -660,6 +660,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.debug("compare phase failed: \(error)")
         }
 
+        // Third phase, independently fallible for the same reason and sent
+        // only when something is actually failing. If it fails the chip says
+        // `2 failing` exactly as it always has, rather than guessing at which
+        // of them stands between this branch and a merge.
+        do {
+            let required = try await client.fetchRequiredChecks(for: mine)
+            mine = MyPRInbox.applyRequiredChecks(required, to: mine)
+        } catch {
+            Log.debug("required-checks phase failed: \(error)")
+        }
+
         if let fake = Log.fakeBehind {
             mine = mine.map { var copy = $0; copy.behindBy = fake; return copy }
         }

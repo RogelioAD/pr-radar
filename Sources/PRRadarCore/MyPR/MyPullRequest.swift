@@ -109,24 +109,64 @@ public struct ChecksSummary: Equatable, Sendable {
     /// nil when the head commit has no checks at all.
     public let rollupState: String?
 
+    /// Which of the failing checks the branch protection rules insist on.
+    ///
+    /// nil means **not known**, which is the state every row is in until the
+    /// second phase answers, and the state it stays in if that phase fails.
+    /// Deliberately not the same as an empty array: `[]` is the verified claim
+    /// that nothing failing is blocking the merge, and a row that made that
+    /// claim without checking would be the same lie as a failed branch compare
+    /// rendered as "up to date".
+    public let requiredFailingNames: [String]?
+
     public var total: Int { passing + failing + running + skipped }
     public var hasAny: Bool { total > 0 }
 
+    /// Whether any failing check actually stands between this and a merge.
+    /// nil while it is unknown, so a caller has to decide what to do about
+    /// not knowing rather than being handed a `false`.
+    public var hasBlockingFailure: Bool? {
+        requiredFailingNames.map { !$0.isEmpty }
+    }
+
+    /// How severe the checks are.
+    ///
+    /// A failure that nothing requires is a real failure and a lesser one: the
+    /// branch can still merge, and a red lint job nobody gates on should not
+    /// rank beside a broken build. It drops to `attention` rather than
+    /// disappearing, because red is still red and somebody put that check
+    /// there. While required-ness is unknown, every failure is treated as the
+    /// worst it could be — the honest reading of a question not yet asked.
     public var health: Health {
-        if failing > 0 { return .bad }
+        if failing > 0 { return hasBlockingFailure == false ? .attention : .bad }
         if running > 0 { return .running }
         if passing > 0 { return .good }
         return .neutral
     }
 
+    /// What the chip says after the count, or nil while nothing is known.
+    public var blockingLabel: String? {
+        guard let required = requiredFailingNames else { return nil }
+        return required.isEmpty ? "none blocking" : "\(required.count) blocking"
+    }
+
     public init(passing: Int, failing: Int, running: Int, skipped: Int,
-                failingNames: [String], rollupState: String?) {
+                failingNames: [String], rollupState: String?,
+                requiredFailingNames: [String]? = nil) {
         self.passing = passing
         self.failing = failing
         self.running = running
         self.skipped = skipped
         self.failingNames = failingNames
         self.rollupState = rollupState
+        self.requiredFailingNames = requiredFailingNames
+    }
+
+    /// The same tally, with the second phase's answer folded in.
+    public func knowingRequired(_ names: [String]) -> ChecksSummary {
+        ChecksSummary(passing: passing, failing: failing, running: running,
+                      skipped: skipped, failingNames: failingNames,
+                      rollupState: rollupState, requiredFailingNames: names)
     }
 
     public static let empty = ChecksSummary(passing: 0, failing: 0, running: 0,
@@ -203,7 +243,9 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
     public var account: String = ""
 
     public let totalThreadCount: Int
-    public let checks: ChecksSummary
+    /// `var` so the required-checks phase can fold its answer in, the way
+    /// `behindBy` is filled by the compare phase.
+    public var checks: ChecksSummary
     public let additions: Int
     public let deletions: Int
     public let changedFiles: Int

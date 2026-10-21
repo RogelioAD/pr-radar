@@ -155,11 +155,18 @@ public struct ContextNode: Decodable {
     public let startedAt: Date?
     public let createdAt: Date?
     public let checkSuite: CheckSuiteNode?
+    /// Whether this check is one the branch protection rules insist on.
+    ///
+    /// Only the second-phase query asks for it — the field takes the pull
+    /// request as an argument, which cannot be written inside a search that
+    /// does not know the number yet. nil everywhere else, and nil is *not
+    /// known* rather than *not required*.
+    public let isRequired: Bool?
 
     enum CodingKeys: String, CodingKey {
         case typename = "__typename"
         case name, conclusion, status, context, state
-        case startedAt, createdAt, checkSuite
+        case startedAt, createdAt, checkSuite, isRequired
     }
 
     /// The single verdict for this context, whichever kind it is.
@@ -202,4 +209,21 @@ public struct ComparisonNode: Decodable {
     public let aheadBy: Int?
     public let behindBy: Int?
     public let status: String?
+}
+
+// MARK: - Second-phase required-checks payload
+
+/// Which of a pull request's checks the branch protection rules insist on.
+///
+/// Its own request for a reason the compare phase does not share:
+/// `isRequired` takes the pull request as an argument, and a GraphQL argument
+/// cannot refer to a sibling field — so inside a `search` that has not yet
+/// told us the number, there is nowhere to write it. One alias per pull
+/// request, with the number interpolated, is the only shape that can ask.
+public struct RequiredChecksResult: Decodable {
+    public let pullRequest: RequiredChecksPR?
+}
+
+public struct RequiredChecksPR: Decodable {
+    public let commits: CommitConn?
 }

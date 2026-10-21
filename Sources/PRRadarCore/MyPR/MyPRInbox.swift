@@ -163,13 +163,14 @@ public struct MyPRInbox {
         var failingNames: [String] = []
 
         for context in currentContexts(rollup.contexts?.nodes ?? []) {
+            if isFailure(context.verdict) {
+                failing += 1
+                failingNames.append(context.displayName)
+                continue
+            }
             switch context.verdict {
             case "SUCCESS":
                 passing += 1
-            case "FAILURE", "ERROR", "TIMED_OUT", "CANCELLED",
-                 "ACTION_REQUIRED", "STARTUP_FAILURE":
-                failing += 1
-                failingNames.append(context.displayName)
             case "IN_PROGRESS", "QUEUED", "PENDING", "WAITING", "REQUESTED":
                 running += 1
             case "SKIPPED", "NEUTRAL", "STALE":
@@ -211,6 +212,65 @@ public struct MyPRInbox {
                 .sorted()
         }
         return result
+    }
+
+    /// Which pull requests are worth asking the required-checks phase about.
+    ///
+    /// Only the ones with a failing check. Most pull requests are green, and
+    /// re-fetching a hundred context nodes per row per minute to learn that
+    /// nothing is failing is the cost the conflict counter already refuses to
+    /// pay. Indexed against the full array so an alias always names the same
+    /// item whether or not it was asked about.
+    public static func requiredCheckTargets(
+        _ items: [MyPullRequest]
+    ) -> [(index: Int, repo: String, number: Int)] {
+        items.enumerated().compactMap { index, item in
+            guard item.checks.failing > 0 else { return nil }
+            return (index: index, repo: item.repo, number: item.number)
+        }
+    }
+
+    /// Applies second-phase required-checks results, keyed by the `r<index>`
+    /// aliases `Query.requiredChecks` produced.
+    ///
+    /// A missing alias leaves `requiredFailingNames` nil — *not asked*, which
+    /// is the same thing as *not known* and must never be read as *nothing is
+    /// required*. An alias that came back but listed no required failures is
+    /// the opposite: a verified empty, which is what lets a row say the red
+    /// checks on it are not what is holding it up.
+    ///
+    /// The superseded-run rule runs over these contexts too. A cancelled run
+    /// and the re-run that replaced it both come back from this query as well,
+    /// and counting the cancelled one as a required failure would re-create
+    /// the bug the main tally already fixed.
+    public static func applyRequiredChecks(
+        _ results: [String: RequiredChecksResult],
+        to items: [MyPullRequest]
+    ) -> [MyPullRequest] {
+        var result = items
+        for index in result.indices {
+            guard let contexts = results["r\(index)"]?.pullRequest?
+                    .commits?.nodes.first?.commit?.statusCheckRollup?.contexts?.nodes
+            else { continue }
+            let required = currentContexts(contexts)
+                .filter { $0.isRequired == true && isFailure($0.verdict) }
+                .map(\.displayName)
+            result[index].checks = result[index].checks.knowingRequired(required)
+        }
+        return result
+    }
+
+    /// The verdicts that count as a failure. One list, read by the tally and
+    /// by the required-checks phase, so the two cannot disagree about what
+    /// failing means.
+    static func isFailure(_ verdict: String?) -> Bool {
+        switch verdict {
+        case "FAILURE", "ERROR", "TIMED_OUT", "CANCELLED",
+             "ACTION_REQUIRED", "STARTUP_FAILURE":
+            return true
+        default:
+            return false
+        }
     }
 
     /// Applies second-phase compare results, keyed by the `c<index>` aliases

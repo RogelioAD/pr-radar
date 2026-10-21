@@ -448,21 +448,52 @@ struct MyPRRowView: View {
             : shown
     }
 
+    /// The checks tally, and — once the second phase has answered — how much
+    /// of it stands between this branch and a merge.
+    ///
+    /// `12 passed · 2 failing` counted a required build and somebody's
+    /// optional lint job identically, so a row could wear the worst chip on
+    /// the tab over two failures nothing gates on. It says `2 failing · none
+    /// blocking` when it has been told, and `2 failing` exactly as before when
+    /// it has not — because nothing asked is not the same as nothing required.
     private var checksChip: some View {
         let checks = item.checks
         let text: String = {
-            if checks.failing > 0 { return "\(checks.failing) failing" }
+            if checks.failing > 0 {
+                let count = "\(checks.failing) failing"
+                guard let blocking = checks.blockingLabel else { return count }
+                return "\(count) · \(blocking)"
+            }
             if checks.running > 0 { return "\(checks.running) running" }
             return "\(checks.passing) passed"
         }()
         let symbol = checks.failing > 0 ? "xmark.octagon"
             : (checks.running > 0 ? "circle.dotted" : "checkmark.circle")
+        // Filled only while it is a blocker. An unfilled red chip is still
+        // red; filling it is the row saying *this is the thing stopping you*,
+        // which a failing check nothing requires is not.
         return Chip(text: text, symbol: symbol, health: checks.health,
-                    filled: checks.failing > 0)
-            .help("\(checks.passing) passed · \(checks.failing) failed · "
-                  + "\(checks.running) running · \(checks.skipped) skipped"
-                  + (checks.failingNames.isEmpty ? ""
-                     : "\nFailing: " + checks.failingNames.joined(separator: ", ")))
+                    filled: checks.failing > 0 && checks.hasBlockingFailure != false)
+            .help(checksHelp)
+    }
+
+    private var checksHelp: String {
+        let checks = item.checks
+        var lines = ["\(checks.passing) passed · \(checks.failing) failed · "
+                     + "\(checks.running) running · \(checks.skipped) skipped"]
+        if !checks.failingNames.isEmpty {
+            lines.append("Failing: " + checks.failingNames.joined(separator: ", "))
+        }
+        switch checks.requiredFailingNames {
+        case nil:
+            break
+        case let required? where required.isEmpty:
+            lines.append("None of them is a required check, so they are not "
+                         + "what is blocking the merge.")
+        case let required?:
+            lines.append("Required: " + required.joined(separator: ", "))
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// Says what the branch needs — when nothing beside it is offering to do it.

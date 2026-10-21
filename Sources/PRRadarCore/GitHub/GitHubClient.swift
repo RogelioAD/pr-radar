@@ -140,4 +140,19 @@ public struct GitHubClient {
         guard let query = Query.compares(targets) else { return [:] }
         return try await run(query, as: [String: CompareResult].self)
     }
+
+    /// Second phase: which of each failing check the branch rules insist on.
+    ///
+    /// Returns an empty dictionary when nothing is failing, which is most
+    /// rounds — the query is only built for the pull requests that have a red
+    /// check, so the common path sends no request at all. Allowed to fail
+    /// independently like the compare phase: callers leave
+    /// `requiredFailingNames` nil rather than claiming nothing is blocking.
+    public func fetchRequiredChecks(
+        for items: [MyPullRequest]
+    ) async throws -> [String: RequiredChecksResult] {
+        let targets = MyPRInbox.requiredCheckTargets(items)
+        guard let query = Query.requiredChecks(targets) else { return [:] }
+        return try await run(query, as: [String: RequiredChecksResult].self)
+    }
 }
