@@ -368,8 +368,10 @@ neutral and stale count as skipped. Hover for the failing check names.
 **And how much of it is actually in the way.** `2 failing` counted a required
 build and somebody's optional lint job identically, so a pull request could
 wear the worst chip on the tab over two failures nothing gates on. The chip now
-reads `2 failing · 1 blocking`, or `2 failing · none blocking` where nothing
-failing is required.
+reads `3 failing · 1 blocking`, or `2 failing · none blocking` where nothing
+failing is required — and plain **`2 blocking`** when every failure is a
+required one, which is the common case and the one where naming both numbers
+prints the same number twice.
 
 `isRequired` takes the pull request as an argument, and a GraphQL argument
 cannot refer to a sibling field — so inside a search that has not yet told us
@@ -387,7 +389,7 @@ Three states, not two:
 |---|---|
 | **not known** — the phase has not answered, or failed | `2 failing`, exactly as before |
 | **verified none** | `2 failing · none blocking` |
-| **named** | `2 failing · 1 blocking`, and the tooltip names it |
+| **named** | `3 failing · 1 blocking` — or `2 blocking` when that is all of them — and the tooltip names it |
 
 Not knowing is where every row starts and where it stays if the phase fails,
 and then the failure is treated as the worst it could be — the honest reading
@@ -395,9 +397,9 @@ of a question not yet asked. A *verified* empty is a different sentence and is
 earned, the same way `conflicts · 0 files` is not a thing the row is allowed to
 say.
 
-A failure nothing requires drops the row from bad to attention and leaves the
-chip unfilled. Red is still red, but filling it is the row saying *this is the
-thing stopping you*, which an ungated lint job is not.
+A failure nothing requires drops the row from bad to attention. Whether the
+chip is *filled* is decided elsewhere — see [the three bands](#the-three-bands)
+below, where only one chip on a row is allowed to be.
 
 ### Branch state
 
@@ -409,7 +411,7 @@ Says what the branch needs rather than doing it:
 | `needs rebase · N behind` | the compare shows N commits behind |
 | `needs rebase` | GitHub reports `BEHIND` but the count is unavailable |
 | `conflicts · N files` | the branch conflicts, and `merge-tree` counted them |
-| `conflicts · needs rebase` | it conflicts, but nothing could count the files |
+| `conflicts` | it conflicts, but nothing could count the files |
 | `base state unknown` | the compare request failed |
 
 That last row matters: a failed lookup reads as *unknown*, never as "up to
@@ -447,6 +449,40 @@ carry five of them on a bad day, and the alternatives are both worse: squeezing
 them truncates the words that make them worth reading, and letting the line
 overflow pushed whatever sat to its right — the stack marker — out past the
 row's edge, where it was clipped away entirely.
+
+### The three bands
+
+A row's chips are drawn in three groups, with a wider gap between groups than
+between the lines inside one:
+
+| Band | What is in it |
+|---|---|
+| who has signed off | `lead needed` or `lead: Alice`, other approvals, `N dismissed` |
+| what is blocking it | checks, the branch, and whatever the merge blocker adds |
+| everything else | threads, how long it has been waiting on its reviewers |
+
+Two of those bands existed already and the third was a catch-all that had grown
+to carry the checks, the threads, the branch *and* the waiting clock — four
+kinds of thing in one flow, wrapping wherever the width ran out, so the break
+never meant anything. This is the argument the automatic review's strip already
+makes about its own two bands: giving the decisions their own flow puts the
+break where the meaning already is.
+
+The gap between bands is deliberately more than twice the gap between wrapped
+lines. With the two equal, a band boundary read as another wrap and the
+grouping that was already there said nothing.
+
+The dismissed count stays with the lead chip rather than moving to the third
+band, because it exists to explain the `lead needed` beside it. Across a band
+boundary it would be an orphaned number.
+
+**Only one chip on a row is filled.** `2 blocking` and `conflicts` were both
+solid red at once and the eye had nowhere to land, so among the chips carrying
+the row's worst health exactly one is filled and the rest say the same thing
+outlined. Red is still red either way; filling it is the row saying *this* is
+the thing to look at. A good verdict is unaffected — a filled green
+`lead: Alice` is the row being done rather than the row shouting, and two of
+those never happen at once.
 
 ### Waiting on them
 
@@ -1248,11 +1284,14 @@ base was from the day before and the branches had not diverged yet at that
 commit. Fetching only on disagreement keeps the common path free and settles
 itself — once the ref is current the next poll agrees and fetches nothing.
 
-When the count still cannot be had, the chip says **conflicts · needs rebase**
-with no number rather than inventing one, exactly as a missing compare leaves
-`needs rebase` without a count. `conflicts · 0 files` is not a thing the row
-says: an empty result means the two sources disagree, never that there is
-nothing to fix.
+When the count still cannot be had, the chip says **conflicts** with no number
+rather than inventing one, exactly as a missing compare leaves `needs rebase`
+without a count. `conflicts · 0 files` is not a thing the row says: an empty
+result means the two sources disagree, never that there is nothing to fix.
+
+It used to read `conflicts · needs rebase` there, which spent half a chip
+saying what the first word already says — a conflicted branch plainly needs
+work. The rule is untouched; the second clause was never carrying it.
 
 ## Resolve, and why it is gone
 

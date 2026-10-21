@@ -30,18 +30,34 @@ final class RequiredChecksTests: XCTestCase {
     /// compare makes between unknown and up to date.
     func testUnknownIsNotTheSameAsNoneRequired() {
         XCTAssertNil(summary(failing: 2).hasBlockingFailure)
-        XCTAssertNil(summary(failing: 2).blockingLabel)
+        XCTAssertEqual(summary(failing: 2).failureLabel, "2 failing")
 
         let verified = summary(failing: 2, required: [])
         XCTAssertEqual(verified.hasBlockingFailure, false)
-        XCTAssertEqual(verified.blockingLabel, "none blocking")
+        XCTAssertEqual(verified.failureLabel, "2 failing · none blocking")
     }
 
-    func testBlockingLabelCounts() {
-        XCTAssertEqual(summary(failing: 3, required: ["build"]).blockingLabel,
-                       "1 blocking")
-        XCTAssertEqual(summary(failing: 3, required: ["build", "test"]).blockingLabel,
+    func testTheLabelNamesBothNumbersWhenTheyDiffer() {
+        XCTAssertEqual(summary(failing: 3, required: ["build"]).failureLabel,
+                       "3 failing · 1 blocking")
+        XCTAssertEqual(summary(failing: 3, required: ["build", "test"]).failureLabel,
+                       "3 failing · 2 blocking")
+    }
+
+    /// The case that cost a line: when every failure is a required one,
+    /// `2 failing · 2 blocking` prints the same number twice.
+    func testTheLabelSaysTheNumberOnceWhenEveryFailureBlocks() {
+        XCTAssertEqual(summary(failing: 2, required: ["build", "test"]).failureLabel,
                        "2 blocking")
+        XCTAssertEqual(summary(failing: 1, required: ["build"]).failureLabel,
+                       "1 blocking")
+    }
+
+    /// Nothing failing is a different sentence, and this one has no business
+    /// being in it.
+    func testNoFailuresHaveNoFailureLabel() {
+        XCTAssertNil(summary(failing: 0).failureLabel)
+        XCTAssertNil(summary(failing: 0, required: []).failureLabel)
     }
 
     // MARK: - Severity
@@ -135,7 +151,7 @@ final class RequiredChecksTests: XCTestCase {
              started: "2026-01-01T00:00:00Z"),
         ]), to: items)
         XCTAssertEqual(applied[0].checks.requiredFailingNames, ["build"])
-        XCTAssertEqual(applied[0].checks.blockingLabel, "1 blocking")
+        XCTAssertEqual(applied[0].checks.failureLabel, "2 failing · 1 blocking")
     }
 
     func testAVerifiedEmptyIsRecorded() {

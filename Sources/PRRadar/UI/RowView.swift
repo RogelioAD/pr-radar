@@ -213,7 +213,7 @@ struct RowView: View {
     /// words that make it worth reading.
     @ViewBuilder
     private func triage(_ signals: ReviewSignals) -> some View {
-        ChipFlow(spacing: 5, lineSpacing: 4) {
+        ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
             Chip(text: signals.sizeLabel, symbol: "plusminus",
                  health: signals.weight)
                 .help(signals.sizeHelp)
@@ -266,7 +266,7 @@ struct RowView: View {
     /// identical to a waking one would be holding up neither half.
     @ViewBuilder
     private func sleepBand(_ wakesAt: Date) -> some View {
-        ChipFlow(spacing: 5, lineSpacing: 4) {
+        ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
             Chip(text: "wakes \(TimeAgo.until(wakesAt, now: now))", symbol: "zzz",
                  health: .neutral)
                 .help("Snoozed. It comes back on its own, and a new review "
@@ -289,7 +289,7 @@ struct RowView: View {
     /// review strip is outside for the same reason.
     @ViewBuilder
     private func sinceBand(_ since: SinceReview) -> some View {
-        ChipFlow(spacing: 5, lineSpacing: 4) {
+        ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
             if let diff = since.incrementalDiff(of: item.url) {
                 Button { NSWorkspace.shared.open(diff) } label: {
                     Chip(text: since.label, symbol: since.symbol, health: since.health)
@@ -344,7 +344,7 @@ struct RowView: View {
     /// exactly like a pull request the feature had decided to ignore.
     @ViewBuilder
     private func queueStrip(_ waiting: AutoReviewQueue.Waiting) -> some View {
-        ChipFlow(spacing: 5, lineSpacing: 4) {
+        ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
             Chip(text: waiting.label, symbol: "clock", health: .neutral)
                 .help(waiting == .next
                       ? "Starts as soon as the review in progress finishes"
@@ -364,7 +364,7 @@ struct RowView: View {
     @ViewBuilder
     private func strip(_ review: AutoReviewRecord) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            ChipFlow(spacing: 5, lineSpacing: 4) {
+            ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
                 switch review.status {
                 case .queued:
                     Chip(text: "queued for review", symbol: "clock", health: .neutral)
@@ -437,7 +437,7 @@ struct RowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if review.offersDecisions {
-                ChipFlow(spacing: 5, lineSpacing: 4) {
+                ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
                     decisions(review)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

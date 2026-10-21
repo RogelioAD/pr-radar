@@ -55,8 +55,25 @@ struct MyPRRowView: View {
             VStack(alignment: .leading, spacing: 5) {
                 titleLine
                 identityLine
-                reviewChips
-                stateChips
+                // Three groups rather than two flows and a catch-all.
+                //
+                // `stateChips` had grown to carry the checks, the threads, the
+                // branch and the waiting clock — four kinds of thing in one
+                // undifferentiated flow, wrapping wherever the width ran out,
+                // so the break never meant anything. This is the argument the
+                // auto-review strip already makes about its own two bands:
+                // giving the decisions their own flow puts the break where the
+                // meaning already is.
+                //
+                // Who has signed off stays one group, and the dismissed count
+                // stays in it. That chip exists to explain the `lead needed`
+                // beside it, and across a group boundary it would be an
+                // orphaned number.
+                VStack(alignment: .leading, spacing: ChipMetrics.groupSpacing) {
+                    reviewChips
+                    blockingChips
+                    contextChips
+                }
                 if showingThreads, !item.unresolvedThreads.isEmpty { threads }
                 if showsStackRow { stackRow }
             }
@@ -194,7 +211,7 @@ struct MyPRRowView: View {
 
     /// Approvals and the lead gate.
     private var reviewChips: some View {
-        ChipFlow(spacing: 4) {
+        ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
             if item.hasLeadGate {
                 if let lead = item.approvingLead {
                     Chip(text: "lead: \(lead.shortName)", symbol: "checkmark.seal.fill",
@@ -331,12 +348,57 @@ struct MyPRRowView: View {
         .padding(.trailing, 2)
     }
 
-    /// Checks, threads, merge blocker, behind-by.
-    private var stateChips: some View {
-        ChipFlow(spacing: 4) {
-            if item.checks.hasAny {
-                checksChip
+    /// What stands between this pull request and a merge.
+    ///
+    /// Checks, the branch, and whatever the merge blocker says that the branch
+    /// chip has not already said. Everything here is a reason it cannot go in.
+    @ViewBuilder
+    private var blockingChips: some View {
+        if hasBlockingChips {
+            ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
+                if item.checks.hasAny {
+                    checksChip
+                }
+
+                branchButtons
+
+                // Behind and conflicted are said once, by the branch chip.
+                if !coveredByBranchChip {
+                    Chip(text: item.mergeBlocker.label, symbol: "arrow.triangle.merge",
+                         health: item.mergeBlocker.health,
+                         filled: fills(item.mergeBlocker.health, as: .blocker))
+                }
+
+                branchChip
             }
+        }
+    }
+
+    /// Whether that group has anything in it, so an empty one costs no gap.
+    ///
+    /// Asked rather than left to `ChipFlow` returning nothing: the group
+    /// spacing above is a `VStack`'s, and a `VStack` spaces an empty child
+    /// exactly as it spaces a full one.
+    private var hasBlockingChips: Bool {
+        item.checks.hasAny
+            || item.branchState != .upToDate
+            || !coveredByBranchChip
+    }
+
+    /// Everything else the row knows — counts and clocks rather than blockers.
+    @ViewBuilder
+    private var contextChips: some View {
+        if item.totalThreadCount > 0 || item.awaiting != nil {
+            ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
+                threadChips
+                awaitingChip
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var threadChips: some View {
+        Group {
             if item.unresolvedThreadCount > 0 {
                 // A button when there is something behind the count, and a
                 // plain chip when there is not. The two can differ: threads are
@@ -370,22 +432,47 @@ struct MyPRRowView: View {
                 Chip(text: "\(item.totalThreadCount) resolved",
                      symbol: "bubble.left", health: .neutral)
             }
-
-            branchButtons
-
-            // Behind and conflicted are said once, by the branch chip.
-            if !coveredByBranchChip {
-                Chip(text: item.mergeBlocker.label, symbol: "arrow.triangle.merge",
-                     health: item.mergeBlocker.health)
-            }
-
-            branchChip
-
-            // Last, because it is the one chip about somebody else. Everything
-            // before it is a thing the pull request needs doing to it; this is
-            // the thing it is waiting on a person for.
-            awaitingChip
         }
+    }
+
+    /// Which signals on this row may draw themselves filled.
+    ///
+    /// Severe ones compete; calm ones do not. `2 blocking` and `conflicts`
+    /// were both solid red at once and the eye had nowhere to land — so among
+    /// the chips carrying the row's worst health, exactly one is filled, and
+    /// the rest state the same thing outlined. Red is still red either way;
+    /// filling is the row saying *this* is the thing to look at.
+    ///
+    /// A good verdict is unaffected: a filled green `lead: Alice` is the row
+    /// being done rather than the row shouting, and two of those never happen.
+    private enum RowSignal { case checks, branch, blocker }
+
+    /// The one severe signal allowed to fill, in the order they are worth
+    /// looking at. Ordered explicitly rather than by whichever is drawn first,
+    /// so the choice does not move when the chips are rearranged.
+    private var loudest: RowSignal? {
+        let severe: [Health] = [.bad, .attention]
+        guard severe.contains(item.health) else { return nil }
+        let candidates: [(RowSignal, Health)] = [
+            (.branch, branchHealth),
+            (.checks, item.checks.health),
+            (.blocker, item.mergeBlocker.health),
+        ]
+        return candidates.first { $0.1 == item.health }?.0
+    }
+
+    private var branchHealth: Health {
+        switch item.branchState {
+        case .conflicts: return .bad
+        case .needsRebase: return .attention
+        case .upToDate, .unknown: return .neutral
+        }
+    }
+
+    /// Whether a chip of this health, from this signal, draws itself filled.
+    private func fills(_ health: Health, as signal: RowSignal) -> Bool {
+        guard health == .bad || health == .attention else { return false }
+        return loudest == signal
     }
 
     /// How long this has been sitting with its reviewers.
@@ -483,21 +570,14 @@ struct MyPRRowView: View {
     private var checksChip: some View {
         let checks = item.checks
         let text: String = {
-            if checks.failing > 0 {
-                let count = "\(checks.failing) failing"
-                guard let blocking = checks.blockingLabel else { return count }
-                return "\(count) · \(blocking)"
-            }
+            if let failures = checks.failureLabel { return failures }
             if checks.running > 0 { return "\(checks.running) running" }
             return "\(checks.passing) passed"
         }()
         let symbol = checks.failing > 0 ? "xmark.octagon"
             : (checks.running > 0 ? "circle.dotted" : "checkmark.circle")
-        // Filled only while it is a blocker. An unfilled red chip is still
-        // red; filling it is the row saying *this is the thing stopping you*,
-        // which a failing check nothing requires is not.
         return Chip(text: text, symbol: symbol, health: checks.health,
-                    filled: checks.failing > 0 && checks.hasBlockingFailure != false)
+                    filled: fills(checks.health, as: .checks))
             .help(checksHelp)
     }
 
@@ -544,10 +624,16 @@ struct MyPRRowView: View {
                     .help("Update this branch from origin/\(item.baseRefName)")
             }
         case .conflicts(let files):
+            // `conflicts` alone where the count could not be had. It used to
+            // read `conflicts · needs rebase`, which spent half a chip saying
+            // what the first word already says — a conflicted branch plainly
+            // needs work. The rule it was protecting is untouched: no number
+            // is invented, and `conflicts · 0 files` is still not a thing the
+            // row says.
             Chip(text: files.map { "conflicts · \($0) file" + ($0 == 1 ? "" : "s") }
-                    ?? "conflicts · needs rebase",
+                    ?? "conflicts",
                  symbol: "exclamationmark.triangle",
-                 health: .bad, filled: true)
+                 health: .bad, filled: fills(.bad, as: .branch))
                 .help(conflictHelp)
         case .unknown:
             Chip(text: "base state unknown", symbol: "questionmark", health: .neutral)
@@ -568,7 +654,7 @@ struct MyPRRowView: View {
     }
 
     private var stackRow: some View {
-        ChipFlow(spacing: 5) {
+        ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
             // Suppressed inside a group: the PR this one sits on is the row
             // directly below it, and saying so twice is noise on a row that
             // already carries four lines of chips.

@@ -16,6 +16,23 @@ enum ChipMetrics {
     /// Sized to the taller of the two it replaces, so buttons keep the hit area
     /// they had and the chips grow into it.
     static let height: CGFloat = 18
+
+    /// And the same horizontal padding, for the same reason.
+    static let padding: CGFloat = 7
+
+    /// The gap between chips on a line.
+    static let spacing: CGFloat = 6
+
+    /// The gap between wrapped lines *inside* one group.
+    static let lineSpacing: CGFloat = 4
+
+    /// The gap between one group of chips and the next.
+    ///
+    /// Deliberately more than twice `lineSpacing`. A row carries three groups
+    /// — who has signed off, what is blocking it, and everything else — and
+    /// with the two gaps equal the boundary between groups read as another
+    /// wrap, so the grouping that was already there did not say anything.
+    static let groupSpacing: CGFloat = 10
 }
 
 /// One chip style for every signal on a row, so approvals, checks, threads and
@@ -35,7 +52,11 @@ struct Chip: View {
             Text(text).font(.system(size: 10, weight: filled ? .semibold : .medium))
         }
         .foregroundStyle(filled ? .white : health.tint)
-        .padding(.horizontal, 5)
+        // The same 7 a `RowButton` uses. The two sit in one `ChipFlow` and
+        // differed by two points a side, which is the horizontal half of the
+        // mismatch `ChipMetrics.height` was introduced to fix vertically —
+        // equal by coincidence until one of them changed a font.
+        .padding(.horizontal, ChipMetrics.padding)
         .frame(height: ChipMetrics.height)
         .background(
             Capsule().fill(filled ? AnyShapeStyle(health.tint)
@@ -103,7 +124,7 @@ struct RowButton: View {
                 Text(title).font(.system(size: 10, weight: .semibold))
             }
             .foregroundStyle(enabled ? health.tint : Color.secondary)
-            .padding(.horizontal, 7)
+            .padding(.horizontal, ChipMetrics.padding)
             .frame(height: ChipMetrics.height)
             .background(Capsule().fill(health.tint.opacity(enabled ? 0.16 : 0.07)))
             .overlay(Capsule().strokeBorder(health.tint.opacity(enabled ? 0.45 : 0.15),

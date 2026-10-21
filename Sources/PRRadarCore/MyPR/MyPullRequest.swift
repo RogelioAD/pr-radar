@@ -144,10 +144,21 @@ public struct ChecksSummary: Equatable, Sendable {
         return .neutral
     }
 
-    /// What the chip says after the count, or nil while nothing is known.
-    public var blockingLabel: String? {
-        guard let required = requiredFailingNames else { return nil }
-        return required.isEmpty ? "none blocking" : "\(required.count) blocking"
+    /// The whole of what the chip says about failures.
+    ///
+    /// One property rather than a count and a suffix the view glues together,
+    /// because the interesting case is the one where glueing them repeats
+    /// itself: when every failure is a required one, `2 failing · 2 blocking`
+    /// prints the same number twice and the row pays a line for it.
+    ///
+    /// nil when nothing is failing — then the chip has a different sentence
+    /// to say and this one has no business being in it.
+    public var failureLabel: String? {
+        guard failing > 0 else { return nil }
+        guard let required = requiredFailingNames else { return "\(failing) failing" }
+        if required.isEmpty { return "\(failing) failing · none blocking" }
+        if required.count == failing { return "\(failing) blocking" }
+        return "\(failing) failing · \(required.count) blocking"
     }
 
     public init(passing: Int, failing: Int, running: Int, skipped: Int,
