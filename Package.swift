@@ -21,7 +21,13 @@ let package = Package(
         .testTarget(
             name: "PRRadarCoreTests",
             dependencies: ["PRRadarCore"],
-            path: "Tests/PRRadarCoreTests"
+            path: "Tests/PRRadarCoreTests",
+            // Real GitHub payloads, with the logins and titles replaced. What
+            // they are for is the shape, which hand-written JSON can only ever
+            // assert about itself — a field the server spells differently, or
+            // stops sending, is exactly what a fixture catches and a mock does
+            // not.
+            resources: [.copy("Fixtures")]
         ),
     ]
 )

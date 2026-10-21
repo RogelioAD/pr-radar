@@ -104,6 +104,19 @@ enum Diagnostics {
                   + "\(item.authorLogin.padding(toLength: 22, withPad: " ", startingAt: 0)) "
                   + "\(item.repoShortName)")
             print("        \(item.title)")
+            if let signals = item.signals {
+                print("        \(signals.sizeLabel)  "
+                      + "checks=\(signals.checks?.rawValue ?? "none")  "
+                      + "others=\(signals.otherReviewers)  "
+                      + "approved=\(signals.approvals)")
+            } else {
+                print("        (no triage signals in the payload)")
+            }
+            if let since = item.sinceReview {
+                print("        \(since.label)"
+                      + (since.incrementalDiff(of: item.url)
+                            .map { "  -> \($0.absoluteString)" } ?? "  (no incremental diff)"))
+            }
         }
 
         try await printMyPRs(client: client)
@@ -120,6 +133,14 @@ enum Diagnostics {
             mine = MyPRInbox.applyCompares(compares, to: mine)
         } catch {
             print("\n(compare phase failed: \(error.localizedDescription))")
+        }
+
+        // Third phase, likewise, and likewise absent when nothing is failing.
+        do {
+            let required = try await client.fetchRequiredChecks(for: mine)
+            mine = MyPRInbox.applyRequiredChecks(required, to: mine)
+        } catch {
+            print("\n(required-checks phase failed: \(error.localizedDescription))")
         }
 
         print("\nmy open PRs: \(mine.count)   leads: \(Prefs.leadsByRepo.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value.joined(separator: ","))" }.joined(separator: " "))")
@@ -146,10 +167,21 @@ enum Diagnostics {
                   + "rollup=\(pr.checks.rollupState ?? "none")")
             if !pr.checks.failingNames.isEmpty {
                 print("        failing: \(pr.checks.failingNames.joined(separator: ", "))")
+                switch pr.checks.requiredFailingNames {
+                case nil:
+                    print("        blocking: not known")
+                case let required? where required.isEmpty:
+                    print("        blocking: none of them is required")
+                case let required?:
+                    print("        blocking: \(required.joined(separator: ", "))")
+                }
             }
             print("        threads \(pr.unresolvedThreadCount) open of \(pr.totalThreadCount)  "
                   + "+\(pr.additions) -\(pr.deletions) in \(pr.changedFiles) files  "
                   + "open \(TimeAgo.short(since: pr.createdAt))")
+            if let awaiting = pr.awaiting {
+                print("        \(awaiting.label())  on=[\(awaiting.reviewers.joined(separator: ","))]")
+            }
             print("        \(pr.headRefName) -> \(pr.baseRefName)"
                   + (pr.stackedOn.map { "  [stacked on #\($0)]" } ?? "")
                   + (pr.blocksRestackOf.isEmpty ? "" : "  [rebase strands \(pr.blocksRestackOf.map { "#\($0)" }.joined(separator: ", "))]")

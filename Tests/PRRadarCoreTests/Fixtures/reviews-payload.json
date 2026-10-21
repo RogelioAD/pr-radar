@@ -1,0 +1,865 @@
+{
+ "direct": {
+  "nodes": [
+   {
+    "additions": 1406,
+    "author": {
+     "avatarUrl": "https://avatars.githubusercontent.com/u/1?v=4",
+     "login": "alice"
+    },
+    "baseRefName": "main",
+    "changedFiles": 19,
+    "deletions": 178,
+    "head": {
+     "nodes": [
+      {
+       "commit": {
+        "oid": "ab3a48de23f34bf69943f596f5d2b4003e076556",
+        "statusCheckRollup": {
+         "state": "SUCCESS"
+        }
+       }
+      }
+     ]
+    },
+    "id": "PR_kwDORby63M8AAAABJnRPgA",
+    "isDraft": false,
+    "latestReviews": {
+     "nodes": [
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "bob"
+       },
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "carol"
+       },
+       "state": "APPROVED"
+      },
+      {
+       "author": {
+        "login": "viewer"
+       },
+       "state": "APPROVED"
+      }
+     ]
+    },
+    "myComments": {
+     "nodes": [
+      {
+       "author": {
+        "login": "carol"
+       },
+       "createdAt": "2026-10-21T02:40:29Z",
+       "id": "IC_kwDORby63M8AAAABd-ffaw"
+      },
+      {
+       "author": {
+        "login": "carol"
+       },
+       "createdAt": "2026-10-21T11:01:51Z",
+       "id": "IC_kwDORby63M8AAAABeF0OpA"
+      },
+      {
+       "author": {
+        "login": "alice"
+       },
+       "createdAt": "2026-10-21T12:52:38Z",
+       "id": "IC_kwDORby63M8AAAABeH22Bw"
+      },
+      {
+       "author": {
+        "login": "carol"
+       },
+       "createdAt": "2026-10-21T16:39:28Z",
+       "id": "IC_kwDORby63M8AAAABeMbeNw"
+      }
+     ]
+    },
+    "myReviews": {
+     "nodes": [
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "add46415cc7625159105ab0d9f3405a024bab1f2"
+       },
+       "createdAt": "2026-10-20T18:03:12Z",
+       "id": "PRR_kwDORby63M8AAAABTSfP3w",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "9909acc43c84f68c8c0bc88372f25c0460f82f3e"
+       },
+       "createdAt": "2026-10-20T18:11:09Z",
+       "id": "PRR_kwDORby63M8AAAABTSksdQ",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "9909acc43c84f68c8c0bc88372f25c0460f82f3e"
+       },
+       "createdAt": "2026-10-20T18:32:57Z",
+       "id": "PRR_kwDORby63M8AAAABTS0y2Q",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "9de8f79c6b640a8cae65f2e7dbb7459e168476f3"
+       },
+       "createdAt": "2026-10-20T19:07:39Z",
+       "id": "PRR_kwDORby63M8AAAABTTQksg",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "9de8f79c6b640a8cae65f2e7dbb7459e168476f3"
+       },
+       "createdAt": "2026-10-20T19:31:15Z",
+       "id": "PRR_kwDORby63M8AAAABTTk3pg",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "viewer"
+       },
+       "commit": {
+        "oid": "9de8f79c6b640a8cae65f2e7dbb7459e168476f3"
+       },
+       "createdAt": "2026-10-20T19:34:33Z",
+       "id": "PRR_kwDORby63M8AAAABTTnlGg",
+       "state": "DISMISSED"
+      },
+      {
+       "author": {
+        "login": "bob"
+       },
+       "commit": {
+        "oid": "9de8f79c6b640a8cae65f2e7dbb7459e168476f3"
+       },
+       "createdAt": "2026-10-21T12:25:43Z",
+       "id": "PRR_kwDORby63M8AAAABTcMc9g",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "bef3e60eeef78ff59ffaab429178f564b589ad21"
+       },
+       "createdAt": "2026-10-21T12:53:52Z",
+       "id": "PRR_kwDORby63M8AAAABTciqzw",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "bef3e60eeef78ff59ffaab429178f564b589ad21"
+       },
+       "createdAt": "2026-10-21T13:18:38Z",
+       "id": "PRR_kwDORby63M8AAAABTc3vMQ",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "bob"
+       },
+       "commit": {
+        "oid": "bef3e60eeef78ff59ffaab429178f564b589ad21"
+       },
+       "createdAt": "2026-10-21T15:06:01Z",
+       "id": "PRR_kwDORby63M8AAAABTeT3tQ",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "ab3a48de23f34bf69943f596f5d2b4003e076556"
+       },
+       "createdAt": "2026-10-21T15:24:07Z",
+       "id": "PRR_kwDORby63M8AAAABTehyhQ",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "viewer"
+       },
+       "commit": {
+        "oid": "ab3a48de23f34bf69943f596f5d2b4003e076556"
+       },
+       "createdAt": "2026-10-21T15:26:34Z",
+       "id": "PRR_kwDORby63M8AAAABTejpRQ",
+       "state": "APPROVED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "ab3a48de23f34bf69943f596f5d2b4003e076556"
+       },
+       "createdAt": "2026-10-21T15:56:50Z",
+       "id": "PRR_kwDORby63M8AAAABTe8CRQ",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "carol"
+       },
+       "commit": {
+        "oid": "ab3a48de23f34bf69943f596f5d2b4003e076556"
+       },
+       "createdAt": "2026-10-21T16:38:31Z",
+       "id": "PRR_kwDORby63M8AAAABTfcS5w",
+       "state": "APPROVED"
+      }
+     ]
+    },
+    "number": 871,
+    "recent": {
+     "nodes": [
+      {
+       "commit": {
+        "committedDate": "2026-10-20T17:59:47Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-20T18:08:40Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-20T19:05:36Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-21T12:51:57Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-21T15:22:22Z"
+       }
+      }
+     ],
+     "totalCount": 5
+    },
+    "repository": {
+     "nameWithOwner": "acme/repo"
+    },
+    "requests": {
+     "nodes": [
+      {
+       "createdAt": "2026-10-20T19:32:58Z",
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "viewer"
+       }
+      },
+      {
+       "createdAt": "2026-10-20T19:33:04Z",
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "bob"
+       }
+      },
+      {
+       "createdAt": "2026-10-21T13:59:49Z",
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "bob"
+       }
+      },
+      {
+       "createdAt": "2026-10-21T13:59:49Z",
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "viewer"
+       }
+      },
+      {
+       "createdAt": "2026-10-21T14:00:01Z",
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "carol"
+       }
+      }
+     ]
+    },
+    "reviewRequests": {
+     "nodes": [],
+     "totalCount": 0
+    },
+    "state": "OPEN",
+    "title": "a pull request (871)",
+    "url": "https://github.com/acme/repo/pull/871"
+   },
+   {
+    "additions": 2856,
+    "author": {
+     "avatarUrl": "https://avatars.githubusercontent.com/u/1?v=4",
+     "login": "alice"
+    },
+    "baseRefName": "main",
+    "changedFiles": 5,
+    "deletions": 0,
+    "head": {
+     "nodes": [
+      {
+       "commit": {
+        "oid": "3f7c115a7dd451e7572049b706887ef079254043",
+        "statusCheckRollup": {
+         "state": "SUCCESS"
+        }
+       }
+      }
+     ]
+    },
+    "id": "PR_kwDORby63M8AAAABJkSF0g",
+    "isDraft": false,
+    "latestReviews": {
+     "nodes": [
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "viewer"
+       },
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "bob"
+       },
+       "state": "COMMENTED"
+      }
+     ]
+    },
+    "myComments": {
+     "nodes": [
+      {
+       "author": {
+        "login": "carol"
+       },
+       "createdAt": "2026-10-21T11:18:06Z",
+       "id": "IC_kwDORby63M8AAAABeGFkWw"
+      }
+     ]
+    },
+    "myReviews": {
+     "nodes": [
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "097ac647a9d9d90974785914add594af1468c1c2"
+       },
+       "createdAt": "2026-10-20T14:09:52Z",
+       "id": "PRR_kwDORby63M8AAAABTPdT5g",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "097ac647a9d9d90974785914add594af1468c1c2"
+       },
+       "createdAt": "2026-10-20T14:32:20Z",
+       "id": "PRR_kwDORby63M8AAAABTPwYXA",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "e1dac3bc194b7fc1b8ade57f6ecde63111f33e49"
+       },
+       "createdAt": "2026-10-20T15:17:10Z",
+       "id": "PRR_kwDORby63M8AAAABTQYhLQ",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "e1dac3bc194b7fc1b8ade57f6ecde63111f33e49"
+       },
+       "createdAt": "2026-10-20T15:43:42Z",
+       "id": "PRR_kwDORby63M8AAAABTQx3WA",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "95e25f218a1ca6b69a85e916b9d3283acdc2cc7b"
+       },
+       "createdAt": "2026-10-20T15:48:36Z",
+       "id": "PRR_kwDORby63M8AAAABTQ18hA",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "95e25f218a1ca6b69a85e916b9d3283acdc2cc7b"
+       },
+       "createdAt": "2026-10-20T16:13:52Z",
+       "id": "PRR_kwDORby63M8AAAABTRKraw",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "viewer"
+       },
+       "commit": {
+        "oid": "95e25f218a1ca6b69a85e916b9d3283acdc2cc7b"
+       },
+       "createdAt": "2026-10-20T17:25:58Z",
+       "id": "PRR_kwDORby63M8AAAABTSCj1w",
+       "state": "DISMISSED"
+      },
+      {
+       "author": {
+        "login": "bob"
+       },
+       "commit": {
+        "oid": "95e25f218a1ca6b69a85e916b9d3283acdc2cc7b"
+       },
+       "createdAt": "2026-10-20T17:30:52Z",
+       "id": "PRR_kwDORby63M8AAAABTSGtDQ",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "6b5e00c0622753ea6c63e179ccdebfae90d43aaf"
+       },
+       "createdAt": "2026-10-20T18:04:10Z",
+       "id": "PRR_kwDORby63M8AAAABTSf7WQ",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "6b5e00c0622753ea6c63e179ccdebfae90d43aaf"
+       },
+       "createdAt": "2026-10-20T18:26:20Z",
+       "id": "PRR_kwDORby63M8AAAABTSv3hg",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "d64fbc7262e66b9e7691cabf1bf4868cfca021a1"
+       },
+       "createdAt": "2026-10-20T18:28:07Z",
+       "id": "PRR_kwDORby63M8AAAABTSxJRA",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "d64fbc7262e66b9e7691cabf1bf4868cfca021a1"
+       },
+       "createdAt": "2026-10-20T18:55:23Z",
+       "id": "PRR_kwDORby63M8AAAABTTFmQQ",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "viewer"
+       },
+       "commit": {
+        "oid": "765ef9c261fdd37c1fca2489862cafe83a30fcfc"
+       },
+       "createdAt": "2026-10-20T19:17:18Z",
+       "id": "PRR_kwDORby63M8AAAABTTY4HQ",
+       "state": "DISMISSED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "876f3d4da07c817769a455c0f88e9d0faa96f8f2"
+       },
+       "createdAt": "2026-10-20T19:26:19Z",
+       "id": "PRR_kwDORby63M8AAAABTTgvmQ",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "876f3d4da07c817769a455c0f88e9d0faa96f8f2"
+       },
+       "createdAt": "2026-10-20T19:51:30Z",
+       "id": "PRR_kwDORby63M8AAAABTT1GGQ",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "765ef9c261fdd37c1fca2489862cafe83a30fcfc"
+       },
+       "createdAt": "2026-10-20T20:13:44Z",
+       "id": "PRR_kwDORby63M8AAAABTUGLLg",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "765ef9c261fdd37c1fca2489862cafe83a30fcfc"
+       },
+       "createdAt": "2026-10-20T20:39:08Z",
+       "id": "PRR_kwDORby63M8AAAABTUZPSg",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "carol"
+       },
+       "commit": {
+        "oid": "765ef9c261fdd37c1fca2489862cafe83a30fcfc"
+       },
+       "createdAt": "2026-10-21T11:15:56Z",
+       "id": "PRR_kwDORby63M8AAAABTbc6lg",
+       "state": "DISMISSED"
+      },
+      {
+       "author": {
+        "login": "bob"
+       },
+       "commit": {
+        "oid": "765ef9c261fdd37c1fca2489862cafe83a30fcfc"
+       },
+       "createdAt": "2026-10-21T12:22:07Z",
+       "id": "PRR_kwDORby63M8AAAABTcJ-qQ",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "409e435a62e6eb734e6fb7e068667c25029b2e64"
+       },
+       "createdAt": "2026-10-21T12:58:04Z",
+       "id": "PRR_kwDORby63M8AAAABTcmK_A",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "409e435a62e6eb734e6fb7e068667c25029b2e64"
+       },
+       "createdAt": "2026-10-21T13:19:55Z",
+       "id": "PRR_kwDORby63M8AAAABTc454g",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "9a5336985511ca904deff50e29ebb700eb4ee6a1"
+       },
+       "createdAt": "2026-10-21T13:56:52Z",
+       "id": "PRR_kwDORby63M8AAAABTdaWrw",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "52228f52a6ed087156ca8f4a72e80c377209efad"
+       },
+       "createdAt": "2026-10-21T14:09:51Z",
+       "id": "PRR_kwDORby63M8AAAABTdlveA",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "695a2ca5aaa4e100eceebdebd1516ec9d3f25eff"
+       },
+       "createdAt": "2026-10-21T14:25:51Z",
+       "id": "PRR_kwDORby63M8AAAABTd0CwA",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "695a2ca5aaa4e100eceebdebd1516ec9d3f25eff"
+       },
+       "createdAt": "2026-10-21T14:54:26Z",
+       "id": "PRR_kwDORby63M8AAAABTeKL_Q",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "viewer"
+       },
+       "commit": {
+        "oid": "695a2ca5aaa4e100eceebdebd1516ec9d3f25eff"
+       },
+       "createdAt": "2026-10-21T15:26:19Z",
+       "id": "PRR_kwDORby63M8AAAABTejdRg",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "17fb572519217db22efbbeb2df99db313ed9aaf9"
+       },
+       "createdAt": "2026-10-21T15:28:24Z",
+       "id": "PRR_kwDORby63M8AAAABTelHgg",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "bob"
+       },
+       "commit": {
+        "oid": "17fb572519217db22efbbeb2df99db313ed9aaf9"
+       },
+       "createdAt": "2026-10-21T15:40:42Z",
+       "id": "PRR_kwDORby63M8AAAABTevRdg",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "7a3a86148e64619108cd611dcb66f34a3767c3b4"
+       },
+       "createdAt": "2026-10-21T15:55:35Z",
+       "id": "PRR_kwDORby63M8AAAABTe65wA",
+       "state": "COMMENTED"
+      },
+      {
+       "author": {
+        "login": "github-actions"
+       },
+       "commit": {
+        "oid": "3f7c115a7dd451e7572049b706887ef079254043"
+       },
+       "createdAt": "2026-10-21T16:07:45Z",
+       "id": "PRR_kwDORby63M8AAAABTfEw8Q",
+       "state": "COMMENTED"
+      }
+     ]
+    },
+    "number": 869,
+    "recent": {
+     "nodes": [
+      {
+       "commit": {
+        "committedDate": "2026-10-20T14:07:19Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-20T15:15:07Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-20T15:46:38Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-20T18:02:12Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-20T18:26:21Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-20T19:24:47Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-20T20:12:09Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-21T12:54:45Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-21T13:54:43Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-21T14:07:15Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-21T14:24:24Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-21T15:26:48Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-21T15:52:36Z"
+       }
+      },
+      {
+       "commit": {
+        "committedDate": "2026-10-21T16:05:29Z"
+       }
+      }
+     ],
+     "totalCount": 14
+    },
+    "repository": {
+     "nameWithOwner": "acme/repo"
+    },
+    "requests": {
+     "nodes": [
+      {
+       "createdAt": "2026-10-20T17:14:13Z",
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "viewer"
+       }
+      },
+      {
+       "createdAt": "2026-10-20T17:14:23Z",
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "bob"
+       }
+      },
+      {
+       "createdAt": "2026-10-20T19:02:39Z",
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "bob"
+       }
+      },
+      {
+       "createdAt": "2026-10-20T19:02:39Z",
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "viewer"
+       }
+      },
+      {
+       "createdAt": "2026-10-21T14:54:00Z",
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "carol"
+       }
+      },
+      {
+       "createdAt": "2026-10-21T14:54:00Z",
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "bob"
+       }
+      },
+      {
+       "createdAt": "2026-10-21T14:54:00Z",
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "viewer"
+       }
+      }
+     ]
+    },
+    "reviewRequests": {
+     "nodes": [
+      {
+       "requestedReviewer": {
+        "__typename": "User",
+        "login": "carol"
+       }
+      }
+     ],
+     "totalCount": 1
+    },
+    "state": "OPEN",
+    "title": "a pull request (869)",
+    "url": "https://github.com/acme/repo/pull/869"
+   }
+  ]
+ }
+}
