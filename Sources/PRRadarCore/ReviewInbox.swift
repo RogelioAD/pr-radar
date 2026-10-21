@@ -83,8 +83,59 @@ public struct ReviewInbox {
             authorAvatarURL: author.avatarUrl.flatMap(URL.init(string:)),
             pingedAt: latestPing,
             nodeID: node.id,
-            baseRef: node.baseRefName
+            baseRef: node.baseRefName,
+            signals: signals(from: node)
         )
+    }
+
+    /// What the row needs to triage this pull request, or nil when the payload
+    /// did not carry it.
+    ///
+    /// nil rather than a zeroed struct. The three sizes arrive together or not
+    /// at all, and a row saying `+0 −0 · 0f` about a pull request nobody
+    /// measured is the same class of answer as a failed branch compare
+    /// rendered as "up to date".
+    func signals(from node: PRNode) -> ReviewSignals? {
+        guard let additions = node.additions,
+              let deletions = node.deletions,
+              let changedFiles = node.changedFiles
+        else { return nil }
+
+        let rollup = node.head?.nodes.first?.commit?.statusCheckRollup?.state
+        return ReviewSignals(
+            additions: additions,
+            deletions: deletions,
+            changedFiles: changedFiles,
+            checks: rollup.flatMap(RollupVerdict.init(rawValue:)),
+            otherReviewers: otherReviewers(in: node),
+            approvals: liveApprovals(in: node))
+    }
+
+    /// Reviewers still being waited on who are neither me nor a team of mine.
+    ///
+    /// Branching on `__typename` for the same reason `latestPing` does: a user
+    /// whose login happens to match one of my team slugs is not my team, and
+    /// counting them as me would make a ping aimed at six people look like one
+    /// aimed at me alone.
+    func otherReviewers(in node: PRNode) -> Int {
+        (node.reviewRequests?.nodes ?? []).filter { request in
+            guard let reviewer = request.requestedReviewer else { return false }
+            switch reviewer.typename {
+            case "User": return reviewer.login != viewerLogin
+            case "Team": return !teamSlugs.contains(reviewer.slug ?? "")
+            default: return false
+            }
+        }.count
+    }
+
+    /// Approvals that actually count, by the rule the lead chip already uses:
+    /// a dismissed approval is not an approval, and a COMMENTED review is not
+    /// an opinion. My own is excluded — a row saying somebody has approved
+    /// this when the somebody is me would be the list answering itself.
+    func liveApprovals(in node: PRNode) -> Int {
+        (node.latestReviews?.nodes ?? []).filter { review in
+            review.author?.login != viewerLogin && review.state == "APPROVED"
+        }.count
     }
 
     /// Newest review request aimed at the viewer. `requestedReviewer` is a union,

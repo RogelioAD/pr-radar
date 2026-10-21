@@ -14,6 +14,8 @@ public enum Prefs {
         static let notifyComments = "notify.comments"
         static let notifyBotComments = "notify.botComments"
         static let sortOrder = "list.sortOrder"
+        static let reviewFilter = "list.reviewFilter"
+        static let snoozes = "list.snoozes"
         static let drawerContentHeight = "drawer.contentHeight"
         static let selectedTab = "drawer.selectedTab"
         static let myPRSortOrder = "mine.sortOrder"
@@ -96,6 +98,25 @@ public enum Prefs {
             return order
         }
         set { defaults.set(newValue.rawValue, forKey: Key.sortOrder) }
+    }
+
+    /// Which triage filter the Reviews tab is narrowed by.
+    ///
+    /// Persisted, where the author filter is not. The two are not the same
+    /// kind of narrowing: an author filter names a person who may have nothing
+    /// outstanding tomorrow, and leaving one on across a restart is how you
+    /// end up staring at an empty drawer beside a non-zero badge. "Don't show
+    /// me pull requests whose CI is already red" is a standing preference
+    /// about the work, and it survives its own emptiness — the list it hides
+    /// from is the whole list, and the bar says so while it is hiding anything.
+    public static var reviewFilter: ReviewFilter {
+        get {
+            guard let raw = defaults.string(forKey: Key.reviewFilter),
+                  let filter = ReviewFilter(rawValue: raw)
+            else { return .all }
+            return filter
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.reviewFilter) }
     }
 
     /// The repo the drawer is narrowed to, as `owner/name`, or nil for all.

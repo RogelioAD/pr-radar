@@ -38,6 +38,15 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
     /// request that touched thirty-nine.
     public var baseRef: String?
 
+    /// What this review will cost and whether it is worth starting — size,
+    /// the checks rollup, who else is on the hook. See `ReviewSignals`.
+    ///
+    /// Optional for the same reason as the three above, and one more: a row
+    /// redrawn from a persisted auto-review record was encoded before this
+    /// existed, so nil is the state a year-old record decodes into. A row with
+    /// no signals simply wears no triage chips.
+    public var signals: ReviewSignals?
+
     public var id: String { "\(repo)#\(number)" }
     /// Short repo name without the owner prefix.
     public var repoShortName: String {
@@ -70,7 +79,8 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
 
     public init(repo: String, number: Int, title: String, url: URL, isDraft: Bool,
                 authorLogin: String, authorAvatarURL: URL?, pingedAt: Date,
-                account: String = "", nodeID: String? = nil, baseRef: String? = nil) {
+                account: String = "", nodeID: String? = nil, baseRef: String? = nil,
+                signals: ReviewSignals? = nil) {
         self.repo = repo
         self.number = number
         self.title = title
@@ -82,6 +92,7 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
         self.account = account
         self.nodeID = nodeID
         self.baseRef = baseRef
+        self.signals = signals
     }
 }
 
@@ -115,12 +126,14 @@ public enum ReviewSortOrder: String, CaseIterable, Sendable {
     case oldestFirst
     case newestFirst
     case authorAZ
+    case smallestFirst
 
     public var label: String {
         switch self {
         case .oldestFirst: return "Oldest first"
         case .newestFirst: return "Newest first"
         case .authorAZ: return "Author A–Z"
+        case .smallestFirst: return "Smallest first"
         }
     }
 
@@ -129,11 +142,19 @@ public enum ReviewSortOrder: String, CaseIterable, Sendable {
         case .oldestFirst: return "arrow.down"
         case .newestFirst: return "arrow.up"
         case .authorAZ: return "textformat.abc"
+        case .smallestFirst: return "ruler"
         }
     }
 
     /// Applies this ordering. Oldest-first is the default because the most
     /// overdue review is the one worth seeing at the top.
+    ///
+    /// Smallest-first is how a queue of six actually gets cleared, and it is
+    /// the one ordering with an unknown in it: an item whose signals never
+    /// arrived has no size, and sorting it as zero would put it at the very
+    /// top claiming to be the quickest thing in the list. Unknowns go last,
+    /// among themselves oldest first, which is where the default would have
+    /// had them anyway.
     public func apply(to items: [ReviewItem]) -> [ReviewItem] {
         switch self {
         case .oldestFirst: return items.sorted { $0.pingedAt < $1.pingedAt }
@@ -142,6 +163,16 @@ public enum ReviewSortOrder: String, CaseIterable, Sendable {
             return items.sorted {
                 let left = $0.authorLogin.lowercased(), right = $1.authorLogin.lowercased()
                 return left == right ? $0.pingedAt < $1.pingedAt : left < right
+            }
+        case .smallestFirst:
+            return items.sorted {
+                switch ($0.signals?.lines, $1.signals?.lines) {
+                case let (left?, right?):
+                    return left == right ? $0.pingedAt < $1.pingedAt : left < right
+                case (nil, nil): return $0.pingedAt < $1.pingedAt
+                case (nil, _): return false
+                case (_, nil): return true
+                }
             }
         }
     }

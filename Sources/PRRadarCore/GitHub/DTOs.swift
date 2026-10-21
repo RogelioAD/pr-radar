@@ -48,6 +48,19 @@ public struct PRNode: Decodable {
     public let baseRefName: String?
     public let author: ActorDTO?
     public let repository: RepoDTO?
+    /// How big the diff is. Optional like everything else here: a payload
+    /// decoded by an older test, or a node the server declined to expand,
+    /// leaves the row's triage chips off rather than printing zeroes.
+    public let additions: Int?
+    public let deletions: Int?
+    public let changedFiles: Int?
+    /// The head commit, for its checks rollup. Aliased in the document, so the
+    /// property name is the alias rather than `commits`.
+    public let head: CommitConn?
+    /// Reviews already in, for counting the live approvals among them.
+    public let latestReviews: ReviewConn?
+    /// Reviewers still being waited on — the live set, not the timeline.
+    public let reviewRequests: RequestConn?
     public let requests: TimelineConn?
     public let myReviews: TimelineConn?
     public let myComments: TimelineConn?

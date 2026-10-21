@@ -276,6 +276,38 @@ public enum Query {
           baseRefName
           author { login avatarUrl }
           repository { nameWithOwner }
+          # What the review will cost to do. The three numbers the My PRs side
+          # has always carried and this side never did, so a forty-line row and
+          # a fourteen-hundred-line one were the same row.
+          additions
+          deletions
+          changedFiles
+          # The rollup's verdict and nothing under it. Triage asks "is this
+          # even reviewable yet", which is one word; the per-check breakdown is
+          # the My PRs tab's job and costs a hundred nodes a pull request —
+          # here that would be a hundred times thirty times one alias per team.
+          #
+          # Aliased because a second `commits` connection sits beside it below,
+          # and the two want different page sizes.
+          head: commits(last: 1) {
+            nodes { commit { oid statusCheckRollup { state } } }
+          }
+          # Who has already signed off, so a row can say you may be the sixth
+          # opinion on something two leads have approved.
+          latestReviews(first: 20) { nodes { author { login } state } }
+          # Who else is still being waited on. `reviewRequests` is the live
+          # set — GitHub removes a reviewer from it the moment they submit —
+          # which is exactly the question "am I the only one left".
+          reviewRequests(first: 20) {
+            totalCount
+            nodes {
+              requestedReviewer {
+                __typename
+                ... on User { login }
+                ... on Team { slug }
+              }
+            }
+          }
           requests: timelineItems(last: 100, itemTypes: [REVIEW_REQUESTED_EVENT]) {
             nodes {
               ... on ReviewRequestedEvent {

@@ -156,6 +156,8 @@ struct RowView: View {
                         Chip(text: "draft", health: .neutral)
                     }
                 }
+
+                if let signals = item.signals { triage(signals) }
             }
 
             Spacer(minLength: 4)
@@ -171,10 +173,90 @@ struct RowView: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(item.title), pull request \(item.number) "
-                            + "in \(item.repoShortName) by \(item.authorLogin), "
-                            + "requested \(TimeAgo.long(since: item.pingedAt, now: now))")
+        .accessibilityLabel(spokenLabel)
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// What the review will cost, and whether it is worth starting.
+    ///
+    /// Its own band under the metadata line rather than more pills on it. That
+    /// line already carries a number, a repository, a login and sometimes two
+    /// chips, and these are a different kind of thing from all of them: it
+    /// says *which* pull request this is, and this says *what you are in for*.
+    ///
+    /// A `ChipFlow` for the reason the My PRs row uses one — three chips and a
+    /// long repository name is a row that has to wrap rather than truncate the
+    /// words that make it worth reading.
+    @ViewBuilder
+    private func triage(_ signals: ReviewSignals) -> some View {
+        ChipFlow(spacing: 5, lineSpacing: 4) {
+            Chip(text: signals.sizeLabel, symbol: "plusminus",
+                 health: signals.weight)
+                .help(signals.sizeHelp)
+
+            if let checks = signals.checks {
+                Chip(text: checks.label, symbol: checks.symbol, health: checks.health)
+                    .help(checks.isFailing
+                          ? "CI has already failed on this head commit"
+                          : "GitHub's rollup for the head commit")
+            }
+
+            // Said either way. "Nobody else was asked" is the more useful half
+            // and it is the half a count alone cannot express — a row with no
+            // reviewer chip would read as a row nobody had got round to
+            // measuring, which is what a missing signal already means here.
+            Chip(text: Self.reviewerText(signals.otherReviewers),
+                 symbol: signals.otherReviewers == 0 ? "person" : "person.2",
+                 health: .neutral)
+                .help(Self.reviewerHelp(signals.otherReviewers))
+
+            if signals.approvals > 0 {
+                Chip(text: "\(signals.approvals) approved", symbol: "checkmark.seal",
+                     health: .good)
+                    .help(Self.approvalHelp(signals.approvals))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private static func reviewerText(_ count: Int) -> String {
+        count == 0 ? "only you" : "\(count) other" + (count == 1 ? "" : "s")
+    }
+
+    private static func reviewerHelp(_ count: Int) -> String {
+        guard count > 0 else { return "Nobody else is being waited on for this one" }
+        let verb = count == 1 ? " reviewer is" : " reviewers are"
+        return "\(count)\(verb) also being waited on"
+    }
+
+    private static func approvalHelp(_ count: Int) -> String {
+        let who = count == 1 ? "1 reviewer" : "\(count) reviewers"
+        return "Already approved by \(who) — yours may not be the one holding it up"
+    }
+
+    /// The whole row, spoken.
+    ///
+    /// Assembled here rather than in the modifier it feeds. Built inline it
+    /// was a four-way `+` chain of interpolations inside a view builder, which
+    /// is the shape the type checker gives up on — and it gave up on this one.
+    private var spokenLabel: String {
+        let when = TimeAgo.long(since: item.pingedAt, now: now)
+        let who = "in \(item.repoShortName) by \(item.authorLogin)"
+        return "\(item.title), pull request \(item.number) \(who), requested \(when)"
+            + triageSpoken
+    }
+
+    /// The triage band, spoken. Kept beside the band rather than inlined into
+    /// the row's label so the two cannot drift apart.
+    private var triageSpoken: String {
+        guard let signals = item.signals else { return "" }
+        var parts = ["\(signals.lines) lines across \(signals.changedFiles) files"]
+        if let checks = signals.checks { parts.append(checks.label) }
+        parts.append(signals.otherReviewers == 0
+                     ? "no other reviewers"
+                     : "\(signals.otherReviewers) other reviewers")
+        if signals.approvals > 0 { parts.append("\(signals.approvals) already approved") }
+        return ", " + parts.joined(separator: ", ")
     }
 
     // MARK: - The automatic review

@@ -86,6 +86,17 @@ final class AppState: ObservableObject {
     /// nil means every author.
     @Published var authorFilter: String?
 
+    /// Narrows the Reviews list by what the triage signals say — CI that is
+    /// not already red, or pull requests nobody has approved yet.
+    ///
+    /// A second axis from the author menu rather than another entry in it, in
+    /// the same sense the pancake button is a second axis on My PRs: *small
+    /// ones nobody has looked at* is one question, and it takes two controls
+    /// to ask it.
+    @Published var reviewFilter: ReviewFilter = Prefs.reviewFilter {
+        didSet { Prefs.reviewFilter = reviewFilter }
+    }
+
     // MARK: - Shared filters
 
     /// Narrows **both** tabs to one repository, as `owner/name`. Shared rather
@@ -973,12 +984,26 @@ final class AppState: ObservableObject {
     // MARK: - Displayed lists
 
     var displayedItems: [ReviewItem] {
-        var filtered = scopedItems
+        var filtered = effectiveReviewFilter.apply(to: scopedItems)
         if let author = authorFilter {
             filtered = filtered.filter { $0.authorLogin == author }
         }
         return sortOrder.apply(to: filtered)
     }
+
+    /// The triage filter, or `.all` when nothing in scope could answer it.
+    ///
+    /// The same shape `effectiveMyPRFilter` uses for needs-lead: a filter
+    /// whose control is not on screen must not still be narrowing the list
+    /// behind it, or a preference set last week hides rows with nothing left
+    /// to switch off.
+    var effectiveReviewFilter: ReviewFilter {
+        showsReviewFilter ? reviewFilter : .all
+    }
+
+    /// Whether the triage filter could hide anything in the list as it stands.
+    /// Scoped by repository and account, like every other count in the bar.
+    var showsReviewFilter: Bool { ReviewFilter.isUseful(on: scopedItems) }
 
     /// The My PRs list as the drawer actually lays it out: lone PRs and stack
     /// groups, in display order.
@@ -1122,6 +1147,7 @@ final class AppState: ObservableObject {
 
     var isRepoFiltered: Bool { repoFilter != nil }
     var isFiltered: Bool { authorFilter != nil }
+    var isReviewFiltered: Bool { effectiveReviewFilter != .all }
     var isMyPRFiltered: Bool { effectiveMyPRFilter != .all || myPRStackedOnly }
 
     /// Whether any PR belongs to a repo with leads configured.

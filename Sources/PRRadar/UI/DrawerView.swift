@@ -700,7 +700,12 @@ struct DrawerView: View {
             problem(title: "Inbox zero", detail: "No reviews waiting on you.",
                     symbol: "checkmark.circle")
         } else if items.isEmpty {
-            problem(title: "Nothing from \(state.authorFilter ?? "that author")",
+            // Named by whichever filter actually emptied it. The author filter
+            // used to be assumed, so turning on "nobody has approved" and
+            // matching nothing produced "Nothing from that author" over a list
+            // with no author filter set at all.
+            problem(title: state.authorFilter.map { "Nothing from \($0)" }
+                        ?? state.effectiveReviewFilter.emptyTitle,
                     detail: "Clear the filter to see the other \(state.count).",
                     symbol: "line.3.horizontal.decrease.circle")
         } else {
@@ -849,9 +854,17 @@ struct DrawerView: View {
     }
 }
 
-/// The Reviews tab's sort + author filter, unchanged in behaviour.
+/// The Reviews tab's sort + author filter, plus the triage filter beside them.
 struct ReviewFilterBar: View {
     @ObservedObject var state: AppState
+
+    /// Each entry with what picking it would leave, the way the author menu
+    /// names a count beside every login. A filter that would empty the list is
+    /// worth knowing about before it does.
+    private func reviewFilterLabel(_ filter: ReviewFilter) -> String {
+        let count = filter.apply(to: state.scopedItems).count
+        return "\(filter.label) (\(count))"
+    }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -916,12 +929,46 @@ struct ReviewFilterBar: View {
             .menuIndicator(.hidden)
             .fixedSize()
 
+            // Symbol only, and only when it could do something.
+            //
+            // Both halves are forced by the bar's width. These pills are
+            // `Menu` labels carrying `.fixedSize()`, so past the edge they are
+            // clipped rather than shortened — and with a long repository name
+            // picked this bar was already measured at 406 of its 440 points.
+            // A worded pill does not fit; a wordless one does, and the words
+            // live in the tooltip, exactly as the sort control's do.
+            if state.showsReviewFilter {
+                Menu {
+                    ForEach(ReviewFilter.allCases, id: \.self) { filter in
+                        Button {
+                            state.reviewFilter = filter
+                        } label: {
+                            if state.reviewFilter == filter {
+                                Label(reviewFilterLabel(filter), systemImage: "checkmark")
+                            } else {
+                                Text(reviewFilterLabel(filter))
+                            }
+                        }
+                    }
+                } label: {
+                    FilterPill(symbol: state.effectiveReviewFilter.symbol,
+                               active: state.isReviewFiltered)
+                        .help(state.isReviewFiltered
+                              ? "Showing only: \(state.effectiveReviewFilter.label.lowercased())"
+                              : "Narrow by what the checks and approvals say")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
+
             Spacer()
 
-            if state.isFiltered || state.isRepoFiltered {
+            if state.isFiltered || state.isRepoFiltered || state.isReviewFiltered {
                 Button {
                     state.authorFilter = nil
                     state.repoFilter = nil
+                    state.reviewFilter = .all
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 11))
