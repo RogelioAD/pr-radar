@@ -699,6 +699,17 @@ struct DrawerView: View {
         if state.items.isEmpty {
             problem(title: "Inbox zero", detail: "No reviews waiting on you.",
                     symbol: "checkmark.circle")
+        } else if items.isEmpty, state.showingSnoozed {
+            problem(title: "Nothing is snoozed",
+                    detail: "Everything you put down has come back.",
+                    symbol: "sun.max")
+        } else if items.isEmpty, state.snoozedCount > 0, !state.isFiltered,
+                  !state.isReviewFiltered {
+            // Everything in scope is asleep. Saying "inbox zero" here would be
+            // the drawer congratulating you for work you deferred an hour ago.
+            problem(title: "All snoozed",
+                    detail: "\(state.snoozedCount) waiting on you, put down for now.",
+                    symbol: "zzz")
         } else if items.isEmpty {
             // Named by whichever filter actually emptied it. The author filter
             // used to be assumed, so turning on "nobody has approved" and
@@ -727,6 +738,9 @@ struct DrawerView: View {
                                 onRemoveComment: {
                                     state.removeAuthoredComment($0, on: item)
                                 },
+                                onSnooze: { state.snooze(item, until: $0) },
+                                onWake: state.showingSnoozed ? { state.wake(item) } : nil,
+                                wakesAt: state.wakeTime(for: item),
                                 lensReading: { state.lensReading(for: $0) },
                                 rowKey: state.rowKey(.reviews, item.id)) {
                             onOpen(item)
@@ -960,6 +974,20 @@ struct ReviewFilterBar: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
+            }
+
+            // Only when something is actually asleep. It is the one control
+            // here that is a count as much as a filter: the badge has gone
+            // quiet by exactly this many, and this is where it says so.
+            if state.snoozedCount > 0 || state.showingSnoozed {
+                Button { state.showingSnoozed.toggle() } label: {
+                    FilterPill(symbol: "zzz", text: "\(state.snoozedCount)",
+                               active: state.showingSnoozed)
+                }
+                .buttonStyle(.plain)
+                .help(state.showingSnoozed
+                      ? "Back to what is waiting on you"
+                      : "\(state.snoozedCount) snoozed, and not in the badge — show them")
             }
 
             Spacer()

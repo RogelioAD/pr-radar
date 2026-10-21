@@ -359,6 +359,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         state.clock = Date()
         state.lastUpdated = Date()
+        // Wake what is due, and forget what is gone. Only a round that reached
+        // every account is allowed to do the second half — see `Snoozes.prune`.
+        state.pruneSnoozes(complete: fetches.allSatisfy { $0.error == nil })
 
         // The one edge worth a reaction: something new landed while you
         // were not looking.

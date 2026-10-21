@@ -97,6 +97,21 @@ final class AppState: ObservableObject {
         didSet { Prefs.reviewFilter = reviewFilter }
     }
 
+    /// Review requests put down until later. See `Snoozes`.
+    @Published var snoozes: Snoozes = Prefs.snoozes {
+        didSet { Prefs.snoozes = snoozes }
+    }
+
+    /// Whether the list is showing the sleeping rows instead of the waking
+    /// ones.
+    ///
+    /// Session-only, where the triage filter is persisted. It is a way of
+    /// looking at the list rather than a standing preference about the work,
+    /// and leaving it on across a restart would open the drawer onto a list of
+    /// rows that are all asleep beside a badge reading zero — the same
+    /// empty-drawer trap that keeps the author filter out of defaults.
+    @Published var showingSnoozed = false
+
     // MARK: - Shared filters
 
     /// Narrows **both** tabs to one repository, as `owner/name`. Shared rather
@@ -984,7 +999,12 @@ final class AppState: ObservableObject {
     // MARK: - Displayed lists
 
     var displayedItems: [ReviewItem] {
-        var filtered = effectiveReviewFilter.apply(to: scopedItems)
+        // The sleeping list is shown whole. The filters narrow the work you
+        // are choosing between, and a row you have already chosen to put down
+        // is not in that choice — hiding some of what you parked, behind a
+        // filter you set for a different purpose, is how a row gets lost.
+        if showingSnoozed { return sortOrder.apply(to: snoozedItems) }
+        var filtered = effectiveReviewFilter.apply(to: awakeItems)
         if let author = authorFilter {
             filtered = filtered.filter { $0.authorLogin == author }
         }
@@ -1003,7 +1023,54 @@ final class AppState: ObservableObject {
 
     /// Whether the triage filter could hide anything in the list as it stands.
     /// Scoped by repository and account, like every other count in the bar.
-    var showsReviewFilter: Bool { ReviewFilter.isUseful(on: scopedItems) }
+    var showsReviewFilter: Bool { ReviewFilter.isUseful(on: awakeItems) }
+
+    /// The rows in scope that are not asleep — what the list and the badge
+    /// are both built from.
+    var awakeItems: [ReviewItem] { snoozes.awake(scopedItems, now: clock) }
+
+    /// The rows in scope that are. Counted so the bar can say so, because the
+    /// one thing the badge must never be is silently short.
+    var snoozedItems: [ReviewItem] { snoozes.asleep(scopedItems, now: clock) }
+
+    var snoozedCount: Int { snoozedItems.count }
+
+    /// When a row wakes, or nil if it is not asleep *now*.
+    ///
+    /// Asked rather than read straight off the store: a wake time that has
+    /// already passed is still in there until the next prune, and a row back
+    /// in the list wearing "wakes in 0m" would be describing a state it has
+    /// already left.
+    func wakeTime(for item: ReviewItem) -> Date? {
+        guard snoozes.isAsleep(item.pingKey, now: clock) else { return nil }
+        return snoozes.wakeTime(for: item.pingKey)
+    }
+
+    /// Puts a row down until `wake`, and tells the queue to leave it alone.
+    func snooze(_ item: ReviewItem, until wake: Date) {
+        snoozes.snooze(item.pingKey, until: wake)
+    }
+
+    func wake(_ item: ReviewItem) {
+        snoozes.wake(item.pingKey)
+        // Nothing left to look at, so stop looking at it. The same rule the
+        // author filter follows when its last pull request is reviewed: a
+        // view that can only show an empty list clears itself rather than
+        // leaving you staring at one.
+        if snoozedItems.isEmpty { showingSnoozed = false }
+    }
+
+    /// Drops snoozes that have expired or whose pull request is gone.
+    ///
+    /// `complete` is false when the round could not reach every account, and
+    /// then only the expired half runs — pruning against a partial list would
+    /// quietly wake every row belonging to the account that was unreachable.
+    func pruneSnoozes(complete: Bool) {
+        var pruned = snoozes
+        pruned.prune(known: complete ? Set(items.map(\.pingKey)) : nil, now: clock)
+        if pruned != snoozes { snoozes = pruned }
+        if showingSnoozed && snoozedItems.isEmpty { showingSnoozed = false }
+    }
 
     /// The My PRs list as the drawer actually lays it out: lone PRs and stack
     /// groups, in display order.
@@ -1312,7 +1379,13 @@ final class AppState: ObservableObject {
 
     /// The badge counts review requests only — the number you owe other people.
     /// Your own PRs are informational and must not inflate it.
-    var count: Int { scopedItems.count }
+    ///
+    /// Sleeping rows are not in it either. The badge answers *what is waiting
+    /// on me*, and a pull request deliberately parked until Monday is not
+    /// waiting on you now — going on nagging about it is the thing the snooze
+    /// was pressed to stop. The drawer says how many are asleep whenever any
+    /// are, so the number is never silently short.
+    var count: Int { awakeItems.count }
 
     /// True when this round could not reach every account in scope, so `count`
     /// is real but short. The badge has to say so: a number that is merely

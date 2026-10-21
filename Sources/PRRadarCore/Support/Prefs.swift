@@ -100,6 +100,15 @@ public enum Prefs {
         set { defaults.set(newValue.rawValue, forKey: Key.sortOrder) }
     }
 
+    /// Review requests put down until later, as ping key to wake time.
+    ///
+    /// Persisted, and it has to be: a snooze whose whole point is to outlast
+    /// today would be worthless if quitting the app woke everything up.
+    public static var snoozes: Snoozes {
+        get { Snoozes.decoded(from: defaults.data(forKey: Key.snoozes)) }
+        set { defaults.set(newValue.encoded(), forKey: Key.snoozes) }
+    }
+
     /// Which triage filter the Reviews tab is narrowed by.
     ///
     /// Persisted, where the author filter is not. The two are not the same

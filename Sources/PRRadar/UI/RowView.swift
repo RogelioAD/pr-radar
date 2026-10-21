@@ -33,6 +33,14 @@ struct RowView: View {
     /// keep what was typed when it did not.
     var onAddComment: ((PreparedFinding) -> Bool)?
     var onRemoveComment: ((String) -> Void)?
+    /// Puts this row down until the given time, or nil where snoozing is not
+    /// offered. Passed in rather than reached for, so the row stays a view.
+    var onSnooze: ((Date) -> Void)?
+    /// Brings it back now. Non-nil exactly when this row is asleep, which is
+    /// also what decides whether the row wears its wake chip.
+    var onWake: (() -> Void)?
+    /// When this row wakes, if it is asleep.
+    var wakesAt: Date?
     /// The plain-English reading for a piece of text, or nil for its own words.
     ///
     /// A lookup rather than a flag and a store, so this row cannot accidentally
@@ -62,6 +70,7 @@ struct RowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             primary
+            if let wakesAt { sleepBand(wakesAt) }
             if let since = item.sinceReview { sinceBand(since) }
             if let review {
                 strip(review)
@@ -85,6 +94,17 @@ struct RowView: View {
             if let diff = item.sinceReview?.incrementalDiff(of: item.url) {
                 Button("Open Changes Since Your Review") { NSWorkspace.shared.open(diff) }
             }
+            Divider()
+            if let onWake {
+                Button("Wake Now", action: onWake)
+            } else if let onSnooze {
+                Menu("Snooze") {
+                    ForEach(SnoozeOption.allCases, id: \.self) { option in
+                        Button(option.label) { onSnooze(option.wake(from: now)) }
+                    }
+                }
+            }
+            Divider()
             Button("Copy Link") { Clipboard.copy(item.url.absoluteString) }
             Button("Copy Title") { Clipboard.copy(item.title) }
         }
@@ -236,6 +256,27 @@ struct RowView: View {
     private static func approvalHelp(_ count: Int) -> String {
         let who = count == 1 ? "1 reviewer" : "\(count) reviewers"
         return "Already approved by \(who) — yours may not be the one holding it up"
+    }
+
+    /// What a sleeping row says about when it comes back.
+    ///
+    /// A row you put down still has to say what you did to it and when it
+    /// undoes itself. The whole bargain of the snooze is that the count goes
+    /// quiet without anything going missing, and a sleeping row that looked
+    /// identical to a waking one would be holding up neither half.
+    @ViewBuilder
+    private func sleepBand(_ wakesAt: Date) -> some View {
+        ChipFlow(spacing: 5, lineSpacing: 4) {
+            Chip(text: "wakes \(TimeAgo.until(wakesAt, now: now))", symbol: "zzz",
+                 health: .neutral)
+                .help("Snoozed. It comes back on its own, and a new review "
+                      + "request brings it back at once.")
+            if let onWake {
+                RowButton(title: "Wake now", symbol: "sun.max",
+                          health: .running, action: onWake)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// What has landed since you last reviewed this one.
