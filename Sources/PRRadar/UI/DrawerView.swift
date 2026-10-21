@@ -976,20 +976,6 @@ struct ReviewFilterBar: View {
                 .fixedSize()
             }
 
-            // Only when something is actually asleep. It is the one control
-            // here that is a count as much as a filter: the badge has gone
-            // quiet by exactly this many, and this is where it says so.
-            if state.snoozedCount > 0 || state.showingSnoozed {
-                Button { state.showingSnoozed.toggle() } label: {
-                    FilterPill(symbol: "zzz", text: "\(state.snoozedCount)",
-                               active: state.showingSnoozed)
-                }
-                .buttonStyle(.plain)
-                .help(state.showingSnoozed
-                      ? "Back to what is waiting on you"
-                      : "\(state.snoozedCount) snoozed, and not in the badge — show them")
-            }
-
             Spacer()
 
             if state.isFiltered || state.isRepoFiltered || state.isReviewFiltered {

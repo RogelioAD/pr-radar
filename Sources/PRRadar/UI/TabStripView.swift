@@ -27,6 +27,32 @@ struct TabStripView: View {
                      symbol: "checkmark.seal", health: .good)
                     .help("\(state.myPRsReadyToMerge) of your PRs are ready to merge")
             }
+
+            // The sleeping count, which belongs here for the same two reasons
+            // the ready count does: it is a fact about one tab rather than
+            // about the app, and this band has the room.
+            //
+            // The filter bar does not. Measured with two accounts, the longest
+            // repository name, an author picked and the triage filter on, its
+            // pills come to 451 of an available 440 with this one among them —
+            // and a `Menu` label carrying `.fixedSize()` is clipped past the
+            // edge rather than shortened. Here it costs nothing: the tabs end
+            // after a third of the band.
+            if state.selectedTab == .reviews, state.snoozedCount > 0 || state.showingSnoozed {
+                Button { state.showingSnoozed.toggle() } label: {
+                    Chip(text: "\(state.snoozedCount) snoozed", symbol: "zzz",
+                         health: .neutral, filled: state.showingSnoozed)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                // Every other chip in this band is a label, so this one has to
+                // say it is not — the rule the threads count already follows.
+                .pressable()
+                .help(state.showingSnoozed
+                      ? "Back to what is waiting on you"
+                      : "\(state.snoozedCount) put down for later, and not in "
+                        + "the badge — click to see them")
+            }
         }
         .padding(.horizontal, 8)
         .frame(height: Layout.tabStripHeight)
