@@ -47,6 +47,13 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
     /// no signals simply wears no triage chips.
     public var signals: ReviewSignals?
 
+    /// What has landed since the last time you reviewed this, when you have.
+    ///
+    /// nil on a pull request you have never reviewed, which is most of them,
+    /// and optional for the same persistence reason as everything above it.
+    /// See `SinceReview`.
+    public var sinceReview: SinceReview?
+
     public var id: String { "\(repo)#\(number)" }
     /// Short repo name without the owner prefix.
     public var repoShortName: String {
@@ -80,7 +87,7 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
     public init(repo: String, number: Int, title: String, url: URL, isDraft: Bool,
                 authorLogin: String, authorAvatarURL: URL?, pingedAt: Date,
                 account: String = "", nodeID: String? = nil, baseRef: String? = nil,
-                signals: ReviewSignals? = nil) {
+                signals: ReviewSignals? = nil, sinceReview: SinceReview? = nil) {
         self.repo = repo
         self.number = number
         self.title = title
@@ -93,6 +100,7 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
         self.nodeID = nodeID
         self.baseRef = baseRef
         self.signals = signals
+        self.sinceReview = sinceReview
     }
 }
 

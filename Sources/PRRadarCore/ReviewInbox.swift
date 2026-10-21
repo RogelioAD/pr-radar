@@ -84,8 +84,41 @@ public struct ReviewInbox {
             pingedAt: latestPing,
             nodeID: node.id,
             baseRef: node.baseRefName,
-            signals: signals(from: node)
+            signals: signals(from: node),
+            sinceReview: sinceReview(in: node, ignoring: pinned)
         )
+    }
+
+    /// What has landed since my last review of this pull request.
+    ///
+    /// nil when I have never reviewed it, which is the common case and the one
+    /// where there is nothing to say. Every row this does appear on is a
+    /// re-review by construction: the rule above only keeps a pull request
+    /// whose newest ping is newer than anything I did to it, so a surviving
+    /// row carrying a review of mine is one I have been asked to look at again.
+    ///
+    /// `ignoring` is the pin, and it is excluded here for a different reason
+    /// than it is excluded above. There it stops PR Radar's own review from
+    /// counting as me having dealt with the pull request; here it stops a
+    /// review I did not read the code for from anchoring a diff labelled
+    /// *since your review*. The review was posted under my name, but the
+    /// sentence would not be true.
+    func sinceReview(in node: PRNode, ignoring excluded: String? = nil) -> SinceReview? {
+        let mine = (node.myReviews?.nodes ?? []).filter { review in
+            review.author?.login == viewerLogin && review.id != excluded
+        }
+        guard let latest = mine.max(by: { ($0.createdAt ?? .distantPast)
+                                          < ($1.createdAt ?? .distantPast) }),
+              let reviewedAt = latest.createdAt
+        else { return nil }
+
+        let page = node.recent?.nodes.compactMap { $0.commit?.committedDate } ?? []
+        return SinceReview.make(
+            reviewedAt: reviewedAt,
+            reviewedOid: latest.commit?.oid,
+            headOid: node.head?.nodes.first?.commit?.oid,
+            commitDates: page,
+            total: node.recent?.totalCount ?? page.count)
     }
 
     /// What the row needs to triage this pull request, or nil when the payload

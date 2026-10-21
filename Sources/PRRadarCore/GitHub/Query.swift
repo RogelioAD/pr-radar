@@ -292,6 +292,14 @@ public enum Query {
           head: commits(last: 1) {
             nodes { commit { oid statusCheckRollup { state } } }
           }
+          # The tail of the branch, for counting what has been pushed since you
+          # last reviewed. Dates only, and twenty of them: the count exists to
+          # tell twelve lines from a rewrite, and a row that says `20+` is a
+          # better answer than one that spends a hundred nodes being exact.
+          recent: commits(last: 20) {
+            totalCount
+            nodes { commit { committedDate } }
+          }
           # Who has already signed off, so a row can say you may be the sixth
           # opinion on something two leads have approved.
           latestReviews(first: 20) { nodes { author { login } state } }
@@ -321,7 +329,16 @@ public enum Query {
             }
           }
           myReviews: timelineItems(last: 100, itemTypes: [PULL_REQUEST_REVIEW]) {
-            nodes { ... on PullRequestReview { id createdAt state author { login } } }
+            nodes {
+              ... on PullRequestReview {
+                id createdAt state author { login }
+                # The commit the review was made against — the anchor for the
+                # diff of what has changed since. Null on a review whose commit
+                # was force-pushed out of the branch, which is a case the row
+                # has to survive rather than link into a 404.
+                commit { oid }
+              }
+            }
           }
           myComments: timelineItems(last: 100, itemTypes: [ISSUE_COMMENT]) {
             nodes { ... on IssueComment { id createdAt author { login } } }

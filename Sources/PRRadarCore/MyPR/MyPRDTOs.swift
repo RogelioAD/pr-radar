@@ -97,6 +97,10 @@ public struct ThreadCommentNode: Decodable {
 
 public struct CommitConn: Decodable {
     public let nodes: [CommitWrapper]
+    /// How many commits the pull request has in total. Asked for only by the
+    /// Reviews tab's `recent` alias, where it is what decides whether a full
+    /// page of commits is a count or a floor.
+    public let totalCount: Int?
 }
 
 public struct CommitWrapper: Decodable {
@@ -105,6 +109,10 @@ public struct CommitWrapper: Decodable {
 
 public struct CommitNode: Decodable {
     public let oid: String?
+    /// When the commit was authored onto the branch. Read by the Reviews tab
+    /// to count what has landed since a review; the My PRs query never asks
+    /// for it, so it decodes as nil there.
+    public let committedDate: Date?
     public let statusCheckRollup: RollupNode?
 }
 

@@ -62,6 +62,7 @@ struct RowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             primary
+            if let since = item.sinceReview { sinceBand(since) }
             if let review {
                 strip(review)
                 if showingFindings, review.isAwaitingSelection { findings(review) }
@@ -81,6 +82,9 @@ struct RowView: View {
         }
         .contextMenu {
             Button("Open in Browser") { onOpen() }
+            if let diff = item.sinceReview?.incrementalDiff(of: item.url) {
+                Button("Open Changes Since Your Review") { NSWorkspace.shared.open(diff) }
+            }
             Button("Copy Link") { Clipboard.copy(item.url.absoluteString) }
             Button("Copy Title") { Clipboard.copy(item.title) }
         }
@@ -232,6 +236,36 @@ struct RowView: View {
     private static func approvalHelp(_ count: Int) -> String {
         let who = count == 1 ? "1 reviewer" : "\(count) reviewers"
         return "Already approved by \(who) — yours may not be the one holding it up"
+    }
+
+    /// What has landed since you last reviewed this one.
+    ///
+    /// Its own band, outside `primary`, rather than another chip in the triage
+    /// flow. Everything in `primary` sits under the tap that opens the pull
+    /// request, and this chip is a link of its own to a different page — a
+    /// press meant for the incremental diff that also opened the whole diff
+    /// behind it is the bug nobody reports and everybody works around. The
+    /// review strip is outside for the same reason.
+    @ViewBuilder
+    private func sinceBand(_ since: SinceReview) -> some View {
+        ChipFlow(spacing: 5, lineSpacing: 4) {
+            if let diff = since.incrementalDiff(of: item.url) {
+                Button { NSWorkspace.shared.open(diff) } label: {
+                    Chip(text: since.label, symbol: since.symbol, health: since.health)
+                }
+                .buttonStyle(.plain)
+                .pressable()
+                .help(since.help(now: now))
+                .accessibilityLabel("\(since.label). Opens just what has changed.")
+            } else {
+                // No anchor, so no link. The sentence is still worth saying —
+                // it is the difference between re-reading nine hundred lines
+                // and knowing you have to.
+                Chip(text: since.label, symbol: since.symbol, health: since.health)
+                    .help(since.help(now: now))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// The whole row, spoken.

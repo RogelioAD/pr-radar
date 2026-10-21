@@ -57,6 +57,10 @@ public struct PRNode: Decodable {
     /// The head commit, for its checks rollup. Aliased in the document, so the
     /// property name is the alias rather than `commits`.
     public let head: CommitConn?
+    /// The tail of the branch, for counting what has been pushed since a
+    /// review. A second aliased `commits` connection, because the two want
+    /// different page sizes and different fields.
+    public let recent: CommitConn?
     /// Reviews already in, for counting the live approvals among them.
     public let latestReviews: ReviewConn?
     /// Reviewers still being waited on — the live set, not the timeline.
@@ -87,6 +91,14 @@ public struct TimelineNode: Decodable {
     public let requestedReviewer: ReviewerDTO?
     public let author: ActorDTO?
     public let state: String?
+    /// For a review, the commit it was made against. Absent on every other
+    /// kind of timeline item, and null on a review whose commit is gone.
+    public let commit: CommitRefDTO?
+}
+
+/// A commit named only to be pointed at.
+public struct CommitRefDTO: Decodable {
+    public let oid: String?
 }
 
 /// `requestedReviewer` is a union of User and Team — `typename` says which,
