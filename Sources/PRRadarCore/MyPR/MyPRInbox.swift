@@ -115,9 +115,31 @@ public struct MyPRInbox {
             changedFiles: node.changedFiles ?? 0
         )
         item.nodeID = node.id
+        item.requestedAt = Self.requestedAt(in: node.requests)
         item.headOid = node.commits?.nodes.first?.commit?.oid
         item.headRepositoryOwner = node.headRepositoryOwner?.login
         return item
+    }
+
+    /// When each reviewer was last asked, from the review-request events.
+    ///
+    /// *Last*, not first: being re-requested restarts that person's clock,
+    /// exactly as a re-request restarts yours on the Reviews tab. Keyed by
+    /// login for a user and by slug for a team, which is how
+    /// `awaitingReviewers` keys them too — the two have to agree or the
+    /// lookup silently misses and the row quietly stops claiming a duration.
+    static func requestedAt(in timeline: TimelineConn?) -> [String: Date] {
+        var latest: [String: Date] = [:]
+        for event in timeline?.nodes ?? [] {
+            guard let createdAt = event.createdAt,
+                  let reviewer = event.requestedReviewer
+            else { continue }
+            let key = reviewer.typename == "Team" ? reviewer.slug : reviewer.login
+            guard let key else { continue }
+            if let existing = latest[key], existing >= createdAt { continue }
+            latest[key] = createdAt
+        }
+        return latest
     }
 
     /// The contexts GitHub is actually showing, one per check.

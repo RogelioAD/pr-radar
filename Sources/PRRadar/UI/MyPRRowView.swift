@@ -380,6 +380,30 @@ struct MyPRRowView: View {
             }
 
             branchChip
+
+            // Last, because it is the one chip about somebody else. Everything
+            // before it is a thing the pull request needs doing to it; this is
+            // the thing it is waiting on a person for.
+            awaitingChip
+        }
+    }
+
+    /// How long this has been sitting with its reviewers.
+    ///
+    /// The app could say to the hour what you owe other people and nothing at
+    /// all about the other direction — this row has carried
+    /// `awaitingReviewers` since the tab was built and never drew it, so a
+    /// pull request you asked three people to look at four days ago looked
+    /// exactly like one you opened this morning.
+    ///
+    /// The same ladder the Reviews tab ages its requests by, so the two tabs
+    /// cannot come to mean different things by the same colour.
+    @ViewBuilder
+    private var awaitingChip: some View {
+        if let awaiting = item.awaiting {
+            Chip(text: awaiting.label(now: now), symbol: "hourglass",
+                 health: awaiting.health(now: now))
+                .help(awaiting.help(now: now))
         }
     }
 

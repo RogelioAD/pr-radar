@@ -192,6 +192,13 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
     /// state is shown or counted.
     public let hasLeadGate: Bool
     public let awaitingReviewers: [String]
+
+    /// When each outstanding reviewer was last asked, by login or team slug.
+    ///
+    /// Defaulted empty, like everything added to this type after the fact. An
+    /// empty map leaves the row naming who it waits on without claiming how
+    /// long, which is what it should say when nothing told it.
+    public var requestedAt: [String: Date] = [:]
     public let unresolvedThreadCount: Int
     /// The threads behind that count.
     ///
@@ -284,6 +291,12 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
     }
 
     public var needsLead: Bool { hasLeadGate && approvingLead == nil }
+
+    /// How long this has been sitting with somebody else, or nil when nobody
+    /// is being waited on. See `AwaitingReview`.
+    public var awaiting: AwaitingReview? {
+        AwaitingReview.make(reviewers: awaitingReviewers, askedAt: requestedAt)
+    }
 
     public var isStacked: Bool { stackedOn != nil }
 

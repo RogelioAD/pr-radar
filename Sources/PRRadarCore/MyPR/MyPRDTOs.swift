@@ -38,6 +38,10 @@ public struct MyPRNode: Decodable {
     public let repository: RepoDTO?
     public let latestReviews: ReviewConn?
     public let reviewRequests: RequestConn?
+    /// Review-request events, for when each outstanding reviewer was asked.
+    /// Reuses the Reviews tab's timeline shape — the two documents read the
+    /// same event and there is no reason for two decoders of it.
+    public let requests: TimelineConn?
     public let reviewThreads: ThreadConn?
     public let commits: CommitConn?
 }

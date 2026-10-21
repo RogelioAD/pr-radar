@@ -108,6 +108,26 @@ public enum Query {
                     }
                   }
                 }
+                # When each of them was asked. `ReviewRequest` carries no
+                # timestamp of its own — the live set says who is outstanding
+                # and never since when — so the timeline is the only place the
+                # other half of the clock is recorded.
+                #
+                # Its own aliased connection rather than more fields above,
+                # and `last` rather than `first`, because what is wanted is the
+                # most recent time each person was asked.
+                requests: timelineItems(last: 50, itemTypes: [REVIEW_REQUESTED_EVENT]) {
+                  nodes {
+                    ... on ReviewRequestedEvent {
+                      createdAt
+                      requestedReviewer {
+                        __typename
+                        ... on User { login }
+                        ... on Team { slug }
+                      }
+                    }
+                  }
+                }
                 reviewThreads(first: 100) {
                   totalCount
                   nodes {
