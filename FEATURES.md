@@ -1031,8 +1031,16 @@ is the thing the art has been owed since the second shelf went in.
   identical idles would waste it.
 - **They bob out of step.** In lockstep a dozen characters read as one object
   sliding past.
-- **It does not take clicks**, and it keeps off the footer. A parade that
-  stopped you working would be a prank rather than a joke.
+- **The drawer steps aside for it.** The first version had them crossing the
+  header mascot and whatever the list was saying, and two sets of pixel art at
+  two scales on top of each other is a mess rather than a parade. The contents
+  fade out, the cast walks an empty stage, and everything fades back.
+- **The frame does not move.** Taking the contents out rather than fading them
+  would collapse the panel to nothing and bounce it back seven seconds later,
+  which is a worse interruption than the one it fixes.
+- **It does not take clicks**, and nothing underneath can be pressed while it
+  cannot be seen. A parade that stopped you working would be a prank rather
+  than a joke.
 - **The watcher observes rather than consumes.** Up and down still move the
   selection while they are being counted — a sequence that swallowed the keys
   it was watching would break the list for anybody who pressed up twice.

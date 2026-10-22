@@ -115,6 +115,18 @@ struct DrawerView: View {
                 footer
             }
         }
+        // The drawer steps aside rather than being walked over.
+        //
+        // The first version had them crossing the header mascot and whatever
+        // the list was saying, and two sets of pixel art at two scales on top
+        // of each other is a mess rather than a parade. Faded rather than
+        // removed, and the frame is untouched: taking the contents out would
+        // collapse the drawer to nothing and bounce it back seven seconds
+        // later, which is a worse interruption than the one being fixed.
+        .opacity(state.parading ? 0 : 1)
+        .animation(.easeInOut(duration: 0.4), value: state.parading)
+        // Nothing underneath can be pressed while it cannot be seen.
+        .allowsHitTesting(!state.parading)
         .frame(width: state.drawerWidth)
         .background(.regularMaterial)
         // Before the clip, so they walk off the rounded corners rather than

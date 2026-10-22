@@ -114,7 +114,12 @@ final class AppState: ObservableObject {
     /// are being counted. A sequence that swallowed the keys it watches would
     /// break the list for anybody who pressed up twice.
     func noticeKey(_ keyCode: UInt16) {
-        guard konami.accept(keyCode: keyCode) else { return }
+        let fired = konami.accept(keyCode: keyCode)
+        // Only once something is under way, so ordinary typing stays silent.
+        if fired || konami.progress > 0 {
+            Log.debug("konami \(konami.progress)/\(Konami.sequence.count)\(fired ? " — here they come" : "")")
+        }
+        guard fired else { return }
         parading = true
     }
 

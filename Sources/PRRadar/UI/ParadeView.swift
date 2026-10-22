@@ -8,8 +8,12 @@ import PRRadarCore
 /// characters that each get shown one at a time, and a line of all of them is
 /// the thing the art has been owed since the second shelf went in.
 ///
-/// Drawn over the list rather than instead of it, and it does not take clicks:
-/// a parade that stopped you working would be a prank rather than a joke.
+/// The drawer fades out for the length of it and comes back afterwards. It was
+/// drawn over the list to begin with, which was a mess: two sets of pixel art
+/// at two scales on top of each other is not a parade. It still takes no
+/// clicks, and the drawer keeps its frame throughout — emptying it would
+/// collapse the panel and bounce it back seven seconds later, which is a worse
+/// interruption than the one that fixes.
 struct ParadeView: View {
     /// How long the whole thing takes, end to end.
     static let duration: TimeInterval = 7
