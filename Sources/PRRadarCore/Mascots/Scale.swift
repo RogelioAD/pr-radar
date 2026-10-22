@@ -1,6 +1,27 @@
 import Foundation
 
 extension Sprite {
+    /// Plain doubling, one cell becoming four.
+    ///
+    /// Deliberately *not* the clever one. `scaled3x` rounds a stepped
+    /// diagonal into a diagonal, which is what you want when a 16-cell
+    /// character has to stand next to a 48-cell one. This is only ever used
+    /// after `scaled3x` to reach 6×, for the marks and chips beside the
+    /// tallest cast — and rounding corners a second time on art that has
+    /// already been rounded once softens a glyph into a blob. An
+    /// exclamation mark has to stay an exclamation mark.
+    public func scaled2x() -> Sprite {
+        var rows: [String] = []
+        for y in 0..<height {
+            let row = (0..<width).map { x in
+                String(repeating: String(self[x, y]?.rawValue ?? "."), count: 2)
+            }.joined()
+            rows.append(row)
+            rows.append(row)
+        }
+        return Sprite(rows)
+    }
+
     /// Scale3×: the classic pixel-art enlargement, one cell becoming nine.
     ///
     /// Not nearest-neighbour. A corner is only rounded where the two cells

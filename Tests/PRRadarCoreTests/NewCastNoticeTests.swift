@@ -5,8 +5,8 @@ import XCTest
 final class NewCastNoticeTests: XCTestCase {
 
     func testItAnnouncesTheNewestBuiltInCohort() {
-        XCTAssertEqual(NewCastNotice.cohort, .october2026)
-        XCTAssertEqual(NewCastNotice.visitors, [.boo, .flit, .gourd, .rattle])
+        XCTAssertEqual(NewCastNotice.cohort, .fantasticFour)
+        XCTAssertEqual(NewCastNotice.visitors, [.humanTorch])
     }
 
     /// Never the custom shelf. A fork's own characters are not news to the
@@ -27,6 +27,7 @@ final class NewCastNoticeTests: XCTestCase {
     func testAnOlderAcknowledgementDoesNotSilenceANewerCohort() {
         XCTAssertTrue(NewCastNotice.shouldShow(acknowledged: MascotCohort.og.rawValue))
         XCTAssertTrue(NewCastNotice.shouldShow(acknowledged: MascotCohort.space.rawValue))
+        XCTAssertTrue(NewCastNotice.shouldShow(acknowledged: MascotCohort.october2026.rawValue))
     }
 
     /// Whoever it names has to be somebody the picker will actually offer.
@@ -39,7 +40,7 @@ final class NewCastNoticeTests: XCTestCase {
     /// The heading is the shelf's own title, so the banner and the room it
     /// points at cannot disagree about what the group is called.
     func testTheHeadlineIsTheShelfsOwnTitle() {
-        XCTAssertEqual(NewCastNotice.headline, MascotCohort.october2026.title)
+        XCTAssertEqual(NewCastNotice.headline, MascotCohort.fantasticFour.title)
     }
 
     func testNamesReadAsASentence() {

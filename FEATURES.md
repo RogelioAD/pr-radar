@@ -910,7 +910,7 @@ press.
 ## Mascots
 
 A small pixel-art character that keeps you company in the drawer and, by
-default, replaces the floating icon entirely. **Twelve of them**, on three
+default, replaces the floating icon entirely. **Thirteen of them**, on four
 shelves, and none of them go away.
 
 **OG Mascots** — the first cast, drawn at 16 cells and retired when the
@@ -943,6 +943,52 @@ because they leave. They do not.
 | **Gourd** | a jack-o'-lantern, the only one lit from inside |
 | **Rattle** | a skeleton; the nose hollow glows and a spark sits in his ribs |
 
+**Fantastic Four** — the first shelf that is **traced rather than drawn**, and
+the first with **two forms per character**. Still being filled: Human Torch
+has landed, the other three are waiting on their art.
+
+| | |
+|---|---|
+| **Human Torch** | in the suit when the queue is quiet, flamed on when it is not |
+
+The art is supplied as a sprite sheet and resampled onto the grid by
+`Scripts/trace.py`, which keeps the sheet's own palette and does *not* run it
+through the outline or shading passes — both exist to turn a flat
+authored half into a lit drawing, and supplied art is already lit. The
+source sheets live in `Art/`, so a re-import is one command rather than an
+archaeology exercise. A second sheet is already in there against the rest of
+the shelf landing, and `trace.py` carries what it took to measure it — a
+sheet's own figure bounds, its head, and whether its tones need stretching
+across the ramp to read at all.
+
+Three things fall out of this shelf being different:
+
+**Drawn at 96 × 144**, not 48 square. At the mascot room's 54 points that puts
+one cell on one device pixel — as fine as the display can show, and the point
+at which the staircase stops being visible. Nothing had to be taught the new
+size: `SpriteLayout.unit` was always a sixteenth of the character's own width
+rather than a constant, so the mood marks and counter chips scale with it.
+
+**Two forms, and the switch is a readout.** `SpriteStyle.powered` picks
+between them off the tint, exactly the way `sweeps` does. Green is a queue you
+cleared and grey is one you parked — in both, there is nothing to do and he is
+standing there in his own clothes. Blue, amber and red all mean something is
+live, and that is when the suit comes off. The transformation is therefore a
+thing you can read rather than an animation that happens at you.
+
+**Not mirrored.** Every character drawn for this app is authored as half and
+mirrored, which is why the suite can insist a silhouette is symmetric to the
+pixel — that is how a broken mirror pass is caught, not a style. A supplied
+figure stands in a three-quarter stance with one arm raised, and folding it in
+half to satisfy a test would destroy the pose it was supplied for. `Mascot.mirrored`
+says which rule a character is under.
+
+The two forms are aligned on the **head**, not the feet. Feet sound right — he
+is standing in the same place either way — but the powered drawing is crouched
+into its pose, so anchored at the floor his face dropped eleven cells when he
+lit up and the eye boxes landed on empty air above his head. Anchored at the
+head his feet rise instead, which is not a compromise: he flies.
+
 ### The mascot room
 
 The **smiling face in the footer** opens a room of the whole cast, four to a
@@ -951,8 +997,8 @@ accent border and its name in the accent colour. A **No mascot** line under
 the shelves puts the plain tile back, so the room can say "none" rather than
 leaving the context menu as the only way to.
 
-A room rather than a longer pop-up menu: twelve names in a list is a list you
-read, twelve faces in a grid is a set you recognise, and recognising them is
+A room rather than a longer pop-up menu: thirteen names in a list is a list you
+read, thirteen faces in a grid is a set you recognise, and recognising them is
 the whole transaction. Settings keeps its picker — now grouped the same way —
 for anyone who already knows which one they want. Each cell's tooltip carries
 the blurb and what the character's tell is, which is the one place either is
@@ -960,19 +1006,19 @@ still said.
 
 Characters are drawn **whole** here, not cropped to the head the way the
 drawer's header lockup is. A room is the one surface with space for it, and
-half a character is a poor way to be asked to choose between twelve. Each is
+half a character is a poor way to be asked to choose between thirteen. Each is
 framed to its own columns rather than the perch's, which reserves a mood-mark
 gutter on the right that `idle` never draws into — centring a name under the
 perch put every label a third of a gutter left of the character it belonged
 to.
 
-They are also **held still**. Twelve timelines animating at once is a screen
+They are also **held still**. Thirteen timelines animating at once is a screen
 that will not sit still long enough to be read, and the badge is where a
 character is supposed to move.
 
 ### Your own
 
-A fourth shelf appears, titled with **your GitHub login**, holding any
+A last shelf appears, titled with **your GitHub login**, holding any
 character this build did not ship. There is nothing to register: a fork adds
 a `MascotID` case and a `Mascot`, and anything that does not claim one of the
 three built-in cohorts lands there.
@@ -1003,7 +1049,7 @@ room:
 
 ```
 ┌────────────────────────────────────────────────────┐
-│  👻 🦇 🎃 💀   October 2026                      ×  │
+│  🔥              Fantastic Four                  ×  │
 │                Pick one in the mascot room.         │
 └────────────────────────────────────────────────────┘
 ```

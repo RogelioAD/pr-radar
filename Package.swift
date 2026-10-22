@@ -18,6 +18,16 @@ let package = Package(
             dependencies: ["PRRadarCore"],
             path: "Sources/MakeIcon"
         ),
+        // Renders a character to a PNG without launching anything. The cell
+        // cast has `Scripts/mascot.py --png`, which can preview art because
+        // it is the thing that draws it; the shelf drawn as outlines lives in
+        // Swift and goes through the real layout, so its preview has to as
+        // well.
+        .executableTarget(
+            name: "MascotPreview",
+            dependencies: ["PRRadarCore"],
+            path: "Sources/MascotPreview"
+        ),
         .testTarget(
             name: "PRRadarCoreTests",
             dependencies: ["PRRadarCore"],

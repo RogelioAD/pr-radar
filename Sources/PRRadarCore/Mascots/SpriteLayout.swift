@@ -95,35 +95,44 @@ extension SpriteLayout {
                              blink: Bool,
                              crop: Int? = nil) -> SpriteLayout {
         let unit = unit(for: mascot)
-        let rows = min(crop ?? mascot.sprite.height, mascot.sprite.height)
+        let art = mascot.art(powered: style.powered)
+        let rows = min(crop ?? art.height, art.height)
         let bob = min(2, style.offset(frame: frame) * mascot.bobScale) * unit
+        // Cropping takes columns as well as rows when the character says
+        // where its head is. A full-length figure cropped to rows alone
+        // keeps two shoulders' worth of empty air either side of the head,
+        // and that air is then scaled to fit a 26-point slot.
+        let columns = rows < art.height ? mascot.headBox : nil
         let character = cropped(mascot.frame(eyes: blink ? .shut : style.eyes,
                                              frame: frame,
                                              sweeping: style.sweeps,
-                                             breath: style.breath),
-                                rows: rows)
+                                             breath: style.breath,
+                                             powered: style.powered),
+                                rows: rows, columns: columns)
 
         var layers = [Layer(sprite: character, origin: Point(0, bob),
-                            accent: style.health, ramp: mascot.ramp)]
+                            accent: style.health,
+                            ramp: mascot.ramp(powered: style.powered))]
         // Fire that runs off the bottom of the art, as its own layer rather
         // than clipped to the character's own rows. Only drawn as far as
         // the crop reaches: a cropped perch is already saying it does not
         // want the lower half of him.
-        if rows >= mascot.sprite.height,
+        if rows >= art.height,
            let spill = mascot.flameOverflow(frame: frame, breath: style.breath) {
             layers.append(Layer(sprite: spill,
-                                origin: Point(0, bob + mascot.sprite.height),
-                                accent: style.health, ramp: mascot.ramp))
+                                origin: Point(0, bob + art.height),
+                                accent: style.health,
+                                ramp: mascot.ramp(powered: style.powered)))
         }
         let mark = style.mark(frame: frame)
         if mark != .none {
             layers.append(Layer(sprite: furniture(mark.sprite, unit: unit),
-                                origin: Point(mascot.sprite.width + unit, bob),
+                                origin: Point(character.width + unit, bob),
                                 accent: style.health, ramp: nil))
         }
-        let spillRoom = rows >= mascot.sprite.height ? mascot.overflowRows : 0
+        let spillRoom = rows >= art.height ? mascot.overflowRows : 0
         return SpriteLayout(layers: layers,
-                            width: blockWidth(for: mascot),
+                            width: character.width + unit + Mark.width * unit,
                             height: rows + spillRoom + maxBobUnits * unit)
     }
 
@@ -143,7 +152,16 @@ extension SpriteLayout {
     /// corners on the way up, so an enlarged exclamation mark is still the
     /// same exclamation mark.
     private static func furniture(_ sprite: Sprite, unit: Int) -> Sprite {
-        unit == 3 ? sprite.scaled3x() : sprite
+        switch unit {
+        case 3: return sprite.scaled3x()
+        // Six, for the cast drawn at 96 cells. Three then two rather than a
+        // flat six: `scaled3x` is the pass that turns a stepped diagonal
+        // into a diagonal, and it only has anything to work with on the
+        // original art. Run on its own output it would round the corners a
+        // second time and soften the glyph into a blob.
+        case 6: return sprite.scaled3x().scaled2x()
+        default: return sprite
+        }
     }
 
     /// The whole floating widget: character, mark, and a chip per non-zero
@@ -173,7 +191,8 @@ extension SpriteLayout {
             ? 0
             : chips.reduce(0) { $0 + $1.sprite.width } + (chips.count - 1) * unit
 
-        let centre = mascot.sprite.width / 2
+        let art = mascot.art(powered: style.powered)
+        let centre = art.width / 2
         // A wide chip row can reach further left than the character does; the
         // whole composition shifts right by that much rather than clipping.
         let leftOverhang = max(0, Int((Double(chipsWidth) / 2).rounded(.up)) - centre)
@@ -184,25 +203,28 @@ extension SpriteLayout {
         var layers = [Layer(sprite: mascot.frame(eyes: blink ? .shut : style.eyes,
                                                  frame: frame,
                                                  sweeping: style.sweeps,
-                                                 breath: style.breath),
+                                                 breath: style.breath,
+                                                 powered: style.powered),
                             origin: Point(characterX, bob),
-                            accent: style.health, ramp: mascot.ramp)]
+                            accent: style.health,
+                            ramp: mascot.ramp(powered: style.powered))]
         if let spill = mascot.flameOverflow(frame: frame, breath: style.breath) {
             layers.append(Layer(sprite: spill,
-                                origin: Point(characterX, bob + mascot.sprite.height),
-                                accent: style.health, ramp: mascot.ramp))
+                                origin: Point(characterX, bob + art.height),
+                                accent: style.health,
+                                ramp: mascot.ramp(powered: style.powered)))
         }
         let mark = style.mark(frame: frame)
         if mark != .none {
             layers.append(Layer(sprite: furniture(mark.sprite, unit: unit),
-                                origin: Point(characterX + mascot.sprite.width + unit, bob),
+                                origin: Point(characterX + art.width + unit, bob),
                                 accent: style.health, ramp: nil))
         }
 
         var x = characterX + centre - chipsWidth / 2
         // Below the reserved flame room, not just below the art, or a blast
         // lands on top of the counts.
-        let chipY = mascot.sprite.height + mascot.overflowRows
+        let chipY = art.height + mascot.overflowRows
                   + (maxBobUnits + chipGapUnits) * unit
         for chip in chips {
             layers.append(Layer(sprite: chip.sprite, origin: Point(x, chipY),
@@ -216,13 +238,14 @@ extension SpriteLayout {
             height: chipY + (chips.isEmpty ? 0 : Counter.height * unit))
     }
 
-    private static func cropped(_ sprite: Sprite, rows: Int) -> Sprite {
-        guard rows < sprite.height else { return sprite }
+    private static func cropped(_ sprite: Sprite, rows: Int,
+                                columns: Mascot.HeadBox? = nil) -> Sprite {
+        let xs = columns.map { $0.x..<min(sprite.width, $0.x + $0.width) }
+               ?? 0..<sprite.width
+        guard rows < sprite.height || xs.count < sprite.width else { return sprite }
         var trimmed: [String] = []
-        for y in 0..<rows {
-            trimmed.append(String((0..<sprite.width).map { x in
-                sprite[x, y]?.rawValue ?? "."
-            }))
+        for y in 0..<min(rows, sprite.height) {
+            trimmed.append(String(xs.map { x in sprite[x, y]?.rawValue ?? "." }))
         }
         return Sprite(trimmed)
     }

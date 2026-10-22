@@ -5,8 +5,9 @@
     python3 Scripts/mascot.py --demo --png out.png
 
 This is the pipeline the header comment in `Mascot.swift` refers to. It made
-the October four and it converted the OG cast; it is committed because the
-rules it encodes were expensive to rediscover and are invisible in the output.
+the October four and the Fantastic Four and it converted the OG cast; it is
+committed because the rules it encodes were expensive to rediscover and are
+invisible in the output.
 
 WHAT IT DOES, in order. The order is the whole design:
 
@@ -54,13 +55,47 @@ AUTHORING ALPHABET — what you put in the half:
 
 The output alphabet is `Slot` in `Sprite.swift`. Nothing here needs to know
 about colour: a character's `ChassisRamp` decides what the rungs look like.
+
+THREE THINGS THE PASSES CANNOT DO, each with a helper below, all three
+learned on the Fantastic Four:
+
+  * `tone` — hand-place a rung, but never on the boundary. The shading pass
+    is right for a hull and wrong for a face: with no edge close enough to
+    matter it drops a wedge of shadow down the middle of a large flat
+    plane, and a wedge down the middle of a face is a beard. But a tone
+    painted right up to the edge is a cell `outline` will not ink — it
+    converts `#` and nothing else — so the silhouette comes back with a gap
+    in it. `tone` paints the inside and leaves the rim to the pass.
+
+  * `seam` — a one-cell crack through the inside of a character, guarded
+    the same way. For the one whose hide is slabs rather than skin, the
+    light between them is the only part of him that can carry a mood.
+
+  * `stamp` — paint a glyph over the *finished* rows. Everything else here
+    comes back symmetric to the pixel, which is the whole point; a team
+    badge with a `4` on it is the one thing that must not, because a
+    mirrored 4 is a butterfly. It only touches cells that are already lit,
+    so the silhouette cannot change and the symmetry test still holds.
 """
 
 import math
 import sys
 
+# The cast's two formats. Forty-eight square is the bust everyone was drawn
+# at; 96 by 144 is the full-length shelf, at four times the cell density and
+# the same size on screen — at the mascot room's 54 points a 96-cell
+# character puts one cell on one device pixel, which is as fine as the
+# display can show and the point at which the staircase stops being visible.
 W = H = 48
 HALF = 24
+
+
+def format(width, height):
+    """Switch the module to a different grid. Everything here works in
+    `W`/`H`/`HALF`, so a drawing says once what size it is and the passes
+    follow."""
+    global W, H, HALF
+    W, H, HALF = width, height, width // 2
 RAMP = ['D', 'S', 'B', 'H', 'W']            # deep -> light; 'X' is by hand
 
 
@@ -83,6 +118,88 @@ def put(half, spans, ch):
         for a, b in runs:
             for x in range(max(0, a), min(wide, b) + 1):
                 half[y][x] = ch
+
+
+def tone(half, spans, ch):
+    """Hand-place a rung, but never on the silhouette's boundary.
+
+    See the header: a tone on the edge is a cell `outline` will not ink, so
+    the drawing comes back with a gap in its edge wherever somebody painted
+    hair or a cheek right up to it.
+    """
+    wide = len(half[0]) - 1
+    lit = [[c != '.' for c in row] for row in half]
+
+    def at(x, y):
+        return 0 <= x <= wide and 0 <= y < len(half) and lit[y][x]
+
+    for y, runs in spans.items():
+        for a, b in runs:
+            for x in range(max(0, a), min(wide, b) + 1):
+                if half[y][x] == '.':
+                    continue
+                # The centre column's mirror is its own right-hand
+                # neighbour, so it is never on the boundary however it
+                # looks from this side of the drawing.
+                if at(x - 1, y) and (at(x + 1, y) or x == wide) \
+                        and at(x, y - 1) and at(x, y + 1):
+                    half[y][x] = ch
+
+
+def seam(half, points, ch='a'):
+    """A crack: a one-cell path between points, through the inside only.
+
+    Guarded against the boundary for the same reason `tone` is. Keep them
+    the length of a slab — short ticks dotted about a face come out as
+    stubble, and two of them crossing come out as a plus sign.
+    """
+    wide = len(half[0]) - 1
+    lit = [[c != '.' for c in row] for row in half]
+
+    def at(x, y):
+        return 0 <= x <= wide and 0 <= y < len(half) and lit[y][x]
+
+    for (x0, y0), (x1, y1) in zip(points, points[1:]):
+        steps = max(abs(x1 - x0), abs(y1 - y0), 1) * 2
+        for i in range(steps + 1):
+            t = i / steps
+            x, y = round(x0 + (x1 - x0) * t), round(y0 + (y1 - y0) * t)
+            if at(x - 1, y) and (at(x + 1, y) or x == wide) \
+                    and at(x, y - 1) and at(x, y + 1):
+                half[y][x] = ch
+
+
+def stamp(rows, glyph, x0, y0, ch):
+    """Paint a glyph over the finished rows — *after* the mirror.
+
+    The one thing in this file that deliberately breaks symmetry, and the
+    only safe way to put a `4` on something. It touches cells that are
+    already lit and no others, so the silhouette is untouched and the
+    mirror test still passes; only the colours come back asymmetric, which
+    they are allowed to be.
+    """
+    out = [list(r) for r in rows]
+    for j, line in enumerate(glyph):
+        for i, c in enumerate(line):
+            if c == '.':
+                continue
+            x, y = x0 + i, y0 + j
+            if 0 <= x < W and 0 <= y < H and out[y][x] != '.':
+                out[y][x] = ch
+    return [''.join(r) for r in out]
+
+
+# The team badge, for the shelf that wears one.
+BADGE_FOUR = [
+    '...##.',
+    '..###.',
+    '.#.##.',
+    '#..##.',
+    '######',
+    '...##.',
+    '...##.',
+    '...##.',
+]
 
 
 def cols(spec):
@@ -146,7 +263,7 @@ def _reach(lit, x, y, dx, dy, cap):
     return n
 
 
-def shade(full, cap=10, throw=3.2):
+def shade(full, cap=10, throw=3.2, dither=True):
     """Light from the upper left, off a normal read out of the distance field."""
     lit = [[c != '.' for c in row] for row in full]
     out = [row[:] for row in full]
@@ -161,7 +278,12 @@ def shade(full, cap=10, throw=3.2):
             level = max(0.0, min(4.0, 3 + (0.62 * nx + 0.55 * ny) * edge * throw))
             base = int(level)
             frac = level - base
-            up = frac > 0.65 or (frac > 0.35 and (x + y) % 2 == 0)
+            # Dithering is confined to the band where two rungs genuinely
+            # meet, and at 96 cells it is turned off entirely: the checker
+            # is a fixed one cell wide, so on art at four times the density
+            # it covers a quarter of the area and reads as fabric texture
+            # over the whole figure rather than as a soft edge.
+            up = frac > 0.65 or (dither and frac > 0.35 and (x + y) % 2 == 0)
             out[y][x] = RAMP[min(4, base + (1 if up else 0))]
     return out
 
@@ -207,10 +329,11 @@ def traced(name, half, down=True):
     return rows
 
 
-def build(name, half, specs=()):
-    """Half -> finished 48 rows."""
+def build(name, half, specs=(), dither=True):
+    """Half -> finished rows, mirrored, outlined, shaded."""
     print(f"-- {name}", file=sys.stderr)
-    rows = [''.join(r) for r in specular(shade(outline(mirror(half))), specs)]
+    rows = [''.join(r) for r in
+            specular(shade(outline(mirror(half)), dither=dither), specs)]
     assert all(len(r) == W for r in rows), "a row came out the wrong width"
     assert len(rows) == H
     return rows
@@ -240,11 +363,20 @@ def png(path, rows, ramp, scale=7, pad=3, bg=(0.11, 0.12, 0.14),
              'M': blend(tint, .42), 'f': (.329, .710, .420),
              'P': (.878, .561, .659), 'V': (.020, .035, .075),
              'c': (.949, .922, .843),
-             'U': (.071, .125, .235), 'w': (.969, .973, .980)}
+             'U': (.071, .125, .235), 'w': (.969, .973, .980),
+             # The fixed trophy tones, which the traced shelf borrows for
+             # hair and skin: a ramp is one hue, and a blond head on a blue
+             # suit needs warm tones that are nobody's chassis.
+             'o': (.937, .757, .259), 'n': (.706, .514, .114),
+             'z': (.843, .561, .341), 'x': (.604, .373, .204),
+             'e': (.804, .831, .878), 'm': (.561, .592, .651)}
     order = 'DSBHWX'
 
-    size = 48 + pad * 2
-    w = h = size * scale
+    # Sized off the art rather than off a constant. It was 48 squared for as
+    # long as that was the only format there was, and a literal here is a
+    # literal that has to be found and changed in step with every drawing.
+    w = (len(rows[0]) + pad * 2) * scale
+    h = (len(rows) + pad * 2) * scale
     canvas = [[tuple(int(c * 255) for c in bg)] * w for _ in range(h)]
     for y, row in enumerate(rows):
         for x, ch in enumerate(row):

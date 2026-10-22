@@ -79,6 +79,9 @@ public enum MascotCohort: String, CaseIterable, Sendable {
     /// The Halloween four. Dated because there may be another cohort later,
     /// not because they go away — they do not.
     case october2026
+    /// The team, traced from supplied sprite art rather than drawn here, and
+    /// the only shelf with two forms per character — see `Mascot.powered`.
+    case fantasticFour
     /// Anything this build did not ship. A fork's own.
     case custom
 
@@ -89,12 +92,14 @@ public enum MascotCohort: String, CaseIterable, Sendable {
         case .og:          return "OG Mascots"
         case .space:       return "Out of this World"
         case .october2026: return "October 2026"
+        case .fantasticFour: return "Fantastic Four"
         case .custom:      return nil
         }
     }
 
     /// Ordered as the room stacks them: oldest first, yours last.
-    public static let ordered: [MascotCohort] = [.og, .space, .october2026, .custom]
+    public static let ordered: [MascotCohort] = [.og, .space, .october2026,
+                                                .fantasticFour, .custom]
 }
 
 public enum MascotID: String, CaseIterable, Sendable {
@@ -104,6 +109,7 @@ public enum MascotID: String, CaseIterable, Sendable {
     case pip, byte, widget, nimbus
     case blip, scoot, wobble, bloop
     case boo, flit, gourd, rattle
+    case humanTorch
 
     /// The personal shelf. Last in the lap, which is where `MascotCohort`
     /// says yours goes.
@@ -140,6 +146,80 @@ public struct Mascot: Identifiable, Sendable, Equatable {
     /// One line for the picker.
     public let blurb: String
     public let sprite: Sprite
+    /// The same character, powered up, for the shelf that has two forms.
+    ///
+    /// Not a different character and not a different pose: the same figure,
+    /// the same size, the same eyes in the same place, with the costume and
+    /// the powers on. `SpriteStyle.powered` decides which one is showing, so
+    /// the transformation reads as a state the app is in rather than as an
+    /// animation — an empty queue is somebody standing there in their own
+    /// clothes, and a queue is somebody who has powered up to deal with it.
+    ///
+    /// nil for everyone else, who have one form and always did.
+    public let powered: Sprite?
+    /// Where the powered form's eyes are and how big they are, when they
+    /// are not the civilian form's.
+    ///
+    /// They very much are not. The two drawings are aligned on the top of
+    /// the head, which is the right landmark for keeping a face from
+    /// jumping — but the powered pose is crouched and his chin is tucked,
+    /// so his eyes sit seven rows higher up the head than they do when he
+    /// is standing in his suit. One pair of boxes put the drawn eyes on his
+    /// forehead in one form or his cheekbones in the other, and the result
+    /// read as two dots stuck on a face rather than as the character's own
+    /// eyes.
+    ///
+    /// Both together rather than two optionals, because they are one fact
+    /// about one drawing: his powered head is two thirds the width of the
+    /// civilian one — he is drawn bulkier and smaller-headed when he is
+    /// lit — so an eye that is right on one face is a diving mask on the
+    /// other.
+    ///
+    /// nil means "the same face", which is true of anyone whose two forms
+    /// share a pose and of everyone who has only one.
+    public let poweredFace: Face?
+
+    /// An eye pair: where they are and how big.
+    public struct Face: Sendable, Equatable {
+        public let eyes: [Point]
+        public let size: Int
+        public init(eyes: [Point], size: Int) {
+            self.eyes = eyes
+            self.size = size
+        }
+    }
+    /// The powered form's own six rungs.
+    ///
+    /// Separate because the two forms are not the same colour and cannot be:
+    /// a blue suit and a body made of fire are the two ends of the wheel, and
+    /// one ramp that tried to be both would be grey. nil means the powered
+    /// drawing uses the civilian ramp, which is right for a character whose
+    /// transformation is about shape rather than colour.
+    public let poweredRamp: ChassisRamp?
+    /// The box to crop to for a small perch: the head, and nothing else.
+    ///
+    /// `headRows` was enough while every character was a bust — the head was
+    /// the top of the drawing and the full width of it, so a row count said
+    /// everything. A full-length figure has its head in the middle few
+    /// columns, and cropping that to rows alone leaves a head with two
+    /// shoulders' worth of empty air either side, scaled to fit a 26-point
+    /// slot. The character ends up a sixth of the height it should be.
+    ///
+    /// nil means the old behaviour, which is what every bust wants and what
+    /// a fork that has never heard of this gets.
+    public let headBox: HeadBox?
+
+    /// The columns a head crop keeps. A struct rather than a tuple because
+    /// `Mascot` is `Equatable` and a stored tuple is not something the
+    /// compiler will synthesise that for.
+    public struct HeadBox: Sendable, Equatable {
+        public let x: Int
+        public let width: Int
+        public init(x: Int, width: Int) {
+            self.x = x
+            self.width = width
+        }
+    }
     /// Top-left of each eye box.
     public let eyes: [Point]
     /// Eye boxes are square and this is their side. The alien's is half again
@@ -186,7 +266,14 @@ public struct Mascot: Identifiable, Sendable, Equatable {
                 sprite: Sprite, eyes: [Point], eyeSize: Int, eyeInk: Slot,
                 sweep: SweepKind, ramp: ChassisRamp, headRows: Int,
                 cohort: MascotCohort = .custom, bobScale: Int = 1,
-                breathes: Bool = false) {
+                breathes: Bool = false, powered: Sprite? = nil,
+                poweredFace: Face? = nil,
+                poweredRamp: ChassisRamp? = nil,
+                headBox: HeadBox? = nil) {
+        self.powered = powered
+        self.poweredFace = poweredFace
+        self.poweredRamp = poweredRamp
+        self.headBox = headBox
         self.id = id
         self.name = name
         self.tellName = tellName
@@ -232,6 +319,45 @@ public struct Mascot: Identifiable, Sendable, Equatable {
         }.max() ?? 0
         return max(0, deepest + 1 - sprite.height)
     }
+
+    /// Whichever form is showing. The one place that choice is made, so a
+    /// sweep, a tell and a silhouette can never end up read off different
+    /// forms of the same character.
+    public func art(powered wantsPowered: Bool) -> Sprite {
+        wantsPowered ? (powered ?? sprite) : sprite
+    }
+
+    /// The rungs for whichever form is showing.
+    public func ramp(powered wantsPowered: Bool) -> ChassisRamp {
+        wantsPowered ? (poweredRamp ?? ramp) : ramp
+    }
+
+    /// The face for whichever form is showing.
+    public func face(powered wantsPowered: Bool) -> Face {
+        wantsPowered ? (poweredFace ?? Face(eyes: eyes, size: eyeSize))
+                     : Face(eyes: eyes, size: eyeSize)
+    }
+
+    /// The eye boxes for whichever form is showing.
+    public func eyeBoxes(powered wantsPowered: Bool) -> [Point] {
+        face(powered: wantsPowered).eyes
+    }
+
+    /// Whether this one transforms at all.
+    public var hasTwoForms: Bool { powered != nil }
+
+    /// Whether the drawing was authored as half and mirrored.
+    ///
+    /// True of everything drawn for this app, which is why the test suite
+    /// can insist a silhouette is symmetric to the pixel and a pair of eyes
+    /// sits square about the centre line: those are not aesthetic rules,
+    /// they are how you catch the mirror pass going wrong.
+    ///
+    /// False for art traced off a supplied drawing. A figure standing in a
+    /// three-quarter stance with one arm raised is asymmetric on purpose,
+    /// and folding it in half to satisfy a test would destroy the pose the
+    /// art was supplied for.
+    public var mirrored: Bool { cohort != .fantasticFour }
 
     /// Always drawn in the live tint, whatever the eyes are doing.
     ///
@@ -867,6 +993,363 @@ extension Mascot {
         headRows: 26, cohort: .october2026)
 }
 
+
+// MARK: - The Fantastic Four
+//
+// Traced, not drawn. The art was supplied as a sprite sheet and is resampled
+// onto this cast's grid by `Scripts/trace.py` — the same bargain the dragon
+// already makes, and for the same reason: the reference is already lit, so
+// running it through the outline and shading passes would put a black rim
+// round art that has its own edges and relight a figure somebody else
+// already lit.
+//
+// Two things about this shelf are new.
+//
+// It is drawn at **96 by 144** rather than 48 square. At the mascot room's
+// 54 points that puts one cell on one device pixel, which is as fine as the
+// display can show; the furniture around it scales to match because
+// `SpriteLayout.unit` was always a sixteenth of the character's width
+// rather than a constant.
+//
+// And each character has **two forms**. `SpriteStyle.powered` picks between
+// them off the tint, so the transformation is a readout rather than an
+// animation: green is a queue you cleared and grey is one you parked, and in
+// both he is standing there in his own clothes. Blue, amber and red all mean
+// something is live, and that is when he lights up.
+
+extension Mascot {
+    /// Johnny Storm, in the suit and flamed on.
+    ///
+    /// The tell is the fire, in both forms: the outer flames on the powered
+    /// one and the flame in his raised fist on the civilian one. Those are
+    /// the reds in the supplied art, and the trace maps reds to the accent
+    /// so they take the live tint — which makes the colour of the fire the
+    /// state of the queue.
+    ///
+    /// The badge on his chest is stamped on rather than traced. Both forms
+    /// already carry a tell, but the fist is a long way from his face and
+    /// the drawer's header crops to the head; a character whose tell falls
+    /// outside its own crop cannot show a mood on the one surface that is
+    /// visible all day.
+    public static let humanTorch = Mascot(
+        id: .humanTorch, name: "Human Torch", tellName: "the fire and the badge",
+        blurb: "Flames on when there is something in the queue, and off when there is not.",
+        sprite: Sprite([
+            "................................................................................................",
+            "................................................................................................",
+            "................................................................................................",
+            "................................................................................................",
+            "..........Wno...................................................................................",
+            "..........Wnn...................................................................................",
+            "...........nn...................................................................................",
+            "................................................................................................",
+            "..............................................nnnnnnnnn.........................................",
+            ".............................................nnnnnnnnnn.........................................",
+            "...........................................nnnoooooooonnn.......................................",
+            "........nno..............................ooooooooooooooonn......................................",
+            ".......Wnnocc.........................nnoooocccooooccccoonn.....................................",
+            ".......WWnocc........................nnnoooccoooooccccccoon.....................................",
+            ".....WWnnnocccc......................oonooocccccccccccccoonn....................................",
+            ".....WWnnoooooo......................nnnoooocccccooooooooonn....................................",
+            ".....xxanooooW.......................nnooooooooooooooooooonn....................................",
+            ".....NNaxnnnn........................nnnnnooononnnooonnnnnnn....................................",
+            "....aaaaaWaaa........................nnnnnonxxnnnnnnnnnnnnnn....................................",
+            "...kNaaaaaaaa.........................nnnnnnxxnnnnnnnWWWxnnn....................................",
+            "..SSkNDNNaaaN...........................nnnWxxzxWWWWzzzzznnn....................................",
+            ".SSSSkkNNaaa.............................WWWzxxWWWWWxzzzznnn....................................",
+            "SSBDDDDkaNa..............................xxxxxzzzWWczzzxxxWn....................................",
+            "DSBSDDSkkN................................xzxxzooccczzxxxHHB....................................",
+            "DSBBSSSDD..................................zxxzzzcozzxxkDHHBB...................................",
+            "SSSBBSSDD..................................xxxWWWxzzxxkkDBHHB...................................",
+            "SDDBBSDDD..................................xxxzxxzzxxkSSDDBHHSS.................................",
+            "SSDSSSDDD....................................xxxxxxxkSBBSDSBBSSSSSHWWWWW........................",
+            "BSDDDDDDD....................................xxkkkkkDSHWBSDDSHSSSSHWWWWWW.......................",
+            "HBDSSSSDS....................................HSSkkkkDBHWHBSSHSSSSBHWWWWWWW......................",
+            "HBDSBBSSS.............................BBBHHHBBDDDDDDSHHHHHSBBSSSSHWWWWWWWWW.....................",
+            "HHSSDDDDD............................BBBBHHHBBSSDDDDDBBSSBSSSSSBHWWWWWWWWWW.....................",
+            "WWBDDDSDDDDD........................HHWWHBBBHWWaaaDSBWWWWBHHHHHWWWWWWWWWWWW.....................",
+            "HWBDDDDDDDDDDDDDDDDDD............HHHWWWWHBBWWWaaaaSBWWWWWHHHHHHWWWWWWWWWWWWW....................",
+            "HHBDDDDDDSSSDDDDDDDDD...........WHWHWWWHWWBWWaaWaaHWWWWWWWHHHWHHWHHWWWWWWWWWW...................",
+            "SSBDDSSSDSSSBBHHHHBBDHWWWWW..HHWWWWWWBBWWWWWWaWWaaWWWWWWWWWWWHBSSSBHHHWWWWWWWW..................",
+            ".SBBHWHBBSDDDSHHHWWHSWWWWWWHHWWWWWWWHBHWWWWWWaaaaaaWWWWWWWWWWHBSDDSSHHWWWWWHWWW.................",
+            "..SBWWWWHBSSDDSBBWHBDWWWWWWHWWWWWWWWBBHHHWWHWWWWaaWWWWWWWWWWWHBSDDDSBBHWWWHHWWWW................",
+            "...BHWWWWHHSDDDDSBBSDHWWWWWWWWWWWWWHBBBBHWWWWWWWaaWWWWWWWWWHBBBSDDDDSSSHHWHWWWWWW...............",
+            "....SSBWWWWHBSSSDDDDDWWWHHWWWWWWWWWHSSBBBBHWWWWBBBHBBBBBBBBBBHBSDDDDDDDSBBBWWWWWWW..............",
+            ".....SBSBHWWWHHBSDDDDWWWWHHHWWWWWWBSDSSSSSHWWWWHHHBBBBBBBBBBSDSSDDDDDDDSBHHWWWWWWW..............",
+            ".......SSHHWWWHHBSDDBWWWWHHBBBBBBBSSDDDSSBWWWWWWWWBBBBBBBBSBSSSBSSDDDDSBHWWWWWWWWWW.............",
+            "...........BBWWWHSDDWWWWWWHBSSSSSSBSDDDDBWWWWWWWWWWBBSSSDDSHHHHWHBBBDDBWWWWWWWWWWWWW............",
+            "............BSSSSSSBBHHHHHHBSBHBHHHHBSDBWWWWHHHWWWWWWHHHHHHWWHWWHHHBDDSWWWWWWWWWWWWW............",
+            ".............SSSSDSSBBBBBSSSBBHHHBBBSDDBHWWWWWWWWWWWWWWWWWWWWHWWWWWHSDDHWWWWWWWWWWWWW...........",
+            "................SDSSDDDSDDDDBSBBSSDSDDDBHHWWWWWWWWWWWWWWWWWWWHWWWWWWBSDSHWWWWWWWWWWWW...........",
+            "..................DDDDDDDDDDDDDDDDDDD..SBHWWWHHWWWHHHWWWWWWWHHWWWWWWBBDDSBWWWWWWWWWWW...........",
+            ".......................................SSBHHHBHHHHHBSSHWWWWWWWWWWWWWBB.DDSWWWWBWWWWWWW..........",
+            ".......................................SSBBBBBHHHHHBSSHWWWHHWWWWWWWWBB.DDSWWWWHWWWWWWW..........",
+            "........................................SSBBBBBBBBBBBBBHHHHWWWWWWWWHBB..DDSSSBWWWWWWWW..........",
+            "........................................SSSBBBSBBBBBBBSDSSHHHHWWWWWH......DSHWWWWWWWWW..........",
+            "........................................DDSSSSDBBSBBBSSDSBHHHHWWWWHB......DBWWWWWWWWWW..........",
+            "........................................DDSSSSDSBBBSSSSSBHHHWWWWHHB........BWWWWWWWWWW..........",
+            ".......................................SSBHWWWWWWWWWBSSBHWWWHWWH..........SWWWWWWWHWWWWW........",
+            ".......................................SBHWWWWWWWWWWWBBHWWWHHHHB..........SBBHHWWWWWWWHH........",
+            ".......................................DBHWWWWWWWWWWWBHHWWWHHHB..........DDSSSSHHWWWWHBB........",
+            ".......................................DSHWWWHHWWWWWHBHHHHWHB...........DDDBBBSSWWWBBBHH........",
+            ".......................................DDDSSSSSSSSDDDDSSBSBBS...........DSHWWWWSSBWBBBWW........",
+            ".......................................DSBHHHHBBBSDDDDSBHBHHS..........DSBWWWWHSDDBSSHHH........",
+            ".......................................DSHWWWWHBBBSDDDSBHHWWB..........DSHWWWWBSDDSSBHB.........",
+            ".......................................DSBHWWWBBBBDDDDSSHHHWB..........DSHWHHBSDDDSBHH..........",
+            ".......................................DDDSSSSSSSSSSSSSSBBBBB.........DSBHBSDDDDSBBBBB..........",
+            ".......................................DDDSBWWWWWWWWBBBHWWWWH.........DSSSDDDDDSHWBBBB..........",
+            ".......................................DDSBHWWWWWWWWWHHWWWWWHSSSDDDDDDDSSDDDDDSHHWBSS...........",
+            ".......................................DDDBBWWWWWWWWHWWWWWWHDDSSDDDDDDSSDDSBBBHHSS..............",
+            "......................................DDDDBBHWWWWWWWHWHBBBSDDDDDSSSSSSDDSBHWWHDDD...............",
+            ".....................................DDDDDSBHWWWWWWHHHHBBBSSSSSSHHHBSSDSHWWHHSDD................",
+            ".....................................DDDSSSSBHWWWWWHSSBBHHHBSSBHWWHBSSDWWWWSDD..................",
+            "....................................DDSSSSSSSHWWWWHBBSDDSSSDDSSBHSDDSSHWWWB.....................",
+            "....................................DDSSSSBSSBWWWWHBSSDDSBSSSSSSHSDDSBWWWWB.....................",
+            "....................................SSBBBBBDDSHWWWHSSBSDBHBSBSSSSDSBWWWWHB......................",
+            "....................................SSBBSSBBDDBWWHHBSBBBBBBSDSSSDSHWWWH.........................",
+            "...................................DSSBBBSSBDDSHHHBSSBHHSBBSSSDDDHHBHHH.........................",
+            "...................................DSBHHBSSBSDDSBBSDDHHHDBSSSDDDSWHSBB..........................",
+            "...................................SSHHHBSSBBSDDDDDDDBHWBBSDSSSSHHHHWW..........................",
+            "...................................SBHWHBBBHHHHSSDDDDBHWWBBSBBBHHWWWWWW.........................",
+            "..................................DSHHWHBBBHHHWHBSSDDBHWWHBSBBBHHWWWWWW.........................",
+            ".................................DDBHHWBBBBHHHWHWHBSDBHWWWHBSBBHHWWWWWW.........................",
+            ".................................DDBHHHBBBBHHHHWWHBDDDHWWWWWHWWHWWWWWWWWW.......................",
+            ".................................SSHHHBBBBBHWHHWWWHBDDBHWWWWHWWWWWWWWWWWW.......................",
+            ".................................DBHHHSBBBBHHWHWWWHBDDSBWWWWWHWWWWWWWWWWW.......................",
+            "................................DDBHHBSBBBSBHWHWWWHBDDDBWHHWWHHHWWWWWWWWWW......................",
+            "................................DDBBBBSBHBSBHWHWWWHBDDDBHHHWWWHHWWWWWWWWWW......................",
+            "................................DDBBBBSHHHSBHWHWWWHBD.DSHHHWWWWHWWWWWWWWWWW.....................",
+            "................................DDBBBBBHHHBHHHHWWWBSD.DDBHHWWWWWWWWWWWWWWWW.....................",
+            "................................DDHBSSBWWHWHHHHWWWSD..DDSBHWWWWWHWWWWWWWWWW.....................",
+            "................................SSSBSSBWWHHHHHHWWWSD...DDSHHWWWWWHWWWWWWWWW.....................",
+            "...............................DDSSSSBHWWHBHHHHWWHSD....DDSHWWWWWWWWWWWWWWW.....................",
+            "...............................DSSSSSBHWWHBWWHHWWBDD.....DSHWWWWWWHWWWWWWWW.....................",
+            "...............................DSSSSBHWWWHBHHHWWHDD......DDSHWWWWWWHWWWWWWW.....................",
+            "...............................DSSSSBHWWWHHBBHWHHDD.......DDHWWWWWWHWWWWWWW.....................",
+            "...............................DSSBSBHWWWWHBHHHBBDD.......DDBWWWWWWWHWWWWWW.....................",
+            "...............................DDSBSBHWWWWHWHBBDD.........DDSWWWWWWWHWWWWWW.....................",
+            "...............................DDDSSBBHWWWHHHBBDD..........DDHWWWWWWHHWWWWH.....................",
+            "................................DDSSSBBHHHHWHBSS............DBHWWWWWHHWWWWB.....................",
+            "................................DDDDSSBHHHHHHBDD............DSBHWWWHBHWWWWB.....................",
+            ".................................DDSDDDSBHHBSD...............DDBHHHHBHWWWWH.....................",
+            ".................................DDDSSDBHWHBSD................DDBHBBBHWWWWW.....................",
+            "..................................DDBBSHHHHBSD.................DSSSSBHWWWWWH....................",
+            "...................................DSBHHBBHBSD..................DDDDBBWWWWWHH...................",
+            "...................................DSBHHBSSDD....................DDDSSHWWWWWW...................",
+            "...................................DSSBBSDBSS.....................DDDDHWWWWWWW..................",
+            "...................................DDSSDSSBBB.....................DDDDSHHWWWWW..................",
+            "...................................DDDDSSSSHH.......................DDDBHWHWWWB.................",
+            "....................................DDSBBBDBBB........................DDSHWWWWWHB...............",
+            "...................................DDSBBBBBHHBD.......................DDSBWWWWWWW...............",
+            "...................................DSBBHHHBHHHDD......................DDSBWWWWWWW...............",
+            ".................................DDDSBBHHHBBHHBB......................DDSHWWWWWWWW..............",
+            ".................................DDDSBBWWWHHHWBB......................DDSBHWWWWWWWWBS...........",
+            ".................................DDDSBBWWWWHHWBB......................DDSBHWWWWWWWWBS...........",
+            ".................................DDDSBHWWWWHHWBB......................DDDSHWWWWWWWWHS...........",
+            ".................................DDDSSBHWWHHHHSS......................DDSSHHWWWWWWWHBS..........",
+            ".................................DDSSSSBHBHHHHSS......................DDSBBHWWWWWWHWHS..........",
+            ".................................DSBBBBSSSBBHHBB......................DDSBBHWWWWWBHWHS..........",
+            ".................................DSHHBSDSBWWWWBB......................DSSSSSHWWHHHHWHS..........",
+            "..................................SBBBBDSBWWWWSS......................DSSBSSSSBBHHHWHS..........",
+            "...................................SBHBDSBWWWHD.......................DDBHBSDDDBBHHWHS..........",
+            "...................................SBHBDSBWWWB.........................SHWWHSDSSBHWWHS..........",
+            "...................................SBHBDSBWWW..........................SSBWHSDDBBHWWHS..........",
+            "...................................DSBSDSBWHH..........................SSSWWBSDSBHWWHS..........",
+            "....................................SSSDSBWBB...........................DSHWHSDSBHWHB...........",
+            "....................................SSSDSBBB..............................SWHBDSBHWBS...........",
+            "....................................SSSDSHBB..............................SBHHSSSHWBS...........",
+            "....................................SSSDBHBB...............................SBHSDSHWBS...........",
+            "....................................SSDSHWHB...............................SBBSDSHWBS...........",
+            "....................................SSDSBHWBB...............................SSSDSHWBS...........",
+            "...................................SSSSBBBWHB...............................SSSDSHWBS...........",
+            "..................................BSBBSBBBWHB...............................SSSDSHWBS...........",
+            ".................................BBHBBDSSBWHB...............................HBSDSHWBB...........",
+            ".................................BBHBBSDSBWHH...............................BSSDSBWHBS..........",
+            "............................DDSBSBHHBBSDSBWWH..............................DSSSSDSWWHS..........",
+            "............................DDSBBBHBBBSDSBWWHS.............................DSSBSDDHWWH..........",
+            "........................DSSBBHHHBBBSBBBSDSHWWH.............................DSBHSDDBHWWB.........",
+            ".......................SSBBHHHHBSSSSBBSDDDBWWWS............................DSBWSDDSHWWHH........",
+            ".....................DSBBWWHBBBSSDSSBBSDDDBWWWSS...........................DSBWBDDDHWWHHH.......",
+            ".....................DSBWWHBBSSDSBHSSSDDDSHWWWDD...........................DSBWBSDDSBWWWHH......",
+            ".....................DSSSBSSSSSDSSBSSSDDDSHHHHD............................DSSHHBSDDSHWWWB......",
+            ".......................SSSSSSSDDSSS....DSSBHBB..............................SSHHBSDDSBHWWBB.....",
+            "............................................................................DSBHHSDDDBHWWWW.....",
+            "............................................................................DSBHHBSDDDHHWWBS....",
+            "............................................................................DSBWWHSSSDBHHHHS....",
+            ".............................................................................SSHWWBBSDSBBBB.....",
+            "..............................................................................SBHWWHBDDDDDD.....",
+            "...............................................................................SSBBBSDDkkk......",
+        ]),
+        // One pair of boxes has to land on his face in *both* forms, which
+        // is what decided the alignment: see `Scripts/trace.py`.
+        // Measured off the supplied art rather than chosen: his eyes are at
+        // source rows 61-62, columns 494-498 and 508-512, which land here.
+        // Placed anywhere else the drawn eye sits beside the painted one and
+        // he comes out with four.
+        eyes: [Point(42, 20), Point(49, 20)], eyeSize: 3, eyeInk: .outline,
+        sweep: .flicker,
+        // The suit: six rungs of its own blue, sampled out of the supplied
+        // art rather than invented, so he keeps the colour he was drawn in.
+        ramp: ChassisRamp(deep: RGB(0.106, 0.176, 0.455), shade: RGB(0.125, 0.259, 0.545), mid: RGB(0.133, 0.306, 0.671),
+                          base: RGB(0.133, 0.357, 0.753), light: RGB(0.161, 0.404, 0.808), spec: RGB(0.173, 0.514, 0.894)),
+        headRows: 46, cohort: .fantasticFour, bobScale: 1,
+        powered: Sprite([
+            "MMMMMM..........................................................................................",
+            "..M.............................................................................................",
+            "................................................................................................",
+            "....MM..........................................................................................",
+            ".....M..........................................................................................",
+            ".............................................MMMMMMM............................................",
+            ".............................................NNNNNNNN...........................................",
+            "..........................................MMNaaaaaaaNN..........................................",
+            ".........................................NNaSBBBBBBBDNN.........................................",
+            ".........................................NNDSHHHHHHHSaN.........................................",
+            "........................................MNDBHWWWWWWWHSN.........................................",
+            "...............................BBB......NNDBHHHWWWWHHSN.........................................",
+            "............................WWWWWH......NNDDSSBBWWWBBDN.........................................",
+            "...........................HHWWWWW.....MNNaDDDDSHHBSSDN.........................................",
+            "...MM......................HWWWWWW....MMNNaDNNNaDDSDDNN.........................................",
+            "..MM...............MMM.....HHHHHHH....MMDDDSaDaNNaDaDNM.........................................",
+            "..MM...............MM..WW..HHHH..B.....MNDSBDSDNDDSNSNM.........................................",
+            "..M................M...WWW....N.........NaDBDBBSBBSNDNM.........................................",
+            "........................WW....NN........aNaSBBHHWHDNNNM.........................................",
+            "...aDD..................WW....BNN.....NNDSDNSHHHSDNaNN..........................................",
+            "..MNN.....NDBDSBHH....WWWSNNNNDNMM.NNNaDBBBSaSSaNaDNN...........................................",
+            "..NNNDNNNDNaSSHHBS...WWWBDaDDDDDDNNaDDDBBHHHDDaNNNNNNMM.........................................",
+            "..NNNDNNNDNNDSWHSN..BHHBDDSBBBBBBBaDSBBBBHWWBDaNNNNNNMMNNNMM....................................",
+            "..NMNNNNNSDDDSWWSM.BDDSSSBBHHHBWWWHBBHHBBHWWWBDNMM...MMNNNMM....................................",
+            "..DDa.NaaDDSHSHHSNMNDSSBHHHHHHHHWWWBBHHSBBBBHHBDNNNNNNNaaDNN....................................",
+            "..DDNNNDDNDBBBBBSaMMaSHWWWWWHHHWWWWHHHHSSSSBBBSSDDDDDaNNNNNNN...................................",
+            "....MNNSSNDSSBSBSaMNDBWWWWWWHHHWWWWHWWHBBBSSSDDDaDDSSSDaaNNaNN..................................",
+            "....NNNDDDaDDSSSDNMDBWWWWWWWWHBWWWWWWWWHHBSSaNNNNNaSBBBBSDaNaNN.................................",
+            "......NNNNDDaDDDaaMBWWWWWWWWWHSHHWWWWWWWHBDNDHaaaDSaSBHHBBSDNNNN................................",
+            "......NNNNSDaDDaNDaHWWWWWWWWWHSBHWWWWWWWHSDaBaaaaSHaDBHHHBSDNNNN................................",
+            ".......NNDBSDNNNNDHWWWWWWWWWBSDBHWWWWWWHHSaDaaBaaHWaDBHWHHBSNNNN................................",
+            ".......MNaBBSSDaaDBWWWWWHBSSSaNDBWWWHHHHBDDDaBHaaHWaDBHHBBSDNNN..........NNNNNN.................",
+            ".......NNDBHHBSSSBBHWWWHHBDaDSaNDBBBSSSSSaNNaaaaaaHNDSSSSDNNNNNN........NaDDaNMM................",
+            ".......NNDBHHHHHHHHHHHHHBSDDSSDaaaDaaaaaaNNNDBBaaDBNaaaaaNNNNaNNMN.....NNSSSDNNNN...............",
+            ".......NaSBHWWWWWWHHBBBSBSDDSSSDaNNNNNNNNNaaHWWaaSWNNNNNNaaNNDaNNNNNN.MNaBBSDDaNN...............",
+            ".......NaSBHWWWWWWBBSDaaSDNDSSHSDDDDDDDDDDDaDHHBDDSaDDDDDDDNaDaNDDNNNNNNaBHHHBSDN...............",
+            ".......NNDSBHWHHHBBSDNNNaaNDSBSBHBBBBBBHBBBDaNNNNNDSBBHBBDNNaNNNSSSDDNNaSBBBBSDNN...............",
+            "........NNDBBHBBBSDaNNMMNNaNaDDSBBHHHHWWHHBSDDDDDDSBBHHHSDNNaNaDSBBBSDDDSSSSDaNNN...............",
+            ".........NDSBBDDDDNNNMMNNaDNNNaDSSBHHHWWWWHBBBBBBBBHHHHBDaNaaaDSBHBBSSDDDDDDNN..................",
+            ".........MaDDDaNNNMMMMMNDDDSDaNNaDSBBHWWWWWWWWWWWWWWWHBSDNNNaDSBBBBSSDaNMNNNM...................",
+            "..........NMMMNNMMNNNNNNaDSBSSDDaNDDSBBHWWWWWWWWWWWWWHSDNN..NNaaaDDaDNN.........................",
+            ".........NMMMMN.NNNNNNaNNDSBBSDBSDNaaDSBHWWWWWWWWWWWWBSNN...NNNNNNNNaN..........................",
+            ".........MN.....NNaaNNDNNDSBBBSHBBDaNaDSBHWWWWWWWWWWWBSN.......MMMM.............................",
+            "..........DD....NNDDDaDDDDSSSBBHHHHDaaNDSBHWWWWWWWWWWBSN........................................",
+            "................NNSDDDDDDDDDSSHHWWHBBSNaDBHWWWWWWWWWWBSN........................................",
+            "................NNNDSBBSDDDSSBHHHWHBBBDNDSHWWWWWWWWWWBSNDD......................................",
+            ".................NNDSBBSDDSSSSBHHHHHHBDNaSHWWWWWWWWWWBSDaa......................................",
+            "..................NDSSSSDSBBBSBBHHHWHBSNaSHWWWWWWWWWWHBSNN......................................",
+            "...................DDDDDDSBBBBSSSBWWWHSNaSHWWWWWWWWWWHHSaaa.....................................",
+            ".......DD..........DDDDDDSSBBBSSBHWWWHSNaSHWWWWWWWWWWWHSDaNM....................................",
+            ".......DD...........SSSDDDDSBHBSBHWWWHSNaSHWHWWWWWWWWWHBDaNNN...................................",
+            ".......DD...........SSSDDDDDBBBHHWWWWBDNDBHWBHHHHWWWWWHSaDDNN...................................",
+            ".....................SSSSSSSBBBWWWWWWBaaSBHHSSSBHHWWWHHSNaDDDNN.................................",
+            ".....................DDSBBBBBBBHWWWWWSNDBHHHSDDSBBHWHHBDNaSBSDaNM...............................",
+            ".........DD...........DBBBBBBBHHWWWWWSNSBHWHSDaDSSBHHBSaNDSHBSDNNN..............................",
+            ".........DDD...........BBHHBBBHHWWWWHDNBHWWHSDNNDSSHHBSNNDSHHBSDDN..............................",
+            "..........DSS..........BHHHHHHWWWWW.NNDSHWWHBSDaNNDSBSDNDSBWWHHBSDNN............................",
+            "..........SBB.........DBBHHHHHHWWWBNaDSHHWWWHHBDNNNSSDaNSBHWWWWHHSDNN...........................",
+            ".........DBBB........SSBHHWWHHHWHHDNDSBHWWWWWHHBDDNaDaNNBBHWWWWWHBSaNN..........................",
+            ".........DBBB........SBHHHWWHHBWHBNDSBHWWWWWWWHHSSaNNNNDBHWWWWWWWHSDNN..........................",
+            ".........DBHH..WW....SSBHWWWWWHWHSNSBHWWWWWWWWWHBBSNNaDSHHWWWWWWWHHSDNM.........................",
+            ".......DDSBH....BBD..SSBBHHWWWWSaaDDBHWWWWWWWWWHBBSNaDSBHWWWWWWWWHHBSaN....MM...................",
+            ".......DDBBB.....BDDDDDSSBHWWWWDaDSSBHWWWWWWWWWHBSDaNaSHHWWWWHBHHHBBBDNN.NNNM...................",
+            ".......DDBSS......DDDDDDSBHWWWWDaSBSBHWWWWWWWWHBSSNSNaSHWWWWWHBBHHSSBDaNSSSSH...................",
+            ".......aaSDD......DDDDDDSHWWWWSDDSSBHWWWWWWWWWHSSDNBNaSBHWWWWHSSBBDDBSDaSHWWH...................",
+            ".......NNDDDD.......SSSSBBHWWWaDSBSBHWWWWWWWWHHSNNN.NaDSHWWWWHBSSBBSSDaNSDDDD...................",
+            "........NDDD.......DSBBBBBHWBSaSBBSBHWWWWHHHHHBDNaSWBDaSHWWWWWBSSHSSSSDNNNDDD...................",
+            ".........DD........DSBHBBBHWBDaSBBSBHWWWWHBBHBSDaDHWBaNSBWWWWWHBSHBBBSSDNN......................",
+            "....................SSHHHBHWBDDBBBSSHWWWHHBSBBSaDSWWSaNSBHWWWWHBSHHBBBSSNN......................",
+            ".........B.........DSBHHHHHWBDaBHHSBHWWWHBSBBSDaDSHWHSDDBHWWWWHBSHWWWBSSNN......................",
+            ".........B........DDDSHHHHHWSDaBHHSBHWWHBBBBBSDaSBHHHHSDSBHWWWHSSHWWWBSSNN......................",
+            "..................DDDSBWWHHWSDaBHHSBBHHBSBBBBDaDBBHHWWWBSBHHWWHSSHHHHBSDNN......................",
+            ".......BB..........SSSSHWWWWSDaBHHBSBBBSSBBSDaDBHHWWWWWWSSBHWWHBDSBHWHBSNNN.....................",
+            ".......SSB..........BBBHHHWWSaaSBHWSBBSSHHBSNDBHHHWWWWWWSHHHWWBDDDWWWHBSNNBWB...................",
+            ".......SSBB........DSSBHHWWWHBaDBHHSSSSBHHBDNSBHHHWWWWWHDBHHHHSDDBWWWHSDNN.WHW..................",
+            ".......DDSB........DSSBHWWWWWWaDBHBSSSSHHBSaNSBHHWWWWWWHDSBBBHBDDHWWWHSDNN.WWWW.................",
+            ".......DDBBB.......DSBBHWWWWWWaDBHHSSSBHHBDNSHHBWWWWWWHBBDDaDBBBSBWWWWBDDNMWWBB.................",
+            "DD.....DDSSSD.....DSBHWWWWWWWWaDBHHBBHHHBSDDWWWWWWWWWWHHHHSNaSBBHWWWWWHDNMaBBB..................",
+            "DD.....DDSBBSS....DSBHWWWWWWWWNDSHWHHHHBSDaSWWWWWWWWWWWWWWBNNDSBHWWWWWWBNNNDB...................",
+            "DD.....DDSBBBB....DSBHHHWWWWBSNDSHWWHHBSDaaSWWWWWWWWWWWWWWWSNDSBWWWWWWWBNNNDD...................",
+            "DD.....DDSBHWH......BBHWWWWWSaNDBHWWHBSDNN..WWWWWWWWWWWWWWWWBDSBHHWWWWWSNMMDD...................",
+            "DD.......SBHHW.....DSBHWWWHWDMaBHHWWBSSNN....WWWWWWWWWWWWWWWWDDSHBBHHBDaaNNBBWW.................",
+            "DDDD.....DBBH......DSBHWWWBBaNDBHWWWHSa.......WWWWWWWWWWWWWWWDDSBHHBDDSSDNNSS...................",
+            "DDDD.....DSBB.......SBHWWWBBNNSBHWWHBSN.......WWWWWWWWWWWWWWWDDSHHHHBSSSDNN.D...................",
+            "DDDS......SSS.......SBHWHH.NNaSBHWWHSDN.......WWWWWWWWWWWWWWWDDSHHHHHBSDDNN.....................",
+            "DDSBB...............SSBHHH.NNDBHHHHBSaN........WWWWWWWWWWWWWWDDSHWWWHBDaNN......................",
+            "..SBHW........DDD.DDSSBBHH.NSSHHBSSSaNN........WWWWWWWWWWWBNaDSBHWWHHSDN.NN.....................",
+            "..SHHW.BBB....DD..DDSBBBBDNDSSHBSDNaaNM...WW....WWWWWWWWBSDDDSBHWWWHHDaN........................",
+            "..SHW..BBBH.......DDSBBBSDNDSBHBSaNNaS....WW.....WWWWWWWDaaDDBBHWWWHBDN.........................",
+            "..BHH..BHWWW......DDSBHHaaDSBHHBDNNNWWWWWWWW..WWWWWWWWWDaDSSBHHHWWHBSDN.........................",
+            "..BHW..HHWWWW......DSBBNNDSBHHHSDNaNWWWWWWWWWWWWWWHWWWWNaSBBHWWWWWHBSaN.........................",
+            "..BHW..WWWWWW...DD..SSDNDSBHWWHSaNaNHWWWWWWWWWWWWWWWWWBNDBHWWWWWWHBSDNN.........................",
+            "..BHW..WWWW....DDD...NNDSBHWWWHSDaNNDHWWWWWWWWWWWWWWWWBNSBHWWWWWWHSDaNM.........................",
+            "...WW....WW.....DD..NNDSBHWWWWWBDaNDaHWWWWWWWWWWWWWWWHBNBHWWWWWWWHSaNN..........................",
+            ".........W......DDD.NNSBHWWWWWWHSDSDaHWWWWWWWWWWWWWWWHDNBHWWWWWHHSDNN...........................",
+            "................DDDDNNSHHWWWWWWHBBSDaHWWWWWWWWWWWWWWWBDNSBHWWWWHBSaN............................",
+            "................DDDDNNSHHWWWWWWHHBSDaHWWWWWWWWWWWWWWWHSNDBHWWWHHSDNN............................",
+            "..................DSDNDHHWWWWWWWHBSNNWWWWWWWWWWWWWWWWWHaaBHWWHBSDNN.............................",
+            "...................BDNDSHWWWWWHHBSDNMWWWWWWWWWWWWWWWWWHaaBHHHBSDN...............................",
+            "...................BSDNSBHWWWWHBSDNN.WWWWWWWWWWWWWWWWWHDNDBBHSDNN...............................",
+            "........H...........BSNDBHWWHHBSDNN..WWWWWWWWWWWWWWWWWWBNDSBBDa.................................",
+            ".......HH...........HBNaSHHHBSDDaN..WWWWWWWWWWWWWWWWWWWWaDSBSNN.................................",
+            ".......HH............SSNSBHSSDNNSH..WWWHWWWWWWWWWWWWWWWWNDSSDNN.................................",
+            ".....................SSNSBBDaNNNS..HWWWWWWWWWWWWWWWWWWWHNaSSNN..................................",
+            ".....................WSNSBSaNN.....HWWWWWWWWWWWWWWWWWWWSNDDDN...................................",
+            "....................WWBaDSSNN........WWWWWWWWWWWWWWWWWWDaDDaN...................................",
+            "....................WWWDDDaNN........WWWWWWWWWWWWWWHWWBNDDDN....................................",
+            "....................WWWDaaaNN.............WWWWWWWWWDaaaDSDNN....................................",
+            "....................WWWDaaaNN.............WWWWWWHHHDaaaDBDNN....................................",
+            ".....................WWDaaaMM...............WWWHNNNaDDSSHDNM....................................",
+            ".....................HHaaaaMM................HSNDDSSBBHHBDNM....................................",
+            ".....................SSaDDDNN................HDNDSBBBHHHHDNM....................................",
+            ".....................NNaSSDNN.H...............NNDDBHHHWHBDNM....................................",
+            ".....................NNDSBSNN.HH..............SDNaDBHHWHSDNM....................................",
+            "................DDD..NNSBSDNN.HH...............SSDNDBBHHSNN.....................................",
+            "..................SSDNNSBSDDWWHHB..............WWHBaDBHHSNN.....................................",
+            "..................SBDaNSBSDDWWWHH..............WWWWaDSBBSNN.....................................",
+            "..................BHBDNSBSaDHWWHH...............WWWDDSSSDNN.....................................",
+            "..................DBSDNSBSaaHWWHH................WWWaDSSNN......................................",
+            "..................DBBSNSBSaDWWWH..................WWaDSSNN......................................",
+            "..................DBSDNSBSDSWWWW...................WNDSSNN......................................",
+            "...................BSaaSBSDSWWWWW..W................NaSSNN......................................",
+            "....................NNDBBSDSWWWWWW.WW...............NNDDaN......................................",
+            ".............W......NNSHHBDNHW..WW...................NNaDNN.....................................",
+            ".............W......NNSHHBSDDD........................NDDaNM....................................",
+            "....................NNSHHHBSaNH........................DaNNM....................................",
+            "....................NNSBHHBSNNHH.......................SNNNN....................................",
+            "....................NNaSHHSaNNWW................................................................",
+            "....................NNNSBBSaNNWWW...............................................................",
+            ".....................NNSBSDNN..WW...............................................................",
+            ".......................NDDDNN...................................................................",
+            ".......................NNNNN....................................................................",
+            ".........................NN.....................................................................",
+            "................................................................................................",
+            "................................................................................................",
+            "................................................................................................",
+            "................................................................................................",
+            "................................................................................................",
+            "................................................................................................",
+            "................................................................................................",
+            "................................................................................................",
+            "................................................................................................",
+            "................................................................................................",
+            "................................................................................................",
+        ]),
+        // His chin is tucked in this pose and his head is two thirds the
+        // width, so the eyes move up seven rows and come down a size.
+        poweredFace: Face(eyes: [Point(45, 14), Point(51, 14)], size: 2),
+        // And the fire: the same sampling, of the oranges and yellows he is
+        // made of when he is lit.
+        poweredRamp: ChassisRamp(deep: RGB(0.988, 0.322, 0.004), shade: RGB(0.992, 0.416, 0.008), mid: RGB(0.996, 0.514, 0.008),
+                                 base: RGB(0.996, 0.604, 0.012), light: RGB(0.996, 0.710, 0.020), spec: RGB(0.996, 0.890, 0.098)),
+        headBox: HeadBox(x: 34, width: 28))
+}
+
+
 // MARK: - The personal shelf
 //
 // Not a cohort the app ships a set of: one character, on the row the room
@@ -963,6 +1446,7 @@ extension Mascot {
     public static let all: [Mascot] = [pip, byte, widget, nimbus,
                                        blip, scoot, wobble, bloop,
                                        boo, flit, gourd, rattle,
+                                       humanTorch,
                                        ember]
 
     /// The characters on one shelf, in cast order.

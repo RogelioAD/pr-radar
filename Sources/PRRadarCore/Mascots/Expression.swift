@@ -39,12 +39,24 @@ extension Mascot {
     /// Nimbus is a rounded cloud whose first three and last three rows are
     /// pure `k`, so a band parked there painted nothing at all and the sweep
     /// appeared to stop for a sixth of its cycle.
-    public var sweepRows: ClosedRange<Int> {
-        let ys = sprite.litPoints.filter {
-            guard let slot = sprite[$0.x, $0.y] else { return false }
+    public var sweepRows: ClosedRange<Int> { sweepRows(of: sprite) }
+
+    /// The same, of whichever form is actually on screen.
+    ///
+    /// Taken off `sprite` unconditionally this was wrong the moment a
+    /// character had two forms: a figure that grows a flame when it powers
+    /// up occupies rows its own civilian drawing does not, and a band
+    /// confined to the civilian rows stops a third of the way down the one
+    /// being drawn.
+    public func sweepRows(of grid: Sprite) -> ClosedRange<Int> {
+        let ys = grid.litPoints.filter {
+            guard let slot = grid[$0.x, $0.y] else { return false }
             return slot.isChassis || isTell(slot)
         }.map(\.y)
-        guard let low = ys.min(), let high = ys.max() else { return litRows }
+        guard let low = ys.min(), let high = ys.max() else {
+            let all = grid.litPoints.map(\.y)
+            return (all.min() ?? 0)...(all.max() ?? 0)
+        }
         return low...high
     }
 
@@ -57,34 +69,57 @@ extension Mascot {
     public func frame(eyes pattern: EyePattern,
                       frame: Int = 0,
                       sweeping: Bool = false,
-                      breath: Breath = .steady) -> Sprite {
-        var grid = sprite
+                      breath: Breath = .steady,
+                      powered: Bool = false) -> Sprite {
+        var grid = art(powered: powered)
         tic(&grid, frame: frame, breath: breath)
         if breathes { breathe(&grid, frame: frame, breath: breath) }
-        for box in eyes { drawEye(&grid, at: box, pattern: pattern) }
+        let face = face(powered: powered)
+        for box in face.eyes {
+            drawEye(&grid, at: box, size: face.size, pattern: pattern)
+        }
         if sweeping { sweep(&grid, frame: frame) }
         return grid
     }
 
     // MARK: - Eyes
 
-    private func drawEye(_ grid: inout Sprite, at box: Point, pattern: EyePattern) {
-        let n = eyeSize
+    private func drawEye(_ grid: inout Sprite, at box: Point, size: Int? = nil,
+                         pattern: EyePattern) {
+        let n = size ?? eyeSize
         switch pattern {
         case .open, .wide:
             // Startled is the same lens one pixel bigger all round, not a
             // different drawing — an eye that changes shape when surprised
             // reads as a different character.
             let pad = pattern == .wide ? 1 : 0
-            let m = n + pad * 2, cut = max(1, m / 4)
+            let m = n + pad * 2
+            // Corners come off a lens to round it, but a two-cell eye is
+            // four corners and nothing else — cut, it draws no pupil at
+            // all, and the character stares out of the art's own sockets
+            // while the blink does nothing. Below three cells there is no
+            // roundness to find.
+            let cut = m < 3 ? 0 : max(1, m / 4)
             for j in 0..<m {
                 for i in 0..<m where !isCorner(i, j, of: m, cut: cut) {
                     grid.plot(box.x - pad + i, box.y - pad + j, eyeInk)
                 }
             }
+            // The catchlight, which never covers the middle of the lens.
+            //
+            // It could not, while the smallest eye in the cast was four
+            // cells: the highlight sits at (1, 1) and the centre of a
+            // four-cell box is (2, 2). At three cells they are the same
+            // cell, and the eye comes back with a white pupil — which is a
+            // blind eye, and which the mood test catches by reading exactly
+            // that cell. Guarded rather than resized, so every eye already
+            // drawn keeps the highlight it has.
             let g = max(2, n / 3)
             for j in 0..<(g - 1) {
-                for i in 0..<g { grid.plot(box.x + 1 + i, box.y + 1 + j, .light) }
+                for i in 0..<g where i + 1 < n && j + 1 < n
+                                  && !(i + 1 == n / 2 && j + 1 == n / 2) {
+                    grid.plot(box.x + 1 + i, box.y + 1 + j, .light)
+                }
             }
         case .shut:
             // Overhangs the box by a pixel each side: a closed lid is wider
@@ -184,6 +219,15 @@ extension Mascot {
             // His jaw. Two rows, so it reads as chattering rather than as the
             // whole skull nodding.
             if f % 4 < 2 { shift(&grid, rows: 20..<24, by: 0, down: 1) }
+
+        case .humanTorch:
+            // The fire, in whichever form is showing: the flames he is made
+            // of when he is lit, and the one in his fist when he is not.
+            // Never out and never steady, which is what fire does and what
+            // a status light should.
+            let lick: Slot = [Slot.accent, .accent, .accentDim, .accent,
+                              .accentDim, .accent][f % 6]
+            repaintAccent(&grid, x: 0..<grid.width, y: 0..<grid.height, with: lick)
 
         // The original cast. Each keeps the one thing it always did — these
         // are the idles the 16-cell art was drawn around, at three times the
@@ -385,7 +429,7 @@ extension Mascot {
     /// entering at the top as the last one leaves — which is what a rising
     /// shimmer looks like anyway.
     private func shimmer(_ grid: inout Sprite, frame: Int, rising: Bool) {
-        let rows = sweepRows
+        let rows = sweepRows(of: grid)
         let span = max(1, rows.count)
         let step = abs(frame) % span
         for band in 0...3 {
@@ -460,7 +504,7 @@ extension Mascot {
     /// skeleton reads as a photocopier; stopping at each bone reads as
     /// something being counted.
     private func spine(_ grid: inout Sprite, frame: Int) {
-        let rows = sweepRows
+        let rows = sweepRows(of: grid)
         let stops = 9
         // Held for two frames apiece, so each stop is seen rather than
         // flicked through.

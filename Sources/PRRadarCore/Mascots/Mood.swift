@@ -207,6 +207,23 @@ public struct SpriteStyle: Sendable {
     /// like the one you can ignore.
     public var sweeps: Bool { health == .running }
 
+    /// Whether a character with two forms is in its powered one.
+    ///
+    /// Derived from the tint rather than listed per mood, for the same
+    /// reason `sweeps` is — and the line falls in the same place twice over.
+    /// Green is a queue you cleared and grey is one you parked: in both
+    /// there is nothing to do, and the character is off duty. Blue, amber
+    /// and red all mean something is live — the app is looking, or the queue
+    /// is ageing, or something is wrong — and that is when the suit comes
+    /// off.
+    ///
+    /// Which makes the transformation itself a readout, on the one surface
+    /// that is on screen all day: an empty queue is a character standing
+    /// there in his own clothes, and a queue is a character who has powered
+    /// up to deal with it. A character with only one form ignores this
+    /// entirely.
+    public var powered: Bool { health != .good && health != .neutral }
+
     public init(eyes: EyePattern, marks: [Mark], health: Health, bob: [Int],
                 breath: Breath = .steady) {
         self.eyes = eyes

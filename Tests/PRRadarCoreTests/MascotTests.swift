@@ -5,11 +5,33 @@ import XCTest
 /// at a screenshot.
 final class MascotTests: XCTestCase {
 
-    func testEverySpriteIsFortyEightSquare() {
+    /// The cast has two formats and no others: 48 square for everyone drawn
+    /// as a bust, and 96 by 144 for the full-length shelf. A third would not
+    /// be caught by anything else — `SpriteLayout` derives its furniture
+    /// scale from the character's own width, so a 64-cell character would
+    /// lay out quite happily and simply be the wrong size next to everybody.
+    func testEverySpriteIsOneOfTheCastsTwoFormats() {
         for mascot in Mascot.all {
-            XCTAssertEqual(mascot.sprite.width, 48, "\(mascot.name) width")
-            XCTAssertEqual(mascot.sprite.height, 48, "\(mascot.name) height")
+            let size = (mascot.sprite.width, mascot.sprite.height)
+            XCTAssertTrue(size == (48, 48) || size == (96, 144),
+                          "\(mascot.name) is \(size.0)x\(size.1)")
+            if let powered = mascot.powered {
+                XCTAssertEqual(powered.width, mascot.sprite.width,
+                               "\(mascot.name) changes width when it transforms")
+                XCTAssertEqual(powered.height, mascot.sprite.height,
+                               "\(mascot.name) changes height when it transforms")
+            }
         }
+    }
+
+    /// The furniture beside a character has to scale with it, or a 96-cell
+    /// figure stands next to a mood mark drawn for a cast half its size.
+    func testTheFurnitureScalesWithTheCharacter() {
+        XCTAssertEqual(SpriteLayout.unit(for: .blip), 3)
+        XCTAssertEqual(SpriteLayout.unit(for: .humanTorch), 6)
+        let mark = Mark.bang.sprite
+        XCTAssertEqual(mark.scaled3x().width, mark.width * 3)
+        XCTAssertEqual(mark.scaled3x().scaled2x().width, mark.width * 6)
     }
 
     /// Every character is authored as 48 rows of 24 and mirrored, so the
@@ -17,7 +39,12 @@ final class MascotTests: XCTestCase {
     /// not: the shading pass lights from the upper left, which is the whole
     /// point of it.
     func testEverySilhouetteIsMirrorSymmetric() {
-        for mascot in Mascot.all {
+        // Only the characters that were authored as half and mirrored, which
+        // is every one drawn for this app. The rule is not an aesthetic
+        // preference — it is how the mirror pass going wrong is caught. Art
+        // traced off a supplied drawing was never folded, and the supplied
+        // pose is asymmetric on purpose.
+        for mascot in Mascot.all where mascot.mirrored {
             let art = mascot.sprite
             for y in 0..<art.height {
                 for x in 0..<(art.width / 2) {
@@ -62,13 +89,68 @@ final class MascotTests: XCTestCase {
     /// Eyes have to sit symmetrically about the centre line, or a face reads
     /// as a pixel off even though every feature is where it was drawn.
     func testEyesArePlacedSymmetricallyAboutTheCentre() {
-        for mascot in Mascot.all {
+        for mascot in Mascot.all where mascot.mirrored {
             XCTAssertEqual(mascot.eyes.count, 2, "\(mascot.name)")
             let left = mascot.eyes[0], right = mascot.eyes[1]
             let n = mascot.eyeSize, w = mascot.sprite.width
             XCTAssertEqual(left.x + n - 1, w - 1 - right.x,
                            "\(mascot.name) eyes are off-centre")
             XCTAssertEqual(left.y, right.y, "\(mascot.name) eyes are not level")
+        }
+        // A traced figure's head is wherever the pose put it. It may also
+        // have only one eye — a figure drawn in profile has one, and giving
+        // it a second would be a drawing of a flounder. What still has to
+        // hold is that whatever eyes it has are level and in order.
+        for mascot in Mascot.all where !mascot.mirrored {
+            XCTAssertFalse(mascot.eyes.isEmpty, "\(mascot.name) has no eyes at all")
+            XCTAssertLessThanOrEqual(mascot.eyes.count, 2, "\(mascot.name)")
+            for (left, right) in zip(mascot.eyes, mascot.eyes.dropFirst()) {
+                XCTAssertEqual(left.y, right.y, "\(mascot.name) eyes are not level")
+                XCTAssertLessThan(left.x, right.x,
+                                  "\(mascot.name) eyes are the wrong way round")
+            }
+        }
+    }
+
+    /// Both forms have to agree about where the face is: the eye boxes are
+    /// declared once and used for whichever one is showing, so an eye that
+    /// lands on skin in the suit and on empty air when he lights up is a
+    /// character who loses his eyes the moment the queue fills.
+    /// A character with two forms draws its eyes from whichever one is
+    /// showing, so the powered boxes are what has to land on the powered
+    /// face. Checked against `eyes` this passed by luck — the civilian
+    /// boxes happened to be opaque in the other drawing too, while sitting
+    /// a long way from the eyes actually painted there.
+    func testBothFormsPutTheEyesOnSkin() {
+        for mascot in Mascot.all {
+            guard let powered = mascot.powered else { continue }
+            let face = mascot.face(powered: true)
+            for box in face.eyes {
+                for dy in 0..<face.size {
+                    for dx in 0..<face.size {
+                        XCTAssertNotNil(powered[box.x + dx, box.y + dy],
+                                        "\(mascot.name) powered eye on a transparent pixel")
+                    }
+                }
+            }
+        }
+    }
+
+    /// And the powered form needs its own tell, for the same reason the
+    /// civilian one does: it is on screen in exactly the states that have
+    /// something to report.
+    func testThePoweredFormCarriesATell() {
+        for mascot in Mascot.all {
+            guard let powered = mascot.powered else { continue }
+            let tell = powered.litPoints.filter {
+                switch powered[$0.x, $0.y] {
+                case .accent, .accentMid, .accentDim: return true
+                default: return false
+                }
+            }
+            XCTAssertFalse(tell.isEmpty, "\(mascot.name) powered has no tell")
+            XCTAssertTrue(tell.contains { $0.y < mascot.headRows },
+                          "\(mascot.name) powered crops to no tell at all")
         }
     }
 
@@ -105,7 +187,7 @@ final class MascotTests: XCTestCase {
         for mascot in [Mascot.scoot, .wobble, .boo, .flit, .ember] {
             XCTAssertEqual(mascot.bobScale, 2, "\(mascot.name) floats")
         }
-        for mascot in [Mascot.blip, .bloop, .gourd, .rattle] {
+        for mascot in [Mascot.blip, .bloop, .gourd, .rattle, .humanTorch] {
             XCTAssertEqual(mascot.bobScale, 1, "\(mascot.name) stands on something")
         }
     }
@@ -245,7 +327,7 @@ final class MascotTests: XCTestCase {
         XCTAssertNotNil(Mascot.blip.glassBounds)
         XCTAssertNotNil(Mascot.scoot.glassBounds)
         XCTAssertNotNil(Mascot.wobble.glassBounds)
-        for mascot in [Mascot.bloop, .boo, .flit, .gourd, .rattle] {
+        for mascot in [Mascot.bloop, .boo, .flit, .gourd, .rattle, .humanTorch] {
             XCTAssertNil(mascot.glassBounds,
                          "\(mascot.name) has no visor and should have no glass")
         }
@@ -696,6 +778,7 @@ final class MascotCycleTests: XCTestCase {
         XCTAssertEqual(Mascot.cohort(.og).map(\.id), [.pip, .byte, .widget, .nimbus])
         XCTAssertEqual(Mascot.cohort(.space).map(\.id), [.blip, .scoot, .wobble, .bloop])
         XCTAssertEqual(Mascot.cohort(.october2026).map(\.id), [.boo, .flit, .gourd, .rattle])
+        XCTAssertEqual(Mascot.cohort(.fantasticFour).map(\.id), [.humanTorch])
         XCTAssertEqual(Mascot.cohort(.custom).map(\.id), [.ember],
                        "the personal shelf holds the one character drawn for it")
     }
@@ -730,9 +813,20 @@ final class MascotCycleTests: XCTestCase {
     /// The room lays the cast out four to a row, so a shelf that is not a
     /// multiple of four leaves a ragged last line.
     func testEveryShelfFillsWholeRows() {
+        // `fantasticFour` is excepted *by name* and on purpose: the art for
+        // it is traced from supplied sprite sheets, and only Human Torch's
+        // has arrived. The room already pads a short row with empty cells,
+        // so a partial shelf lays out correctly — this exception is here to
+        // keep the gap visible rather than to hide it, and it comes out the
+        // moment the other three land.
+        let filling: Set<MascotCohort> = [.fantasticFour]
         for cohort in MascotCohort.ordered where cohort != .custom {
-            XCTAssertEqual(Mascot.cohort(cohort).count % 4, 0,
-                           "\(cohort) has \(Mascot.cohort(cohort).count)")
+            let count = Mascot.cohort(cohort).count
+            if filling.contains(cohort) {
+                XCTAssertLessThan(count, 4, "\(cohort) is full — drop the exception")
+                continue
+            }
+            XCTAssertEqual(count % 4, 0, "\(cohort) has \(count)")
         }
     }
 
