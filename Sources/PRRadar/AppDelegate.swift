@@ -421,6 +421,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Wake what is due, and forget what is gone. Only a round that reached
         // every account is allowed to do the second half — see `Snoozes.prune`.
         state.pruneSnoozes(complete: fetches.allSatisfy { $0.error == nil })
+        // Threads the fetch now agrees are resolved stop being remembered.
+        state.pruneResolved()
 
         // The one edge worth a reaction: something new landed while you
         // were not looking.

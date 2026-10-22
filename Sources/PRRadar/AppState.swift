@@ -159,6 +159,27 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Threads resolved from the drawer, until the fetch agrees they are.
+    ///
+    /// The poll is sixty seconds and the mutation is instant, so without this
+    /// a resolved thread sits there looking untouched for a minute — which is
+    /// how somebody presses the button twice.
+    @Published var resolvedLocally: Set<String> = []
+
+    /// Forgets the ones the fetch no longer calls unresolved.
+    ///
+    /// Keyed on what came back rather than on age: once GitHub stops
+    /// reporting a thread as open, the optimism has been confirmed and there
+    /// is nothing left to remember. One that is somehow still open stays in
+    /// the set and stays hidden, which is the right way round — the press did
+    /// happen, and un-hiding it would look like the resolve coming undone.
+    func pruneResolved() {
+        guard !resolvedLocally.isEmpty else { return }
+        let stillOpen = Set(myPRs.flatMap { $0.unresolvedThreads.map(\.id) })
+        let kept = resolvedLocally.intersection(stillOpen)
+        if kept != resolvedLocally { resolvedLocally = kept }
+    }
+
     /// Review requests you have opened and not finished with. See `Opened`.
     @Published var opened: Opened = Prefs.opened {
         didSet { Prefs.opened = opened }
@@ -800,12 +821,25 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Posts a reply to one of your own review threads.
+    /// Answers a thread, and optionally closes it.
     ///
-    /// Returns whether it landed, so the field can keep what was typed when it
-    /// did not. Nothing is resolved here — a reply and a resolution are two
-    /// different claims, and the row deliberately only makes the first.
-    func reply(to threadID: String, body: String, on pr: MyPullRequest) async -> Bool {
+    /// Returns whether the *reply* landed, so the field can keep what was
+    /// typed when it did not.
+    ///
+    /// The order is the whole of it: **never resolve a thread whose reply did
+    /// not land.** A thread closed over a comment that is not there reads to
+    /// every reviewer as handled, and nobody looks at a resolved thread again.
+    /// So the reply goes first, and a failure stops before the resolve.
+    ///
+    /// The other direction is safe and so is tolerated: a reply that posted
+    /// and a resolve that did not leaves a thread open with your answer in it,
+    /// which is exactly the state you were in before pressing anything.
+    ///
+    /// An empty body resolves without a comment. That is a real case — you
+    /// fixed it and the diff says so — and it is why the button says
+    /// *Resolve* rather than *Reply & Resolve* when nothing is typed.
+    func reply(to threadID: String, body: String, on pr: MyPullRequest,
+               resolving: Bool = false) async -> Bool {
         guard let account = accounts.first(where: { $0.id == pr.account })
                 ?? accounts.first,
               let token = Accounts.token(for: account)
@@ -813,14 +847,30 @@ final class AppState: ObservableObject {
             lastError = "No token for the account that pull request came from."
             return false
         }
-        let url = await GitHubClient(token: token).replyToThread(id: threadID, body: body)
-        if url == nil {
-            lastError = "Could not post that reply to #\(pr.number). "
-                + "What you typed is still there."
-        } else {
+        let client = GitHubClient(token: token)
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !trimmed.isEmpty {
+            guard await client.replyToThread(id: threadID, body: trimmed) != nil else {
+                lastError = "Could not post that reply to #\(pr.number). "
+                    + "What you typed is still there"
+                    + (resolving ? ", and the thread is still open." : ".")
+                return false
+            }
             Log.debug("replied on \(pr.repo)#\(pr.number)")
         }
-        return url != nil
+
+        guard resolving else { return true }
+        if await client.resolveThread(id: threadID) {
+            resolvedLocally.insert(threadID)
+            Log.debug("resolved a thread on \(pr.repo)#\(pr.number)")
+        } else {
+            lastError = trimmed.isEmpty
+                ? "Could not resolve that thread on #\(pr.number)."
+                : "Your reply posted, but the thread on #\(pr.number) "
+                  + "could not be resolved."
+        }
+        return true
     }
 
     /// The skill to run, as the settings field holds it — an edit buffer for
@@ -1542,7 +1592,18 @@ final class AppState: ObservableObject {
     }
 
     var accountScopedMyPRs: [MyPullRequest] {
-        AccountScope.apply(accountFilter, to: myPRs, accountOf: \.account)
+        AccountScope.apply(accountFilter, to: locallyResolvedMyPRs, accountOf: \.account)
+    }
+
+    /// Your pull requests with threads you have just resolved already gone.
+    ///
+    /// Applied here, above every scope and filter, so one transform serves the
+    /// list, the counts, the chip, the needs-threads filter and the drawer's
+    /// sizing. Applying it in the view would leave the chip above the list
+    /// disagreeing with the list.
+    var locallyResolvedMyPRs: [MyPullRequest] {
+        guard !resolvedLocally.isEmpty else { return myPRs }
+        return myPRs.map { $0.resolvingLocally(resolvedLocally) }
     }
 
     var scopedItems: [ReviewItem] {

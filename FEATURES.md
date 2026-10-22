@@ -571,15 +571,34 @@ threads, and saying one word back meant a browser tab. That is an odd place to
 stop: a reply is a far smaller thing than the Approve button this app already
 has, and unlike an approval the person who wrote it can edit it afterwards.
 
-So every unresolved thread has a reply box under it. What it does **not** do is
-resolve anything — a reply and a resolution are two different claims, and the
-row deliberately only makes the first.
+So every unresolved thread has a reply box under it, and two buttons:
+**Reply**, and a second one that follows what you have typed — **Reply &
+Resolve** with a sentence in the field, **Resolve** with it empty. One button
+rather than three controls sharing a 380-point row with a text field, and
+resolving with nothing typed is a real case on its own: you fixed it and the
+diff says so.
+
+**The order is the whole of it: never resolve a thread whose reply did not
+land.** A thread closed over a comment that is not there reads to every
+reviewer as handled, and nobody looks at a resolved thread again. So the reply
+goes first and a failure stops before the resolve, with the thread left open
+and the sentence still in the field.
+
+The other direction is tolerated, because it is safe: a reply that posted and
+a resolve that did not leaves an open thread with your answer in it, which is
+exactly where you were before pressing anything. The row says so and stops.
 
 - **The field keeps what you typed when a send fails.** Losing a sentence to a
   dropped connection is the one outcome that would stop anybody using this
   twice.
-- **The button goes dead while a reply is in flight.** A second press on one
+- **The buttons go dead while a reply is in flight.** A second press on one
   already sending is how a sentence becomes two comments.
+- **A resolved thread leaves the list at once**, and the count above it moves
+  with it. The poll is sixty seconds and the mutation is instant; without that
+  the thread sits there looking untouched for a minute, which is how somebody
+  presses the button twice. It is forgotten once the fetch agrees — and a
+  thread that somehow comes back still open stays hidden, because the press
+  did happen and un-hiding it would look like the resolve coming undone.
 
 ### Asking somebody to look again
 

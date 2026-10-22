@@ -9,9 +9,10 @@ struct MyPRRowView: View {
     let now: Date
     /// Whether the keyboard is on this row. See `RowView.isSelected`.
     var isSelected = false
-    /// Posts a reply to a thread. Returns whether it landed, so the field can
-    /// keep what was typed when it did not. nil hides the reply boxes.
-    var onReply: ((String, String) async -> Bool)?
+    /// Posts a reply to a thread, and optionally resolves it. Returns whether
+    /// the reply landed, so the field can keep what was typed when it did not.
+    /// nil hides the reply boxes.
+    var onReply: ((String, String, Bool) async -> Bool)?
     /// Asks reviewers to look again. nil where there is nobody to ask.
     var onNudge: (([Approval]) -> Void)?
     /// Which account surfaced this row, or nil when saying so would be noise.
@@ -505,17 +506,33 @@ struct MyPRRowView: View {
                       // on a reply in flight is how one sentence becomes two
                       // comments.
                       enabled: !typed.isEmpty && !busy) {
-                send(typed, to: thread)
+                send(typed, to: thread, resolving: false)
             }
+
+            // One button whose job follows what you have typed, rather than a
+            // third control sharing a 380-point row with a text field. Empty
+            // is a real case on its own — you fixed it and the diff says so —
+            // and it is a different sentence from answering and closing.
+            RowButton(title: typed.isEmpty ? "Resolve" : "Reply & Resolve",
+                      symbol: "checkmark.circle",
+                      health: .good,
+                      enabled: !busy) {
+                send(typed, to: thread, resolving: true)
+            }
+            .help(typed.isEmpty
+                  ? "Closes the thread without a comment"
+                  : "Posts the reply, then closes the thread — and leaves it "
+                    + "open if the reply does not land")
         }
         .padding(.top, 2)
     }
 
-    private func send(_ body: String, to thread: UnresolvedThread) {
+    private func send(_ body: String, to thread: UnresolvedThread,
+                      resolving: Bool) {
         guard let onReply else { return }
         sending.insert(thread.id)
         Task {
-            let landed = await onReply(thread.id, body)
+            let landed = await onReply(thread.id, body, resolving)
             sending.remove(thread.id)
             // Cleared only on success, so a failed send leaves the sentence
             // where it was rather than asking for it again.

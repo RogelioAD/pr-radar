@@ -215,7 +215,9 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
     /// empty map leaves the row naming who it waits on without claiming how
     /// long, which is what it should say when nothing told it.
     public var requestedAt: [String: Date] = [:]
-    public let unresolvedThreadCount: Int
+    /// `var` so a thread resolved from the drawer can leave the count before
+    /// the next poll confirms it — see `resolvingLocally`.
+    public var unresolvedThreadCount: Int
     /// The threads behind that count.
     ///
     /// Optional in effect — defaulted, like `account` beside it — so every
@@ -321,6 +323,31 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
     }
 
     public var needsLead: Bool { hasLeadGate && approvingLead == nil }
+
+    /// The same pull request with some threads treated as already resolved.
+    ///
+    /// For the sixty seconds between resolving one and the fetch agreeing.
+    /// Without it the thread sits there having visibly worked, the count
+    /// above it still says three, and the only way to find out whether the
+    /// press did anything is to wait a minute — which is how somebody presses
+    /// it twice.
+    ///
+    /// The count moves with the list. A row showing two threads over a chip
+    /// saying three is the drawer disagreeing with itself, and the chip is
+    /// the half people read.
+    public func resolvingLocally(_ ids: Set<String>) -> MyPullRequest {
+        guard !ids.isEmpty else { return self }
+        let kept = unresolvedThreads.filter { !ids.contains($0.id) }
+        guard kept.count != unresolvedThreads.count else { return self }
+        var copy = self
+        copy.unresolvedThreads = kept
+        // By how many actually went, not to `kept.count`: the count is of
+        // every unresolved thread and the list only holds the ones GitHub
+        // gave an id to, so they are not the same number to begin with.
+        copy.unresolvedThreadCount =
+            max(0, unresolvedThreadCount - (unresolvedThreads.count - kept.count))
+        return copy
+    }
 
     /// How long this has been sitting with somebody else, or nil when nobody
     /// is being waited on. See `AwaitingReview`.

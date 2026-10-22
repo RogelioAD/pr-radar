@@ -831,9 +831,10 @@ struct DrawerView: View {
                         case .single(let item):
                             MyPRRowView(item: item, now: state.clock,
                                         isSelected: state.selection.id == item.id,
-                                        onReply: { thread, body in
+                                        onReply: { thread, body, resolve in
                                             await state.reply(to: thread, body: body,
-                                                              on: item)
+                                                              on: item,
+                                                              resolving: resolve)
                                         },
                                         onNudge: { state.nudge($0, on: item) },
                                         accountLabel: state.accountLabel(for: item.account),
