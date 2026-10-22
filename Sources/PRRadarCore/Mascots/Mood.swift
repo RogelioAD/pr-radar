@@ -223,7 +223,7 @@ public struct SpriteStyle: Sendable {
 
 /// What the app is doing, as one of seven faces.
 public enum Mood: String, CaseIterable, Sendable {
-    case asleep, idle, nudging, alarmed, working, proud, lost
+    case asleep, dozing, stirring, idle, nudging, alarmed, working, proud, lost
 
     /// Pure, so the whole truth table is tested without a window.
     ///
@@ -235,16 +235,37 @@ public enum Mood: String, CaseIterable, Sendable {
                           worst: Staleness,
                           readyToMerge: Int,
                           isRefreshing: Bool,
-                          hasProblem: Bool) -> Mood {
+                          hasProblem: Bool,
+                          snoozed: Int = 0,
+                          wakingSoon: Bool = false) -> Mood {
         if hasProblem { return .lost }
         if isRefreshing { return .working }
-        if reviews == 0 { return readyToMerge > 0 ? .proud : .asleep }
+        if reviews == 0 {
+            if readyToMerge > 0 { return .proud }
+            // An empty list and a parked one are not the same thing, and the
+            // character was saying they were. `reviews` is the waking count,
+            // so snoozing six put him to sleep exactly as finishing six did —
+            // accidentally charming, and a small lie told in the one place
+            // that is on screen all day.
+            //
+            // `proud` still wins, because that is about your own work being
+            // ready and has nothing to do with what you parked.
+            guard snoozed > 0 else { return .asleep }
+            return wakingSoon ? .stirring : .dozing
+        }
         switch worst {
         case .stale: return .alarmed
         case .aging: return .nudging
         case .fresh: return .idle
         }
     }
+
+    /// How close a wake has to be before the character notices it coming.
+    ///
+    /// Five minutes, which is about how long the eye takes to find a badge it
+    /// was not looking for. Shorter and it would be over before you glanced;
+    /// longer and he would spend half an afternoon pretending to stir.
+    public static let stirringWindow: TimeInterval = 300
 
     /// Reuses the app's one colour scale rather than inventing a palette, so
     /// the mascot and the count beside it are the same colour by construction.
@@ -254,6 +275,33 @@ public enum Mood: String, CaseIterable, Sendable {
             return SpriteStyle(eyes: .shut, marks: [.zzz, .zzz, .zzz, .none],
                                health: .good, bob: [0, 0, 0, 1, 1, 1],
                                breath: .out)
+        case .dozing:
+            // Asleep's shape, slowed down and taken off green.
+            //
+            // Green is the colour of a queue you cleared. Grey is the honest
+            // one for a queue you put down — nothing is wrong, and nothing
+            // has been dealt with either. The longer cycles are the rest of
+            // the tell: the mark hangs around twice as long and the bob is
+            // half the rate, so this reads as deeper sleep rather than as a
+            // different character.
+            //
+            // A pilot light rather than `out`. The fire is banked, not gone:
+            // there is still a queue, and it is coming back.
+            return SpriteStyle(eyes: .shut,
+                               marks: [.zzz, .zzz, .zzz, .zzz, .zzz, .zzz, .none, .none],
+                               health: .neutral,
+                               bob: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+                               breath: .pilot)
+        case .stirring:
+            // One eye open, because something you parked is about to come
+            // back. `glance` is the sideways look the nudging mood uses, and
+            // it is exactly right here for a different reason: he is not
+            // looking at you, he is looking at the thing that is about to
+            // land.
+            return SpriteStyle(eyes: .glance, marks: [.zzz, .none, .none, .none],
+                               health: .running,
+                               bob: [0, 0, 1, 1],
+                               breath: .pilot)
         case .idle:
             // The one mood with a longer cycle than it strictly needs: the
             // sweep runs off the frame counter, so a one-frame bob would hold
@@ -299,7 +347,7 @@ public enum Mood: String, CaseIterable, Sendable {
     /// exactly when the empty-state mascot is the one on screen.
     public var reachableWhenListEmpty: Bool {
         switch self {
-        case .asleep, .working, .proud, .lost: return true
+        case .asleep, .dozing, .stirring, .working, .proud, .lost: return true
         case .idle, .nudging, .alarmed: return false
         }
     }

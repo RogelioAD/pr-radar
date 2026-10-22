@@ -951,13 +951,38 @@ badge can never disagree:
 
 | What's happening | The character |
 |---|---|
-| Nothing waiting, nothing in flight | asleep, with a `Z` |
+| Nothing waiting, nothing in flight | asleep, green, with a `Z` |
+| Nothing waiting because you [snoozed](#snoozing) it | dozing — grey, slower, pilot light |
+| Something you parked is about to come back | stirring, one eye open |
 | Reviews waiting, all under a day | eyes open, blue |
 | Something 1–3 days old | side-eye, amber `!` |
 | Something over 3 days | wide-eyed, red `!` |
 | A fetch in flight | eyes down, scanning |
 | One of your PRs is mergeable | green, with a spark |
 | Can't reach GitHub | dead-eyed, grey `?` |
+
+**Done and deferred are not the same thing**, and for a while the character
+said they were. The count it reads is the *waking* one, so snoozing six put him
+to sleep exactly as finishing six did — accidentally charming, and a small lie
+told in the one place that is on screen all day.
+
+So a parked queue gets its own state. Three tells, and each is doing a job:
+
+- **Grey, not green.** Green is the colour of a queue you cleared. Grey is the
+  honest one for a queue you put down — nothing is wrong, and nothing has been
+  dealt with either.
+- **Slower.** The `Z` hangs around twice as long and the bob runs at half the
+  rate, so it reads as deeper sleep rather than as a different character.
+- **A pilot light rather than nothing.** On the one character whose tell is the
+  length of his fire, asleep is out and dozing is banked: there is still a
+  queue, and it is coming back.
+
+And five minutes before the first one wakes he **stirs** — one eye open, the
+sideways glance the nudging mood uses, for a different reason here. He is not
+looking at you. He is looking at the thing that is about to land.
+
+A pull request of yours being ready to merge still outranks both. That is about
+your own work and has nothing to do with what you parked.
 
 On the badge it also reacts to being touched: it wakes on hover, holds on while
 you drag it, and startles once when a new review arrives.
@@ -989,6 +1014,30 @@ Some details that took a while to get right, and are worth not undoing:
   lag rather than calm. Blinking is scheduled in seconds rather than frames, so
   the slower surface does not blink three times less often. Reduce Motion pins
   both to a single frame.
+
+---
+
+### The parade
+
+Type **↑↑↓↓←→←→BA** into the open drawer and the whole cast walks across it,
+once, and then they are gone.
+
+It is good for nothing whatsoever. It exists because this app draws twelve
+hand-authored characters and shows you one at a time, and a line of all of them
+is the thing the art has been owed since the second shelf went in.
+
+- **Each one wears a different mood**, cycled through the roster. The line is
+  the only place the whole expression range is on screen at once, and twelve
+  identical idles would waste it.
+- **They bob out of step.** In lockstep a dozen characters read as one object
+  sliding past.
+- **It does not take clicks**, and it keeps off the footer. A parade that
+  stopped you working would be a prank rather than a joke.
+- **The watcher observes rather than consumes.** Up and down still move the
+  selection while they are being counted — a sequence that swallowed the keys
+  it was watching would break the list for anybody who pressed up twice.
+- **A repeated first key restarts rather than resets.** Three ups is what you
+  get when somebody holds the key down, and it must not throw the attempt away.
 
 ---
 

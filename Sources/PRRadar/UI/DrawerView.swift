@@ -117,6 +117,13 @@ struct DrawerView: View {
         }
         .frame(width: state.drawerWidth)
         .background(.regularMaterial)
+        // Before the clip, so they walk off the rounded corners rather than
+        // past them.
+        .overlay {
+            if state.parading {
+                ParadeView(width: state.drawerWidth) { state.parading = false }
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)

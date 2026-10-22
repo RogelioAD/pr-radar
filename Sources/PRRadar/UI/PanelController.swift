@@ -457,6 +457,8 @@ final class PanelController {
         removeKeyMonitor()
         // The keyboard's place in a list is not something to come back to.
         state.selection.clear()
+        state.konami.reset()
+        state.parading = false
         // The character may have been switched in the header while the drawer
         // was open, so the badge it is folding back into is not necessarily the
         // size it was when it unfolded.
@@ -1102,6 +1104,9 @@ final class PanelController {
             if self.panel.firstResponder is NSTextView { return event }
 
             let flags = event.modifierFlags
+            // Watched before it is interpreted, and never swallowed here.
+            if !flags.contains(.command) { self.state.noticeKey(event.keyCode) }
+
             guard let command = KeyCommand.from(
                 characters: event.charactersIgnoringModifiers ?? "",
                 keyCode: event.keyCode,

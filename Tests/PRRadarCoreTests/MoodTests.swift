@@ -7,9 +7,12 @@ final class MoodTests: XCTestCase {
                       worst: Staleness = .fresh,
                       ready: Int = 0,
                       refreshing: Bool = false,
-                      problem: Bool = false) -> Mood {
+                      problem: Bool = false,
+                      snoozed: Int = 0,
+                      wakingSoon: Bool = false) -> Mood {
         Mood.of(reviews: reviews, worst: worst, readyToMerge: ready,
-                isRefreshing: refreshing, hasProblem: problem)
+                isRefreshing: refreshing, hasProblem: problem,
+                snoozed: snoozed, wakingSoon: wakingSoon)
     }
 
     /// Nothing else on screen can be trusted while the token is broken, so a
@@ -51,22 +54,75 @@ final class MoodTests: XCTestCase {
         XCTAssertEqual(Mood.alarmed.style.health, Staleness.stale.health)
     }
 
-    /// Exactly the four the empty-state mascot can ever be asked to draw.
-    func testOnlyFourMoodsAreReachableWithAnEmptyList() {
+    /// Exactly the six the empty-state mascot can ever be asked to draw.
+    func testOnlySixMoodsAreReachableWithAnEmptyList() {
         let reachable = Mood.allCases.filter(\.reachableWhenListEmpty)
-        XCTAssertEqual(Set(reachable), [.asleep, .working, .proud, .lost])
+        XCTAssertEqual(Set(reachable),
+                       [.asleep, .dozing, .stirring, .working, .proud, .lost])
 
         // And the claim is true of the derivation, not just the flag.
         for refreshing in [true, false] {
             for problem in [true, false] {
                 for ready in [0, 2] {
-                    let result = mood(reviews: 0, ready: ready,
-                                      refreshing: refreshing, problem: problem)
-                    XCTAssertTrue(result.reachableWhenListEmpty,
-                                  "\(result) came out of an empty list but is marked unreachable")
+                    for snoozed in [0, 3] {
+                        for waking in [true, false] {
+                            let result = mood(reviews: 0, ready: ready,
+                                              refreshing: refreshing, problem: problem,
+                                              snoozed: snoozed, wakingSoon: waking)
+                            XCTAssertTrue(result.reachableWhenListEmpty,
+                                          "\(result) came out of an empty list "
+                                          + "but is marked unreachable")
+                        }
+                    }
                 }
             }
         }
+    }
+
+    // MARK: - Done, and deferred
+
+    /// The one this was built for: `reviews` is the *waking* count, so
+    /// snoozing six put the character to sleep exactly as finishing six did.
+    func testAParkedQueueDozesRatherThanSleeping() {
+        XCTAssertEqual(mood(reviews: 0, snoozed: 0), .asleep)
+        XCTAssertEqual(mood(reviews: 0, snoozed: 6), .dozing)
+    }
+
+    /// Grey, not green. Green is the colour of a queue you cleared.
+    func testDozingIsNotPaintedAsDone() {
+        XCTAssertEqual(Mood.asleep.style.health, .good)
+        XCTAssertEqual(Mood.dozing.style.health, .neutral)
+    }
+
+    func testSomethingAboutToWakeStirsHim() {
+        XCTAssertEqual(mood(reviews: 0, snoozed: 2, wakingSoon: true), .stirring)
+        XCTAssertEqual(mood(reviews: 0, snoozed: 2, wakingSoon: false), .dozing)
+    }
+
+    /// Nothing is parked, so there is nothing to stir for — a stray flag
+    /// cannot conjure a mood out of an empty queue.
+    func testStirringNeedsSomethingParked() {
+        XCTAssertEqual(mood(reviews: 0, snoozed: 0, wakingSoon: true), .asleep)
+    }
+
+    /// Your own work being ready has nothing to do with what you parked.
+    func testProudStillBeatsBothOfThem() {
+        XCTAssertEqual(mood(reviews: 0, ready: 2, snoozed: 6), .proud)
+        XCTAssertEqual(mood(reviews: 0, ready: 2, snoozed: 6, wakingSoon: true), .proud)
+    }
+
+    /// And a real review outranks every parked one: something is waiting now.
+    func testAnythingWakingBeatsADozenParked() {
+        XCTAssertEqual(mood(reviews: 1, snoozed: 12), .idle)
+    }
+
+    /// Deeper sleep rather than a different character: the mark hangs around
+    /// twice as long and the bob runs at half the rate.
+    func testDozingIsSlowerThanSleeping() {
+        XCTAssertGreaterThan(Mood.dozing.style.marks.count,
+                             Mood.asleep.style.marks.count)
+        XCTAssertGreaterThan(Mood.dozing.style.bob.count,
+                             Mood.asleep.style.bob.count)
     }
 
     func testEveryStyleHasFramesToCycle() {
