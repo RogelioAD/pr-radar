@@ -97,6 +97,73 @@ final class AppState: ObservableObject {
         didSet { Prefs.reviewFilter = reviewFilter }
     }
 
+    /// Which row the keyboard is on. See `Selection`.
+    ///
+    /// Not persisted and not shared with the pointer: hovering a row does not
+    /// move it, and it does not survive the drawer closing. It is where the
+    /// keyboard is looking right now, which is not a preference and not a
+    /// fact about the work.
+    @Published var selection = Selection()
+
+    /// The ids the selection steps through, in the order they are drawn.
+    var selectableIDs: [String] {
+        switch selectedTab {
+        case .reviews: return displayedItems.map(\.id)
+        case .mine: return displayedMyPRs.map(\.id)
+        }
+    }
+
+    /// The review request the selection is on, if the Reviews tab is showing.
+    var selectedItem: ReviewItem? {
+        guard selectedTab == .reviews, let id = selection.id else { return nil }
+        return displayedItems.first { $0.id == id }
+    }
+
+    var selectedMyPR: MyPullRequest? {
+        guard selectedTab == .mine, let id = selection.id else { return nil }
+        return displayedMyPRs.first { $0.id == id }
+    }
+
+    /// Applies one key press. Returns whether it was used, so a key the drawer
+    /// has no meaning for is left for whatever else wants it.
+    @discardableResult
+    func handle(_ command: KeyCommand) -> Bool {
+        switch command {
+        case .moveDown, .moveUp:
+            let ids = selectableIDs
+            guard !ids.isEmpty else { return false }
+            selection.move(by: command == .moveDown ? 1 : -1, in: ids)
+            return true
+        case .tab(let index):
+            guard let tab = DrawerTab.allCases.indices.contains(index)
+                    ? DrawerTab.allCases[index] : nil
+            else { return false }
+            guard tab != selectedTab else { return true }
+            selectedTab = tab
+            // The selection belongs to a list, and this is a different one.
+            selection.clear()
+            return true
+        case .snooze:
+            guard let item = selectedItem else { return false }
+            // An hour, which is the shortest of the three. A keystroke should
+            // not be able to put something down until Monday without saying
+            // so — the menu is where the longer ones are, with their names on.
+            snooze(item, until: Date().addingTimeInterval(3_600))
+            // Onto whatever took its place, so a run of them clears without
+            // the selection falling off the list.
+            selection.validate(against: selectableIDs)
+            return true
+        case .open, .collapse, .refresh:
+            // Handled by the panel, which owns the window and the browser.
+            return false
+        }
+    }
+
+    /// Review requests you have opened and not finished with. See `Opened`.
+    @Published var opened: Opened = Prefs.opened {
+        didSet { Prefs.opened = opened }
+    }
+
     /// Review requests put down until later. See `Snoozes`.
     @Published var snoozes: Snoozes = Prefs.snoozes {
         didSet { Prefs.snoozes = snoozes }
@@ -116,8 +183,22 @@ final class AppState: ObservableObject {
 
     /// Narrows **both** tabs to one repository, as `owner/name`. Shared rather
     /// than per-tab because "I'm in this repo today" is one intent, not two.
-    @Published var repoFilter: String? = Prefs.repoFilter {
+    /// Several, not one. "I'm in this repo today" was the intent the filter
+    /// was built for, and plenty of days it is three of them — with one
+    /// selection the only way to see three was to see all twelve.
+    ///
+    /// Empty means every repository, which is what nil meant before.
+    @Published var repoFilter: Set<String> = Prefs.repoFilter {
         didSet { Prefs.repoFilter = repoFilter }
+    }
+
+    /// Adds or removes one repository from the scope.
+    func toggleRepo(_ repo: String) {
+        if repoFilter.contains(repo) {
+            repoFilter.remove(repo)
+        } else {
+            repoFilter.insert(repo)
+        }
     }
 
     /// Narrows **both** tabs to one account, by `host/login`. nil means all of
@@ -1051,6 +1132,14 @@ final class AppState: ObservableObject {
         snoozes.snooze(item.pingKey, until: wake)
     }
 
+    /// Records that a row was opened. Called from the one place that opens
+    /// one, so there is no second path that could forget to.
+    func markOpened(_ item: ReviewItem) {
+        var updated = opened
+        updated.open(item.pingKey, at: Date())
+        if updated != opened { opened = updated }
+    }
+
     func wake(_ item: ReviewItem) {
         snoozes.wake(item.pingKey)
         // Nothing left to look at, so stop looking at it. The same rule the
@@ -1066,10 +1155,18 @@ final class AppState: ObservableObject {
     /// then only the expired half runs — pruning against a partial list would
     /// quietly wake every row belonging to the account that was unreachable.
     func pruneSnoozes(complete: Bool) {
+        let known = complete ? Set(items.map(\.pingKey)) : nil
         var pruned = snoozes
-        pruned.prune(known: complete ? Set(items.map(\.pingKey)) : nil, now: clock)
+        pruned.prune(known: known, now: clock)
         if pruned != snoozes { snoozes = pruned }
         if showingSnoozed && snoozedItems.isEmpty { showingSnoozed = false }
+
+        // Same round, same rule. A pull request that has left the fetch has
+        // been reviewed, merged or closed, and there is nothing left to
+        // remember about having opened it.
+        var stillOpen = opened
+        stillOpen.prune(known: known)
+        if stillOpen != opened { opened = stillOpen }
     }
 
     /// The My PRs list as the drawer actually lays it out: lone PRs and stack
@@ -1194,9 +1291,16 @@ final class AppState: ObservableObject {
     /// ways to invalidate it — a refresh, and an account switch — and a rule
     /// with two triggers and one implementation cannot drift between them.
     func dropStaleRepoFilter() {
-        guard let repo = repoFilter else { return }
-        let counts = repoCount(repo)
-        if counts.reviews == 0 && counts.mine == 0 { repoFilter = nil }
+        guard !repoFilter.isEmpty else { return }
+        let live = repoFilter.filter { repo in
+            let counts = repoCount(repo)
+            return counts.reviews > 0 || counts.mine > 0
+        }
+        // Name by name. With three repositories picked and one of them
+        // finished, the other two are still exactly what was asked for, and
+        // clearing the whole scope because part of it went stale would throw
+        // away a choice that is still good.
+        if live != repoFilter { repoFilter = live }
     }
 
     /// The account to name on a row, or nil when naming it would be noise:
@@ -1212,10 +1316,17 @@ final class AppState: ObservableObject {
 
     static func shortRepoName(_ repo: String) -> String { RepoScope.shortName(repo) }
 
-    var isRepoFiltered: Bool { repoFilter != nil }
+    var isRepoFiltered: Bool { !repoFilter.isEmpty }
     var isFiltered: Bool { authorFilter != nil }
     var isReviewFiltered: Bool { effectiveReviewFilter != .all }
     var isMyPRFiltered: Bool { effectiveMyPRFilter != .all || myPRStackedOnly }
+
+    /// Reviewers holding more than one of your pull requests. See `ReviewerLoad`.
+    ///
+    /// Built from the scoped list rather than all of them, so it agrees with
+    /// the rows underneath it — a roll-up over work a repo filter is hiding
+    /// would be a line about pull requests that are not on screen.
+    var reviewerLoads: [ReviewerLoad] { ReviewerLoad.build(from: scopedMyPRs) }
 
     /// Whether any PR belongs to a repo with leads configured.
     var hasLeadGate: Bool { myPRs.contains(where: \.hasLeadGate) }

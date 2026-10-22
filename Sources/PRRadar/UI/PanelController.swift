@@ -11,6 +11,11 @@ final class PanelController {
     private let state: AppState
     private var hostingView: DraggableHostingView<RootView>!
     private var outsideClickMonitor: Any?
+    /// Live only while the drawer is open. A **local** monitor, which sees
+    /// only this process's events and needs no permission — the global one
+    /// beside it watches mouse-downs, which is allowed; watching keystrokes
+    /// globally is not, and is not wanted.
+    private var keyMonitor: Any?
     private var activationObservers: [Any] = []
 
     /// Source of truth for position: the badge's rect in screen coordinates.
@@ -417,6 +422,7 @@ final class PanelController {
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         installOutsideClickMonitor()
+        installKeyMonitor()
         animate(to: targetFrame(), curve: .easeOut) { [weak self] in
             guard let self else { return }
             // Hover is live only in the key window of an active app, so these
@@ -448,6 +454,9 @@ final class PanelController {
         // out of it does, so the dots do not survive to a second opening.
         if state.room == .trophies { state.endTrophyVisit() }
         removeOutsideClickMonitor()
+        removeKeyMonitor()
+        // The keyboard's place in a list is not something to come back to.
+        state.selection.clear()
         // The character may have been switched in the header while the drawer
         // was open, so the badge it is folding back into is not necessarily the
         // size it was when it unfolded.
@@ -1073,6 +1082,69 @@ final class PanelController {
     }
 
     // MARK: - Click outside
+
+    // MARK: - Keys
+
+    /// What the arrow keys, Return and `S` do while the drawer is open.
+    ///
+    /// A local monitor rather than `keyDown` on the hosting view. The drawer
+    /// is a SwiftUI tree full of buttons and text fields, and whichever of
+    /// them happens to hold focus would otherwise swallow the arrows — the
+    /// "other" box on an auto-review row is a `TextField`, and typing a
+    /// sentence into it must not step the selection.
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
+            [weak self] event in
+            guard let self, self.state.expanded else { return event }
+            // A field with focus owns every key it can use. The selection is
+            // for stepping a list, never for competing with somebody typing.
+            if self.panel.firstResponder is NSTextView { return event }
+
+            let flags = event.modifierFlags
+            guard let command = KeyCommand.from(
+                characters: event.charactersIgnoringModifiers ?? "",
+                keyCode: event.keyCode,
+                hasCommand: flags.contains(.command),
+                hasOption: flags.contains(.option),
+                hasControl: flags.contains(.control))
+            else { return event }
+
+            // Returning nil swallows the event, which is only right for keys
+            // the drawer actually used — anything else is still the app's.
+            return self.perform(command) ? nil : event
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
+    }
+
+    /// The three commands that need the window or the browser; the rest are
+    /// the state's own business.
+    private func perform(_ command: KeyCommand) -> Bool {
+        switch command {
+        case .collapse:
+            setExpanded(false)
+            return true
+        case .refresh:
+            onRefresh()
+            return true
+        case .open:
+            if let item = state.selectedItem {
+                onOpen(item)
+                return true
+            }
+            if let mine = state.selectedMyPR {
+                onOpenMyPR(mine)
+                return true
+            }
+            return false
+        default:
+            return state.handle(command)
+        }
+    }
 
     private func installOutsideClickMonitor() {
         guard outsideClickMonitor == nil else { return }

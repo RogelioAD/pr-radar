@@ -69,9 +69,19 @@ struct TabStripView: View {
 
     /// Reads `shown/total` while a filter is hiding rows, so the tab never
     /// claims a count the list below it is not showing.
+    ///
+    /// Counts pull requests, not the drawer's stops. Those were the same
+    /// number for as long as every stop was a row, and `rowCount` stood in for
+    /// this — but a stop is now also a comment inside an opened row and the
+    /// reviewer roll-up above the list, and a tab reading `7/1` over one pull
+    /// request with six comments open would be counting the wrong thing
+    /// entirely.
     private func countLabel(for tab: DrawerTab) -> String {
         let total = total(for: tab)
-        let shown = state.rowCount(for: DrawerSurface(tab))
+        let shown = switch tab {
+        case .reviews: state.displayedItems.count
+        case .mine: state.displayedMyPRs.count
+        }
         return shown == total ? "\(total)" : "\(shown)/\(total)"
     }
 

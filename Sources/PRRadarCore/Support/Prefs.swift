@@ -16,6 +16,8 @@ public enum Prefs {
         static let sortOrder = "list.sortOrder"
         static let reviewFilter = "list.reviewFilter"
         static let snoozes = "list.snoozes"
+        static let opened = "list.opened"
+        static let hotKey = "hotkey.chord"
         static let drawerContentHeight = "drawer.contentHeight"
         static let selectedTab = "drawer.selectedTab"
         static let myPRSortOrder = "mine.sortOrder"
@@ -109,6 +111,26 @@ public enum Prefs {
         set { defaults.set(newValue.encoded(), forKey: Key.snoozes) }
     }
 
+    /// Review requests you have opened and not yet dealt with. See `Opened`.
+    public static var opened: Opened {
+        get { Opened.decoded(from: defaults.data(forKey: Key.opened)) }
+        set { defaults.set(newValue.encoded(), forKey: Key.opened) }
+    }
+
+    /// The system-wide chord that opens the drawer, as `opt+shift+r`.
+    ///
+    /// Defaults alone, with no UI, like `celebrate.cleared` beside it. A
+    /// shortcut recorder is a real piece of work and this is one string; what
+    /// it is for is settling a clash with something else you run, which is a
+    /// thing you do once.
+    public static var hotKey: String? {
+        get { defaults.string(forKey: Key.hotKey) }
+        set {
+            if let newValue { defaults.set(newValue, forKey: Key.hotKey) }
+            else { defaults.removeObject(forKey: Key.hotKey) }
+        }
+    }
+
     /// Which triage filter the Reviews tab is narrowed by.
     ///
     /// Persisted, where the author filter is not. The two are not the same
@@ -134,13 +156,23 @@ public enum Prefs {
     /// today" outlives a restart. The empty-drawer risk that keeps the author
     /// filter session-only is handled by validating it on every refresh and
     /// dropping it when it matches nothing.
-    public static var repoFilter: String? {
-        get { defaults.string(forKey: Key.repoFilter) }
+    /// Stored as an array, and still readable as the single string it used to
+    /// be. Somebody upgrading has one repository in this key as a bare string,
+    /// and `stringArray(forKey:)` returns nil for that — so the scope would
+    /// silently widen to everything on the first launch after an update.
+    public static var repoFilter: Set<String> {
+        get {
+            if let many = defaults.stringArray(forKey: Key.repoFilter) {
+                return Set(many)
+            }
+            if let one = defaults.string(forKey: Key.repoFilter) { return [one] }
+            return []
+        }
         set {
-            if let newValue {
-                defaults.set(newValue, forKey: Key.repoFilter)
-            } else {
+            if newValue.isEmpty {
                 defaults.removeObject(forKey: Key.repoFilter)
+            } else {
+                defaults.set(newValue.sorted(), forKey: Key.repoFilter)
             }
         }
     }

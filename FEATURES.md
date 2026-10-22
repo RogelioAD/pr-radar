@@ -213,6 +213,33 @@ dealt with the pull request; here it stops a review you did not read the code
 for from anchoring a diff labelled *since your review*. It went out under your
 name, but the sentence would not be true.
 
+### That you started it
+
+Snoozing gave the list a way to say *not now*. There was never one for *I am on
+it*: you open a pull request, read four hundred lines, get pulled into
+something else, and the row you come back to is identical to one you have never
+touched.
+
+So opening a row records that it happened, and the row says **`opened 3d ago`**
+until it is dealt with. It is deliberately the weakest claim the app can make —
+that you opened the thing, never that you read it or got anywhere — because
+that is the only part it actually witnessed.
+
+- **The earliest open is the one kept.** Opening it a fourth time is not a
+  fresh start; the interesting number is how long this has been going on, and
+  keeping the latest would reset the clock exactly when it has most to say.
+- **A day, not three.** The two clocks either side of this one use the
+  staleness ladder, which turns amber after a day and red after three. This
+  measures a thing you started and did not finish, where an afternoon is
+  ordinary and a day is already worth a word.
+- **There is no expiry**, where the snooze has one. A snooze is a promise about
+  a time and goes stale on its own; this stays true until the pull request is
+  dealt with — and being dealt with is exactly what takes it out of the fetch.
+- **`Not mine` clears it.** The record can be wrong in one direction: you
+  opened it, decided it was not yours, and said so somewhere this app cannot
+  see. Nothing else would clear it short of reviewing a pull request you are
+  not going to review.
+
 ### What counts as waiting on you
 
 Both `review-requested:@me` and `team-review-requested:` for every team you
@@ -450,6 +477,29 @@ them truncates the words that make them worth reading, and letting the line
 overflow pushed whatever sat to its right — the stack marker — out past the
 row's edge, where it was clipped away entirely.
 
+### Who is sitting on your work
+
+The waiting clock above is per row, which is the right place for it and the
+wrong place to notice the thing that matters: **four of your six pull requests
+waiting on the same reviewer is one conversation, not four.** A list of rows
+never says so — you read it four times and go on waiting.
+
+So above the list, when somebody holds more than one: **`alice has 4 of yours ·
+oldest 6d`**. Nothing is fetched for it; it is a group-by over the outstanding
+reviewers the tab already has.
+
+- **More than one is the whole point.** A reviewer holding exactly one of yours
+  is already completely described by that row's own chip, and repeating it
+  above the list would be the drawer saying the same thing twice in two sizes.
+- **Sorted by how long, not how many.** Two pull requests sat with somebody for
+  a week is a worse state of affairs than four they were handed this morning. A
+  reviewer whose ask times are unknown sorts last, because not knowing is not a
+  small number.
+- **It counts that reviewer's own oldest ask**, not the row's headline. The row
+  reports whoever has had it longest, and that is somebody else's clock.
+- **It is scoped like the rows under it.** A roll-up over work the repository
+  filter is hiding would be a line about pull requests that are not on screen.
+
 ### The three bands
 
 A row's chips are drawn in three groups, with a wider gap between groups than
@@ -592,17 +642,101 @@ one repo. The menu lists every repo appearing in *either* tab, with counts for
 both (`acme/widgets-web — 2 review, 1 mine`), so it is obvious what
 picking one will show.
 
+**Pick as many as you like.** "I'm in this repo today" was the intent it was
+built for, and plenty of days that is three of them — with one selection the
+only way to see three was to see all twelve. Each entry toggles its own
+repository, so picking a second widens the scope rather than replacing it. The
+pill names one and counts several: `widgets-web`, then `3 repos`. Naming two
+would not fit, and naming the first with a `+2` after it reads as though the
+first one were the important one.
+
+Nothing ticked is the same state as **All repos**. A scope that could be
+narrowed to nothing would be an empty drawer with no filter visibly set.
+
+It is validated name by name rather than all at once: with three repositories
+picked and one of them finished, the other two are still exactly what you asked
+for, and clearing the whole scope because part of it went stale would throw
+away a choice that is still good. The stored value reads back as either a list
+or the single string it used to be, so an upgrade does not silently widen the
+scope on first launch.
+
 It is shared rather than per-tab because "I'm in this repo today" is one
-intent, not two. It is also the one filter that persists across restarts —
-which is safe because it is re-validated on every refresh and dropped if it
-matches nothing, rather than leaving you with two empty drawers and no obvious
-cause.
+intent, not two. It also persists across restarts — which is safe because it is
+re-validated on every refresh, rather than leaving you with two empty drawers
+and no obvious cause.
 
 While any filter is hiding rows, the tab reads `shown/total` — `My PRs 1/2` —
 so a tab never claims a count the list below it isn't showing.
 
 The author menu is also scoped by it, so it never offers you someone the repo
 filter has already excluded.
+
+---
+
+## The keyboard
+
+For a long time there was none. Every way into this app went through the
+pointer — find a 48-pixel badge that may be behind a window, click it, click a
+row — and the parts of this document that talk about reaching things talk about
+cursor shapes and hit targets and nothing else.
+
+**⌥⇧R opens the drawer from anywhere**, and closes it again. A shortcut that
+only opened would leave you reaching for the mouse to put it away, which is the
+thing it was pressed to avoid.
+
+It is registered through Carbon's `RegisterEventHotKey`, which is the part of
+Carbon macOS has never replaced and never removed. The modern-looking
+alternative — a global `NSEvent` key monitor — needs **Accessibility**
+permission, because it is a keylogger with a narrow filter and the system
+rightly treats it as one. This app already refuses Screen Recording for the
+sake of an icon colour; asking to watch every keystroke on the machine so a
+panel can open would be a far worse bargain. `RegisterEventHotKey` asks the
+window server for one chord and gets no prompt, because it is asking for
+almost nothing.
+
+A chord another app already holds fails at registration rather than silently
+never firing, so the log says so. Pick a different one without a rebuild:
+
+```sh
+defaults write com.yourname.prradar hotkey.chord -string "cmd+ctrl+p"
+```
+
+A bare letter is refused: registered system-wide it would swallow that key in
+every app on the machine.
+
+### Once it is open
+
+| Key | What it does |
+|---|---|
+| `↑` `↓`, or `k` `j` | move between rows |
+| `Return` | open the selected pull request |
+| `S` | snooze the selected review request for an hour |
+| `Esc` | close the drawer |
+| `⌘1` `⌘2` | Reviews, My PRs |
+| `⌘R` | refresh |
+
+The selection is a ring rather than a fill, so it sits over the hover
+highlight instead of fighting it — the pointer and the keyboard can be on two
+different rows at once and both have to stay legible.
+
+Some details that had to be decided:
+
+- **It is held as a row id, not an index.** A pull request arriving above the
+  selected row on the sixty-second poll would otherwise slide the selection
+  onto its neighbour, and `Return` would open something you were not looking
+  at.
+- **It stops at the ends rather than wrapping.** A list you are stepping
+  through to clear is one you want to reach the bottom of and know it.
+- **`S` is always an hour**, where the menu offers three lengths. A single
+  keystroke should not be able to put something down until Monday without
+  saying so; the longer ones keep their names on them.
+- **A modifier held over a letter is not ours.** Only the tab switches and
+  refresh are chords, so the drawer cannot eat `⌘Q`.
+- **A text field owns every key it can use.** The "other" box on an
+  auto-review row is a real field, and typing a sentence into it must not step
+  the selection.
+- **The selection does not survive the drawer closing.** Where the keyboard
+  was looking is not a preference and not a fact about the work.
 
 ---
 
@@ -1261,6 +1395,19 @@ as two separate things to read.
 
 ### Conflicts, counted but not fixed
 
+Either way the row will also **write the command down for you** — right-click
+for `Copy Rebase Command`, or `Copy Resolve Command` where it conflicts, which
+puts you on the branch first. Rebasing from the widget is still not offered and
+the reasons still stand; none of them is an argument for making you *type* it.
+The annoying half of "go and rebase it" is getting a branch name with four
+slashes in it right, and that half is pure transcription. It copies; it never
+runs.
+
+It is `git fetch` then `git rebase` rather than `git pull --rebase`, because
+pull's behaviour depends on `pull.rebase`, `pull.ff` and the branch's own
+upstream — the same line does different things in different checkouts, and
+these two do not.
+
 A branch that **conflicts** gets a chip, not a button: **conflicts · N files**.
 Fixing one needs a checkout, and PR Radar does not have one to offer any more —
 see *Resolve, and why it is gone* below. The merge is yours to do; the row's job
@@ -1368,6 +1515,16 @@ request timestamp.
 On first launch the seen-list is seeded silently rather than firing a burst of
 notifications for a backlog you already know about.
 
+A review request's banner carries **Open PR** and **Snooze 1 hour**. Dismissing
+a notification is the one response that leaves no trace anywhere, and it is the
+one people reach for when a ping lands mid-focus — so the other thing you might
+want to do about it is offered where it arrives. Snooze does not bring the app
+forward, because not being interrupted is the point of pressing it.
+
+The ping key rides along in the notification rather than the url alone: a
+re-request is the same pull request at the same address and a different ping,
+and snoozing by url would silence the new one with the old one's key.
+
 ### Comments on your own PRs
 
 The My PRs row has always carried a count — `3 open` — and a count answers "is
@@ -1438,6 +1595,19 @@ Things left out on purpose, and why:
   rollup's one-word verdict and stops there. Naming which check failed on
   somebody else's pull request would cost a hundred context nodes per row per
   team alias, to answer a question you ask by opening the thing.
+- **No Accessibility permission for the keyboard.** A global key monitor would
+  have made the shortcut configurable in-app and recordable with a click. It
+  also would have meant watching every keystroke on the machine, which is not
+  a trade this app makes for a convenience. Carbon's one-chord registration
+  costs a defaults string instead.
+- **No shortcut recorder.** The chord is a defaults key with no UI, like
+  `celebrate.cleared`. A recorder is a real piece of work; what it would be
+  for is settling a clash with something else you run, which is a thing you do
+  once.
+- **No per-reviewer nudge.** The roll-up says who is sitting on four of yours
+  and stops there. Messaging them from a floating panel is a different app,
+  and the useful half — noticing it is one conversation — is the half that was
+  missing.
 - **Snoozing does not notify when a row wakes.** It reappears in the list and
   the badge, which is what the badge is for. A notification for a thing you
   already knew was coming back, at a time you chose, is the app congratulating

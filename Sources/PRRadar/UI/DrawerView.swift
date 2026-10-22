@@ -720,10 +720,12 @@ struct DrawerView: View {
                     detail: "Clear the filter to see the other \(state.count).",
                     symbol: "line.3.horizontal.decrease.circle")
         } else {
+            ScrollViewReader { scroller in
             ScrollView {
                 VStack(spacing: Layout.rowSpacing) {
                     ForEach(items) { item in
                         RowView(item: item, now: state.clock,
+                                isSelected: state.selection.id == item.id,
                                 accountLabel: state.accountLabel(for: item.account),
                                 review: state.review(for: item),
                                 waiting: AutoReviewQueue.waiting(for: item.pingKey,
@@ -741,6 +743,14 @@ struct DrawerView: View {
                                 onSnooze: { state.snooze(item, until: $0) },
                                 onWake: state.showingSnoozed ? { state.wake(item) } : nil,
                                 wakesAt: state.wakeTime(for: item),
+                                openedLabel: state.opened.label(for: item.pingKey,
+                                                                now: state.clock),
+                                openedHealth: state.opened.health(for: item.pingKey,
+                                                                  now: state.clock),
+                                openedHelp: state.opened.help(for: item.pingKey,
+                                                              now: state.clock),
+                                onForgetOpened: state.opened.wasOpened(item.pingKey)
+                                    ? { state.opened.forget(item.pingKey) } : nil,
                                 lensReading: { state.lensReading(for: $0) },
                                 rowKey: state.rowKey(.reviews, item.id)) {
                             onOpen(item)
@@ -752,7 +762,47 @@ struct DrawerView: View {
             }
             .onPreferenceChange(RowHeightsKey.self, perform: onRowHeights)
             .onPreferenceChange(RowCutsKey.self, perform: onRowCuts)
+            // Keeping the keyboard's row on screen. The drawer fits its whole
+            // list by default, so this only does anything once the list is
+            // taller than the screen or has been dragged shorter — which is
+            // exactly when stepping off the bottom would otherwise look like
+            // the arrow keys having stopped working.
+            .onChange(of: state.selection.id) { _, id in
+                guard let id else { return }
+                withAnimation(.easeOut(duration: 0.12)) {
+                    scroller.scrollTo(id, anchor: .center)
+                }
+            }
+            }
         }
+    }
+
+    /// Who is sitting on more than one of your pull requests.
+    ///
+    /// One chip each, wrapping like any other band. It reads as a row of the
+    /// list rather than as a header, because a header would need a word
+    /// telling you what it is and these chips say it themselves.
+    private var reviewerLoadBand: some View {
+        ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
+            ForEach(state.reviewerLoads) { load in
+                Chip(text: [load.label, load.ageLabel(now: state.clock)]
+                        .compactMap { $0 }.joined(separator: " · "),
+                     symbol: "person.badge.clock",
+                     health: load.health(now: state.clock))
+                    .help(load.help(now: state.clock))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            GeometryReader { geometry in
+                Color.clear.preference(
+                    key: RowHeightsKey.self,
+                    value: [RowHeightKeys.key(surface: .mine,
+                                              id: "reviewer-load"): geometry.size.height])
+            }
+        )
     }
 
     @ViewBuilder
@@ -770,10 +820,17 @@ struct DrawerView: View {
         } else {
             ScrollView {
                 VStack(spacing: Layout.rowSpacing) {
+                    // Above the rows, because it is about all of them. Inside
+                    // the ScrollView rather than pinned over it: it is a fact
+                    // about the list, and a list you have scrolled down is a
+                    // list you are no longer reading the top of.
+                    if !state.reviewerLoads.isEmpty { reviewerLoadBand }
+
                     ForEach(state.displayedMyPRUnits) { unit in
                         switch unit {
                         case .single(let item):
                             MyPRRowView(item: item, now: state.clock,
+                                        isSelected: state.selection.id == item.id,
                                         accountLabel: state.accountLabel(for: item.account),
                                         onOpen: { onOpenMyPR(item) },
                                         width: state.listContentWidth,
@@ -981,7 +1038,7 @@ struct ReviewFilterBar: View {
             if state.isFiltered || state.isRepoFiltered || state.isReviewFiltered {
                 Button {
                     state.authorFilter = nil
-                    state.repoFilter = nil
+                    state.repoFilter = []
                     state.reviewFilter = .all
                 } label: {
                     Image(systemName: "xmark.circle.fill")

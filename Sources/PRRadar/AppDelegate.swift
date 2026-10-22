@@ -28,6 +28,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the six-hour timer and a press can otherwise overlap, and two checks
     /// racing both read the old `notifiedUpdate` and both notify.
     private var isCheckingForUpdate = false
+    /// The system-wide shortcut that opens the drawer. Held for the life of
+    /// the app: released, it unregisters itself.
+    private var hotKey: HotKey?
 
     /// Discovered once per launch and reused for every poll.
     /// Viewer login and teams per account id. One entry per identity, because
@@ -77,6 +80,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let appearance = Log.forcedAppearance {
             NSApp.appearance = appearance
         }
+        notifier.onSnooze = { [weak self] ping in
+            guard let self else { return }
+            self.state.snoozes.snooze(ping, until: Date().addingTimeInterval(3_600))
+            Log.debug("snoozed from a notification: \(ping)")
+        }
         notifier.prepare()
         installStatusItem()
         state.onWidgetVisibilityChanged = { [weak self] in self?.panel.syncVisibility() }
@@ -87,6 +95,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         panel = PanelController(state: state)
         panel.onOpen = { [weak self] item in
+            // Recorded here rather than in the row, because this is the one
+            // place a review request is opened from — the row's tap, its
+            // context menu and a notification's Open button all arrive here.
+            self?.state.markOpened(item)
             NSWorkspace.shared.open(item.url)
             self?.panel.setExpanded(false)
         }
@@ -102,10 +114,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // off the launch path because it starts somebody else's shell.
         Task { await state.resolveClaudeFromLoginShell() }
 
+        installHotKey()
         startNetworkMonitor()
         startPolling()
         startClock()
         startUpdateChecks()
+    }
+
+    /// Registers the shortcut that opens the drawer from anywhere.
+    ///
+    /// Failure is logged and otherwise ignored. The commonest cause is another
+    /// app holding the same chord, and there is nothing useful to do about it
+    /// from here — every other way in still works, and the defaults key says
+    /// how to pick a different one.
+    private func installHotKey() {
+        let chord = HotKeyChord.parse(Prefs.hotKey) ?? HotKeyChord.default
+        hotKey = HotKey(chord: chord) { [weak self] in
+            guard let self else { return }
+            // A toggle, not an open. The shortcut's whole value is being able
+            // to glance and go back, and a key that only opens leaves you
+            // reaching for the mouse to put it away.
+            let opening = !self.state.expanded
+            self.panel.setExpanded(opening)
+            if opening {
+                // Taking key focus is what makes the arrow keys work. Without
+                // it the drawer opens behind whatever you were typing in and
+                // the keys go there instead.
+                NSApp.activate(ignoringOtherApps: true)
+                self.panel.panel.makeKeyAndOrderFront(nil)
+            }
+        }
+        Log.debug(hotKey == nil
+                  ? "hot key \(chord.display) could not be registered (already taken?)"
+                  : "hot key \(chord.display) registered")
     }
 
     /// A second copy is not a harmless spare: it restores the same saved badge
@@ -830,8 +871,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func validateRepoFilter() {
         let before = state.repoFilter
         state.dropStaleRepoFilter()
-        if before != nil, state.repoFilter == nil {
-            Log.debug("cleared stale repo filter: \(before ?? "")")
+        let dropped = before.subtracting(state.repoFilter)
+        if !dropped.isEmpty {
+            Log.debug("dropped stale repo scope: \(dropped.sorted().joined(separator: ", "))")
         }
     }
 
@@ -924,6 +966,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
+
+        // Advertised rather than left to be discovered. A system-wide shortcut
+        // nobody knows about is a shortcut nobody presses, and this menu is
+        // the one place every way into the app is already listed. Disabled,
+        // because it is a label: the chord itself is what presses it, and the
+        // menu cannot be open at the time.
+        if let hotKey {
+            let item = NSMenuItem(title: "Open the drawer with \(hotKey.chord.display)",
+                                  action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
+            menu.addItem(.separator())
+        }
 
         menu.addItem(withTitle: "Refresh now",
                      action: #selector(menuRefresh), keyEquivalent: "r").target = self

@@ -23,7 +23,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     private enum Action {
         static let open = "open"
+        static let snooze = "snooze"
     }
+
+    /// Puts a ping down for an hour. Set by the app delegate, which owns the
+    /// store; nil until it is, so a banner that somehow arrives first simply
+    /// offers nothing rather than dropping the press on the floor.
+    var onSnooze: ((String) -> Void)?
 
     func prepare() {
         guard isBundled else { return }
@@ -32,9 +38,24 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         center.setNotificationCategories([
             UNNotificationCategory(
                 identifier: Category.review,
-                actions: [UNNotificationAction(identifier: Action.open,
-                                               title: "Open PR",
-                                               options: [.foreground])],
+                actions: [
+                    UNNotificationAction(identifier: Action.open,
+                                         title: "Open PR",
+                                         options: [.foreground]),
+                    // The other half of what you can do about a review
+                    // request, offered where the request arrives. A ping that
+                    // lands mid-focus can now be dealt with from the banner
+                    // instead of being dismissed and forgotten — dismissing a
+                    // notification is the one response that leaves no trace
+                    // anywhere, and it is the one people reach for.
+                    //
+                    // No `.foreground`: putting a row down should not haul the
+                    // drawer in front of whatever you were doing. That is the
+                    // whole point of pressing it.
+                    UNNotificationAction(identifier: Action.snooze,
+                                         title: "Snooze 1 hour",
+                                         options: []),
+                ],
                 intentIdentifiers: []),
             UNNotificationCategory(
                 identifier: Category.update,
@@ -205,7 +226,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         content.title = title
         content.body = body
         content.sound = .default
-        content.userInfo = ["url": item.url.absoluteString]
+        // The ping key rides along so the Snooze button knows which request it
+        // is putting down. The url alone would not do it: a re-request is the
+        // same pull request at the same address and a different ping, and
+        // snoozing it by url would silence the new one with the old one's key.
+        content.userInfo = ["url": item.url.absoluteString, "ping": item.pingKey]
         content.categoryIdentifier = Category.review
         // One thread per repository, so a busy repo collapses into a single
         // stack in Notification Center instead of a flat run of banners.
@@ -263,8 +288,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        if let string = response.notification.request.content.userInfo["url"] as? String,
-           let url = URL(string: string) {
+        let info = response.notification.request.content.userInfo
+        if response.actionIdentifier == Action.snooze {
+            if let ping = info["ping"] as? String { onSnooze?(ping) }
+            completionHandler()
+            return
+        }
+        if let string = info["url"] as? String, let url = URL(string: string) {
             NSWorkspace.shared.open(url)
         }
         completionHandler()

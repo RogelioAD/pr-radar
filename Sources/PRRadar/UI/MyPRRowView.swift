@@ -7,6 +7,8 @@ import PRRadarCore
 struct MyPRRowView: View {
     let item: MyPullRequest
     let now: Date
+    /// Whether the keyboard is on this row. See `RowView.isSelected`.
+    var isSelected = false
     /// Which account surfaced this row, or nil when saying so would be noise.
     var accountLabel: String?
     let onOpen: () -> Void
@@ -96,6 +98,10 @@ struct MyPRRowView: View {
         .frame(width: width, alignment: .leading)
         .background(hovering ? Color.primary.opacity(0.07) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: 7))
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(Color.accentColor, lineWidth: isSelected ? 1.5 : 0)
+        )
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .draggable(PRLink(url: item.url)) {
@@ -103,6 +109,15 @@ struct MyPRRowView: View {
         }
         .contextMenu {
             Button("Open in Browser") { onOpen() }
+            Divider()
+            // What the row will not do for you, written down so you do not
+            // have to transcribe a branch name with four slashes in it. It
+            // copies; it never runs.
+            if let command = branchCommand {
+                Button("Copy \(branchCommandTitle)") { Clipboard.copy(command) }
+            }
+            Button("Copy Branch Name") { Clipboard.copy(item.headRefName) }
+            Divider()
             Button("Copy Link") { Clipboard.copy(item.url.absoluteString) }
             Button("Copy Title") { Clipboard.copy(item.title) }
         }
@@ -640,6 +655,28 @@ struct MyPRRowView: View {
                 .help("Couldn't determine whether this branch is behind "
                       + "origin/\(item.baseRefName)")
         }
+    }
+
+    /// The command this branch's state calls for, or nil when it needs none.
+    ///
+    /// A conflicted branch gets the checkout as well, because resolving one
+    /// means being on it; a branch that is merely behind does not, since
+    /// **Update base** does that on GitHub's servers without a checkout at all.
+    private var branchCommand: String? {
+        switch item.branchState {
+        case .conflicts:
+            return BranchCommand.resolve(head: item.headRefName,
+                                         base: item.baseRefName)
+        case .needsRebase:
+            return BranchCommand.rebase(onto: item.baseRefName)
+        case .upToDate, .unknown:
+            return nil
+        }
+    }
+
+    private var branchCommandTitle: String {
+        if case .conflicts = item.branchState { return "Resolve Command" }
+        return "Rebase Command"
     }
 
     /// Whether the branch chip already covers the merge blocker.

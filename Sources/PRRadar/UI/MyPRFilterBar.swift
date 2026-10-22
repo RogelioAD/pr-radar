@@ -33,7 +33,7 @@ struct MyPRFilterBar: View {
                 Button {
                     state.myPRFilter = .all
                     state.myPRStackedOnly = false
-                    state.repoFilter = nil
+                    state.repoFilter = []
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 11))
@@ -108,8 +108,8 @@ struct RepoFilterMenu: View {
 
     var body: some View {
         Menu {
-            Button { state.repoFilter = nil } label: {
-                if state.repoFilter == nil {
+            Button { state.repoFilter = [] } label: {
+                if state.repoFilter.isEmpty {
                     Label("All repos", systemImage: "checkmark")
                 } else {
                     Text("All repos")
@@ -118,10 +118,14 @@ struct RepoFilterMenu: View {
             if !state.repos.isEmpty { Divider() }
             ForEach(state.repos, id: \.self) { repo in
                 Button {
-                    // Picking the active repo again clears the filter.
-                    state.repoFilter = (state.repoFilter == repo) ? nil : repo
+                    // Each entry toggles its own repository, so picking a
+                    // second one widens the scope rather than replacing it.
+                    // Unticking the last one leaves nothing ticked, which is
+                    // the same state as All — a scope narrowed to nothing
+                    // would be an empty drawer with no filter visibly set.
+                    state.toggleRepo(repo)
                 } label: {
-                    if state.repoFilter == repo {
+                    if state.repoFilter.contains(repo) {
                         Label(label(for: repo), systemImage: "checkmark")
                     } else {
                         Text(label(for: repo))
@@ -131,7 +135,9 @@ struct RepoFilterMenu: View {
         } label: {
             FilterPill(
                 symbol: "folder",
-                text: state.repoFilter.map(AppState.shortRepoName) ?? "All repos",
+                // One repository is named, several are counted. The bar has 68
+                // points for this label and one long name already fills it.
+                text: RepoScope.label(state.repoFilter),
                 active: state.isRepoFiltered
             )
         }

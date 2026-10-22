@@ -4,6 +4,11 @@ import PRRadarCore
 struct RowView: View {
     let item: ReviewItem
     let now: Date
+    /// Whether the keyboard is on this row. Drawn as a ring rather than a
+    /// fill, so it sits over the hover highlight instead of fighting it: the
+    /// pointer and the keyboard can be on two different rows at once and both
+    /// have to stay legible.
+    var isSelected = false
     /// Which account surfaced this row, or nil when saying so would be noise.
     var accountLabel: String?
     /// Where the automatic review has got to, or nil when there has not been
@@ -41,6 +46,12 @@ struct RowView: View {
     var onWake: (() -> Void)?
     /// When this row wakes, if it is asleep.
     var wakesAt: Date?
+    /// What the row says about having been opened, or nil if it has not been.
+    var openedLabel: String?
+    var openedHealth: Health = .neutral
+    var openedHelp: String?
+    /// Forgets that it was opened, for the row that says so.
+    var onForgetOpened: (() -> Void)?
     /// The plain-English reading for a piece of text, or nil for its own words.
     ///
     /// A lookup rather than a flag and a store, so this row cannot accidentally
@@ -71,6 +82,7 @@ struct RowView: View {
         VStack(alignment: .leading, spacing: 6) {
             primary
             if let wakesAt { sleepBand(wakesAt) }
+            if let openedLabel { openedBand(openedLabel) }
             if let since = item.sinceReview { sinceBand(since) }
             if let review {
                 strip(review)
@@ -85,6 +97,10 @@ struct RowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(hovering ? Color.primary.opacity(0.07) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: 7))
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(Color.accentColor, lineWidth: isSelected ? 1.5 : 0)
+        )
         .onHover { hovering = $0 }
         .draggable(PRLink(url: item.url)) {
             Text(item.title).font(.system(size: 12)).padding(6)
@@ -274,6 +290,28 @@ struct RowView: View {
             if let onWake {
                 RowButton(title: "Wake now", symbol: "sun.max",
                           health: .running, action: onWake)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// That you started this one and did not finish.
+    ///
+    /// The weakest claim the app can make and the only one it witnessed: you
+    /// opened it. Never that you read it, never that you got anywhere.
+    @ViewBuilder
+    private func openedBand(_ label: String) -> some View {
+        ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
+            Chip(text: label, symbol: "book", health: openedHealth)
+                .help(openedHelp ?? "")
+            if let onForgetOpened {
+                // Because the record can be wrong in the one direction that
+                // matters: you opened it, decided it was not yours, and told
+                // somebody so in a channel this app cannot see. Nothing else
+                // clears it short of reviewing a pull request you are not
+                // going to review.
+                RowButton(title: "Not mine", symbol: "xmark",
+                          health: .neutral, action: onForgetOpened)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
