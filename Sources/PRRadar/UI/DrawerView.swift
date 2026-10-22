@@ -910,7 +910,8 @@ struct DrawerView: View {
                 MascotView(mascot: mascot,
                            style: state.spriteStyle,
                            scale: Layout.emptyStateMascotScale(
-                            for: mascot, backingScale: state.backingScale))
+                            for: mascot, backingScale: state.backingScale),
+                           crop: mascot.portraitCrop)
             } else {
                 Image(systemName: symbol).font(.system(size: 20)).foregroundStyle(.tertiary)
             }

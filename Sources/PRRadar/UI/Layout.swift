@@ -181,7 +181,7 @@ enum Layout {
 
     static func emptyStateMascotScale(for mascot: Mascot, backingScale: CGFloat) -> CGFloat {
         SpriteScale.snapped(targetPoints: emptyStateMascotPoints,
-                            spriteWidth: mascot.sprite.height,
+                            spriteWidth: mascot.portraitCrop ?? mascot.sprite.height,
                             backingScale: backingScale,
                             minimum: 1 / max(1, backingScale))
     }

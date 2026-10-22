@@ -346,6 +346,24 @@ public struct Mascot: Identifiable, Sendable, Equatable {
     /// Whether this one transforms at all.
     public var hasTwoForms: Bool { powered != nil }
 
+    /// What a surface showing the character *small* should draw: the head
+    /// crop for a full-length figure, and the whole thing for a bust.
+    ///
+    /// The room drew everybody whole, and that was right for as long as
+    /// everybody was a bust — a room is the one surface with space for a
+    /// whole character, and half of one is a poor way to be asked to
+    /// choose. A full-length figure breaks it: fitted into a cell sized for
+    /// a bust he is a half-inch-tall man, and what you are being asked to
+    /// recognise is a face.
+    ///
+    /// Keyed off `headBox` because that is already the declaration that a
+    /// character is full-length — it exists so the head can be found in the
+    /// middle few columns of a figure that has legs.
+    public var portraitCrop: Int? { headBox == nil ? nil : headRows }
+
+    /// The columns that crop keeps.
+    public var portraitWidth: Int { headBox?.width ?? sprite.width }
+
     /// Whether the drawing was authored as half and mirrored.
     ///
     /// True of everything drawn for this app, which is why the test suite
@@ -1346,7 +1364,7 @@ extension Mascot {
         // made of when he is lit.
         poweredRamp: ChassisRamp(deep: RGB(0.988, 0.322, 0.004), shade: RGB(0.992, 0.416, 0.008), mid: RGB(0.996, 0.514, 0.008),
                                  base: RGB(0.996, 0.604, 0.012), light: RGB(0.996, 0.710, 0.020), spec: RGB(0.996, 0.890, 0.098)),
-        headBox: HeadBox(x: 34, width: 28))
+        headBox: HeadBox(x: 29, width: 38))
 }
 
 

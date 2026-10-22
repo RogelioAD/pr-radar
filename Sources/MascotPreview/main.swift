@@ -43,6 +43,9 @@ let sheet = arguments.contains("--sheet")
 let health = Health(rawValue: flag("health") ?? "running") ?? .running
 let frame = Int(flag("frame") ?? "0") ?? 0
 let cell = CGFloat(Int(flag("cell") ?? "9") ?? 9)
+/// Draw what the room and the notice draw: the head crop for a full-length
+/// figure, the whole thing for a bust.
+let head = arguments.contains("--head")
 /// Everything that is not a flag or a flag's value.
 ///
 /// Worked out by walking the list rather than by filtering it. Filtering on
@@ -166,7 +169,8 @@ if sheet {
     }
     let mascot = Mascot.named(id)
     let layout = SpriteLayout.perch(mascot: mascot, style: mood(for: health).style,
-                                    frame: frame, blink: false)
+                                    frame: frame, blink: false,
+                                    crop: head ? mascot.portraitCrop : nil)
     let data = render((layout.width + pad * 2, layout.height + pad * 2)) { rect in
         draw(layout,
              in: NSRect(x: rect.minX + CGFloat(pad) * cell,

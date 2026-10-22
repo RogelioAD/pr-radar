@@ -111,9 +111,12 @@ private struct MascotCell: View {
     var body: some View {
         Button(action: onPick) {
             VStack(spacing: 3) {
-                // Whole, not cropped to the head: a room is the one surface
-                // with the space for it, and half a character is a poor way
-                // to be asked to choose between twelve.
+                // Whole for a bust, and cropped to the head for a figure
+                // with legs. A room is the one surface with space to show a
+                // whole character and half of one is a poor way to be asked
+                // to choose — but a full-length figure squeezed into a cell
+                // sized for a bust is a half-inch-tall man, and what you are
+                // being asked to recognise is a face. See `portraitCrop`.
                 //
                 // Framed to the character's *own* columns rather than the
                 // perch's. A perch reserves a mood-mark gutter on its right
@@ -124,8 +127,9 @@ private struct MascotCell: View {
                 MascotView(mascot: mascot,
                            style: Mood.idle.style,
                            scale: scale,
+                           crop: mascot.portraitCrop,
                            tempo: .still)
-                    .frame(width: CGFloat(mascot.sprite.width) * scale,
+                    .frame(width: CGFloat(mascot.portraitWidth) * scale,
                            alignment: .leading)
                     .clipped()
                 Text(mascot.name)
