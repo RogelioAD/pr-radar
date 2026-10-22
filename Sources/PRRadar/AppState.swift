@@ -97,32 +97,6 @@ final class AppState: ObservableObject {
         didSet { Prefs.reviewFilter = reviewFilter }
     }
 
-    /// Progress through ↑↑↓↓←→←→BA. See `Konami`.
-    ///
-    /// Not `@Published`: nothing on screen reads how far in you are, and
-    /// republishing the whole drawer on every arrow key to track a secret
-    /// would be a real cost for a joke.
-    var konami = Konami()
-
-    /// Whether the cast is currently walking across the drawer.
-    @Published var parading = false
-
-    /// Feeds a key press to the sequence watcher.
-    ///
-    /// Separate from `handle(_:)` and called before it, because this observes
-    /// rather than consumes: the arrows still move the selection while they
-    /// are being counted. A sequence that swallowed the keys it watches would
-    /// break the list for anybody who pressed up twice.
-    func noticeKey(_ keyCode: UInt16) {
-        let fired = konami.accept(keyCode: keyCode)
-        // Only once something is under way, so ordinary typing stays silent.
-        if fired || konami.progress > 0 {
-            Log.debug("konami \(konami.progress)/\(Konami.sequence.count)\(fired ? " — here they come" : "")")
-        }
-        guard fired else { return }
-        parading = true
-    }
-
     /// Which row the keyboard is on. See `Selection`.
     ///
     /// Not persisted and not shared with the pointer: hovering a row does not

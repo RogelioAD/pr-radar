@@ -1017,38 +1017,6 @@ Some details that took a while to get right, and are worth not undoing:
 
 ---
 
-### The parade
-
-Type **↑↑↓↓←→←→BA** into the open drawer and the whole cast walks across it,
-once, and then they are gone.
-
-It is good for nothing whatsoever. It exists because this app draws twelve
-hand-authored characters and shows you one at a time, and a line of all of them
-is the thing the art has been owed since the second shelf went in.
-
-- **Each one wears a different mood**, cycled through the roster. The line is
-  the only place the whole expression range is on screen at once, and twelve
-  identical idles would waste it.
-- **They bob out of step.** In lockstep a dozen characters read as one object
-  sliding past.
-- **The drawer steps aside for it.** The first version had them crossing the
-  header mascot and whatever the list was saying, and two sets of pixel art at
-  two scales on top of each other is a mess rather than a parade. The contents
-  fade out, the cast walks an empty stage, and everything fades back.
-- **The frame does not move.** Taking the contents out rather than fading them
-  would collapse the panel to nothing and bounce it back seven seconds later,
-  which is a worse interruption than the one it fixes.
-- **It does not take clicks**, and nothing underneath can be pressed while it
-  cannot be seen. A parade that stopped you working would be a prank rather
-  than a joke.
-- **The watcher observes rather than consumes.** Up and down still move the
-  selection while they are being counted — a sequence that swallowed the keys
-  it was watching would break the list for anybody who pressed up twice.
-- **A repeated first key restarts rather than resets.** Three ups is what you
-  get when somebody holds the key down, and it must not throw the attempt away.
-
----
-
 ## Colour
 
 One scale, used everywhere — checks, merge blockers, approvals, staleness — so
