@@ -767,6 +767,62 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Asks reviewers who requested changes to look again.
+    func nudge(_ people: [Approval], on pr: MyPullRequest) {
+        let key = pr.id
+        guard rowActions.begin(key) else { return }
+        Task {
+            await performNudge(people, on: pr)
+            rowActions.end(key)
+        }
+    }
+
+    private func performNudge(_ people: [Approval], on pr: MyPullRequest) async {
+        let ids = people.compactMap(\.nodeID)
+        guard let account = accounts.first(where: { $0.id == pr.account })
+                ?? accounts.first,
+              let token = Accounts.token(for: account),
+              let nodeID = pr.nodeID,
+              !ids.isEmpty
+        else {
+            lastError = "That PR arrived without the ids a re-request needs."
+            return
+        }
+        do {
+            _ = try await GitHubClient(token: token)
+                .requestReview(pullRequestID: nodeID, userIDs: ids)
+            Log.debug("re-requested \(ids.count) on \(pr.repo)#\(pr.number)")
+        } catch {
+            // Worth saying out loud: the press looked like it worked, and the
+            // people on the other end are the whole point of it.
+            lastError = "Could not re-request a review on #\(pr.number). "
+                + "Nobody has been notified."
+        }
+    }
+
+    /// Posts a reply to one of your own review threads.
+    ///
+    /// Returns whether it landed, so the field can keep what was typed when it
+    /// did not. Nothing is resolved here — a reply and a resolution are two
+    /// different claims, and the row deliberately only makes the first.
+    func reply(to threadID: String, body: String, on pr: MyPullRequest) async -> Bool {
+        guard let account = accounts.first(where: { $0.id == pr.account })
+                ?? accounts.first,
+              let token = Accounts.token(for: account)
+        else {
+            lastError = "No token for the account that pull request came from."
+            return false
+        }
+        let url = await GitHubClient(token: token).replyToThread(id: threadID, body: body)
+        if url == nil {
+            lastError = "Could not post that reply to #\(pr.number). "
+                + "What you typed is still there."
+        } else {
+            Log.debug("replied on \(pr.repo)#\(pr.number)")
+        }
+        return url != nil
+    }
+
     /// The skill to run, as the settings field holds it — an edit buffer for
     /// the same reason `updateRepoDraft` is one.
     @Published var reviewSkillDraft: String = Prefs.reviewSkill ?? ""
@@ -1676,6 +1732,22 @@ final class AppState: ObservableObject {
     /// One-shot reaction, used when a new review lands. Cancels any previous
     /// one so two pings in quick succession do not leave it stuck.
     private var startleTask: Task<Void, Never>?
+
+    /// One beat of applause for a pull request of yours going in.
+    ///
+    /// Shares `startle`'s machinery and its length, because they are the same
+    /// kind of event: news about one thing, over in under a second, and then
+    /// back to whatever the queue actually says.
+    func cheer() {
+        guard mascot != nil else { return }
+        startleTask?.cancel()
+        reaction = .cheered
+        startleTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(900))
+            guard !Task.isCancelled else { return }
+            self?.reaction = nil
+        }
+    }
 
     func startle() {
         guard mascot != nil else { return }

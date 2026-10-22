@@ -54,6 +54,10 @@ public struct PRNode: Decodable {
     public let additions: Int?
     public let deletions: Int?
     public let changedFiles: Int?
+    /// The description as raw markdown. Read once, reduced to a line, and
+    /// never kept — see `PRSummary`, which needs the markup to tell a heading
+    /// from a sentence.
+    public let body: String?
     /// The head commit, for its checks rollup. Aliased in the document, so the
     /// property name is the alias rather than `commits`.
     public let head: CommitConn?
@@ -73,6 +77,9 @@ public struct PRNode: Decodable {
 public struct ActorDTO: Decodable {
     public let login: String
     public let avatarUrl: String?
+    /// The node id, where the actor is a User and somebody asked for it.
+    /// Absent for a bot, and absent everywhere that did not ask.
+    public let id: String?
 }
 
 public struct RepoDTO: Decodable {

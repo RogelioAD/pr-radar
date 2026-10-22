@@ -104,6 +104,9 @@ enum Diagnostics {
                   + "\(item.authorLogin.padding(toLength: 22, withPad: " ", startingAt: 0)) "
                   + "\(item.repoShortName)")
             print("        \(item.title)")
+            if let summary = item.summary {
+                print("        \u{201C}\(summary)\u{201D}")
+            }
             if let signals = item.signals {
                 print("        \(signals.sizeLabel)  "
                       + "checks=\(signals.checks?.rawValue ?? "none")  "
@@ -179,6 +182,10 @@ enum Diagnostics {
             print("        threads \(pr.unresolvedThreadCount) open of \(pr.totalThreadCount)  "
                   + "+\(pr.additions) -\(pr.deletions) in \(pr.changedFiles) files  "
                   + "open \(TimeAgo.short(since: pr.createdAt))")
+            if !pr.nudgeable.isEmpty {
+                print("        can re-request: "
+                      + pr.nudgeable.map(\.shortName).joined(separator: ", "))
+            }
             if let awaiting = pr.awaiting {
                 print("        \(awaiting.label())  on=[\(awaiting.reviewers.joined(separator: ","))]")
             }

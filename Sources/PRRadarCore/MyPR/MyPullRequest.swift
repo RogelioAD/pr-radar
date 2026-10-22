@@ -5,6 +5,10 @@ public struct Approval: Identifiable, Equatable, Sendable {
     public let login: String
     public let state: ReviewState
     public let isLead: Bool
+    /// The reviewer's node id, which re-requesting needs as its subject.
+    /// nil for a bot, and for any payload that did not ask — a row cannot
+    /// offer to nudge somebody it has no way to name.
+    public var nodeID: String?
     /// When it was submitted. Optional and defaulted, because no row has ever
     /// drawn it — it is here so a verdict can be announced once rather than on
     /// every poll, and a review with no timestamp is simply never announced.
@@ -14,11 +18,12 @@ public struct Approval: Identifiable, Equatable, Sendable {
     public var shortName: String { Leads.shortName(for: login) }
 
     public init(login: String, state: ReviewState, isLead: Bool,
-                submittedAt: Date? = nil) {
+                submittedAt: Date? = nil, nodeID: String? = nil) {
         self.login = login
         self.state = state
         self.isLead = isLead
         self.submittedAt = submittedAt
+        self.nodeID = nodeID
     }
 }
 
@@ -294,6 +299,20 @@ public struct MyPullRequest: Identifiable, Equatable, Sendable {
 
     public var changesRequestedBy: [Approval] {
         approvals.filter { $0.state == .changesRequested }
+    }
+
+    /// Reviewers worth asking to look again.
+    ///
+    /// Only the ones who have **already reviewed** and asked for changes.
+    /// That is the whole of what GitHub's re-request does, and it is the case
+    /// that actually comes up: they said no, you fixed it, and nothing you do
+    /// to the branch tells them so. A reviewer who has simply not looked yet
+    /// is already in the request list and cannot be nudged — see
+    /// `Mutation.requestReview`.
+    ///
+    /// Bots are excluded by having no node id: there is nobody to ask.
+    public var nudgeable: [Approval] {
+        changesRequestedBy.filter { $0.nodeID != nil }
     }
 
     /// The lead whose live approval unblocks this, if one has approved.

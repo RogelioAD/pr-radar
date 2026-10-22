@@ -85,7 +85,8 @@ public struct ReviewInbox {
             nodeID: node.id,
             baseRef: node.baseRefName,
             signals: signals(from: node),
-            sinceReview: sinceReview(in: node, ignoring: pinned)
+            sinceReview: sinceReview(in: node, ignoring: pinned),
+            summary: PRSummary.firstLine(of: node.body)
         )
     }
 

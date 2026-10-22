@@ -97,7 +97,14 @@ public enum Query {
                 changedFiles
                 repository { nameWithOwner }
                 latestReviews(first: 30) {
-                  nodes { author { login } state submittedAt }
+                  nodes {
+                    # `id` through an inline fragment, because `author` is an
+                    # Actor and only a User has one here. A bot comes back
+                    # without it, which is right: there is nobody to ask.
+                    author { login ... on User { id } }
+                    state
+                    submittedAt
+                  }
                 }
                 reviewRequests(first: 30) {
                   nodes {
@@ -366,6 +373,21 @@ public enum Query {
           additions
           deletions
           changedFiles
+          # The description, for the line of it that decides whether to start
+          # now — "don't review yet", "part 2 of 3", "only the last commit is
+          # new".
+          #
+          # The raw markdown, not `bodyText`. `bodyText` was the obvious choice
+          # — smaller on the wire, and the markdown is furniture at one line —
+          # and it is wrong for exactly that reason: it strips the `##` off a
+          # template heading, so the first line of a real pull request came
+          # back as the bare word `What` and the row printed it.
+          #
+          # It is the one genuinely heavy field in this fragment. There is no
+          # way to ask for a prefix, so a templated repository sends a few
+          # kilobytes a row — only the first useful line is kept, and the rest
+          # is dropped the moment it is parsed.
+          body
           # The rollup's verdict and nothing under it. Triage asks "is this
           # even reviewable yet", which is one word; the per-check breakdown is
           # the My PRs tab's job and costs a hundred nodes a pull request —

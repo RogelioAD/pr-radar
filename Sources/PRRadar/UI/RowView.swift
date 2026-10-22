@@ -197,6 +197,20 @@ struct RowView: View {
                     }
                 }
 
+                // One line of what the author wrote, under the line saying
+                // which pull request this is. Dimmed and clipped to one line:
+                // it is context for the title rather than a second title, and
+                // a row that grew three lines of somebody's template would
+                // cost more than it told you. The rest is in the tooltip.
+                if let summary = item.summary {
+                    Text(summary)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(summary)
+                }
+
                 if let signals = item.signals { triage(signals) }
             }
 

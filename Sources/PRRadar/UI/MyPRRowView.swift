@@ -9,6 +9,11 @@ struct MyPRRowView: View {
     let now: Date
     /// Whether the keyboard is on this row. See `RowView.isSelected`.
     var isSelected = false
+    /// Posts a reply to a thread. Returns whether it landed, so the field can
+    /// keep what was typed when it did not. nil hides the reply boxes.
+    var onReply: ((String, String) async -> Bool)?
+    /// Asks reviewers to look again. nil where there is nobody to ask.
+    var onNudge: (([Approval]) -> Void)?
     /// Which account surfaced this row, or nil when saying so would be noise.
     var accountLabel: String?
     let onOpen: () -> Void
@@ -46,6 +51,13 @@ struct MyPRRowView: View {
     /// the threads themselves, which widens the drawer and so has to live on
     /// `AppState` where the panel can see it.
     @State private var openCode: Set<String> = []
+    /// Unsent replies, by thread id. Here rather than in the state for the
+    /// reason the auto-review row keeps its own draft: an unfinished sentence
+    /// is not a comment, and persisting one would redraw the drawer on every
+    /// keystroke.
+    @State private var drafts: [String: String] = [:]
+    /// Threads with a reply in flight.
+    @State private var sending: Set<String> = []
 
     var body: some View {
         HStack(alignment: .top, spacing: Self.gap) {
@@ -350,6 +362,8 @@ struct MyPRRowView: View {
                     if openCode.contains(thread.id), let excerpt = thread.excerpt {
                         DisclosedCode(excerpt: excerpt)
                     }
+
+                    if onReply != nil { replyBox(thread) }
                 }
                 .padding(.horizontal, 7)
                 .padding(.vertical, 5)
@@ -403,10 +417,14 @@ struct MyPRRowView: View {
     /// Everything else the row knows — counts and clocks rather than blockers.
     @ViewBuilder
     private var contextChips: some View {
-        if item.totalThreadCount > 0 || item.awaiting != nil {
+        if item.totalThreadCount > 0 || item.awaiting != nil || !item.nudgeable.isEmpty {
             ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
                 threadChips
                 awaitingChip
+                // Last in the band and the only button in it: everything else
+                // here is a count or a clock, and this is the one thing you
+                // can do about them.
+                nudgeButton
             }
         }
     }
@@ -450,6 +468,61 @@ struct MyPRRowView: View {
         }
     }
 
+    /// Answering a thread without leaving.
+    ///
+    /// The whole conversation has been on screen since the drawer learned to
+    /// read threads, and saying one word back meant a browser tab. That is an
+    /// odd place to stop: a reply is a far smaller thing than the Approve
+    /// button this row already has, and unlike an approval it can be edited
+    /// afterwards by the person who wrote it.
+    ///
+    /// The field keeps what you typed when a send fails. Losing a sentence to
+    /// a dropped connection is the one outcome that would stop anybody using
+    /// this twice.
+    @ViewBuilder
+    private func replyBox(_ thread: UnresolvedThread) -> some View {
+        let text = Binding(
+            get: { drafts[thread.id] ?? "" },
+            set: { drafts[thread.id] = $0 })
+        let typed = text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let busy = sending.contains(thread.id)
+
+        HStack(spacing: 5) {
+            TextField("Reply…", text: text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 10.5))
+                .lineLimit(1...4)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.primary.opacity(0.07)))
+                .disabled(busy)
+
+            RowButton(title: busy ? "Sending…" : "Reply",
+                      symbol: "arrowshape.turn.up.left",
+                      health: .running,
+                      // Nothing to send, or already sending it. A second press
+                      // on a reply in flight is how one sentence becomes two
+                      // comments.
+                      enabled: !typed.isEmpty && !busy) {
+                send(typed, to: thread)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func send(_ body: String, to thread: UnresolvedThread) {
+        guard let onReply else { return }
+        sending.insert(thread.id)
+        Task {
+            let landed = await onReply(thread.id, body)
+            sending.remove(thread.id)
+            // Cleared only on success, so a failed send leaves the sentence
+            // where it was rather than asking for it again.
+            if landed { drafts[thread.id] = "" }
+        }
+    }
+
     /// Which signals on this row may draw themselves filled.
     ///
     /// Severe ones compete; calm ones do not. `2 blocking` and `conflicts`
@@ -488,6 +561,43 @@ struct MyPRRowView: View {
     private func fills(_ health: Health, as signal: RowSignal) -> Bool {
         guard health == .bad || health == .attention else { return false }
         return loudest == signal
+    }
+
+    /// Asking the people who requested changes to look again.
+    ///
+    /// Offered only where somebody has **already reviewed** and asked for
+    /// changes, which is the whole of what GitHub's re-request does. They said
+    /// no, you fixed it, and nothing you do to the branch tells them so.
+    ///
+    /// There is deliberately no button for the other case. A reviewer who has
+    /// simply not looked yet is already in the request list, and re-adding
+    /// them does nothing at all — the only thing that would notify is removing
+    /// and re-adding, which means a window where a failed second call has
+    /// quietly dropped somebody off your pull request. Not worth it for a
+    /// reminder, so the row says nothing rather than offering a button that
+    /// looks like it worked.
+    @ViewBuilder
+    private var nudgeButton: some View {
+        let people = item.nudgeable
+        if !people.isEmpty, let onNudge {
+            RowButton(title: nudgeTitle(people),
+                      symbol: "bell",
+                      health: .attention,
+                      enabled: !acting) { onNudge(people) }
+                .help(nudgeHelp(people))
+        }
+    }
+
+    private func nudgeTitle(_ people: [Approval]) -> String {
+        people.count == 1
+            ? "Ask \(people[0].shortName) again"
+            : "Ask \(people.count) again"
+    }
+
+    private func nudgeHelp(_ people: [Approval]) -> String {
+        let names = people.map(\.shortName).joined(separator: ", ")
+        return "Re-requests a review from \(names), who asked for changes. "
+             + "They are notified; nothing on the branch changes."
     }
 
     /// How long this has been sitting with its reviewers.

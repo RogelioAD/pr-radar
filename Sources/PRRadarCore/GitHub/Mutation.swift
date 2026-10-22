@@ -79,6 +79,29 @@ public enum Mutation {
     /// review on the pull request, the reply is absorbed into that unsubmitted
     /// draft. The mutation returns success, the comment exists, and nobody but
     /// its author can see it — while the thread reads as answered.
+    /// Asks a reviewer who has already reviewed to look again.
+    ///
+    /// `union: true` is the whole safety of it: the input is a *set* of
+    /// reviewers, and without the union flag this mutation replaces the list —
+    /// so naming one person would silently unrequest everybody else on the
+    /// pull request. With it, the named ones are added to what is already
+    /// there and nobody is removed.
+    ///
+    /// This only does something for a reviewer who has **already submitted**
+    /// a review. For somebody who simply has not looked yet, GitHub has no
+    /// nudge: they are already in the request list, and re-adding them is the
+    /// no-op it sounds like. Removing and re-adding would notify, and would
+    /// also mean a window where a failed second call has quietly dropped a
+    /// reviewer off somebody's pull request. Not worth it for a reminder.
+    public static let requestReview = """
+    mutation($pullRequestId: ID!, $userIds: [ID!]!) {
+      requestReviews(input: {
+        pullRequestId: $pullRequestId, userIds: $userIds, union: true}) {
+        pullRequest { id }
+      }
+    }
+    """
+
     public static let replyToThread = """
     mutation($threadId: ID!, $body: String!) {
       addPullRequestReviewThreadReply(
@@ -87,6 +110,15 @@ public enum Mutation {
       }
     }
     """
+}
+
+/// What `requestReviews` gives back — only enough to know it landed.
+public struct RequestReviewPayload: Decodable, Sendable {
+    public struct Result: Decodable, Sendable {
+        public struct PR: Decodable, Sendable { public let id: String? }
+        public let pullRequest: PR?
+    }
+    public let requestReviews: Result?
 }
 
 /// What `addPullRequestReview` gives back.
@@ -234,6 +266,23 @@ extension GitHubClient {
                         "expectedHeadOid": .string(expectedHeadOid)],
             as: UpdateBranchPayload.self)
         return payload.updatePullRequestBranch?.pullRequest?.headRefOid
+    }
+
+    /// Asks reviewers who have already reviewed to look again.
+    ///
+    /// Several in one call rather than one call each: it is a single
+    /// set-valued mutation, and sending it per person would be several
+    /// chances for half of it to land.
+    @discardableResult
+    public func requestReview(pullRequestID: String,
+                              userIDs: [String]) async throws -> Bool {
+        guard !userIDs.isEmpty else { return false }
+        let payload = try await run(
+            Mutation.requestReview,
+            variables: ["pullRequestId": .string(pullRequestID),
+                        "userIds": .array(userIDs.map { .string($0) })],
+            as: RequestReviewPayload.self)
+        return payload.requestReviews?.pullRequest?.id != nil
     }
 
     /// Replies to one thread, and says whether the reply is actually visible.

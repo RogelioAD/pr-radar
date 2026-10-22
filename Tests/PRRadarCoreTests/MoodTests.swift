@@ -362,9 +362,35 @@ final class ReactionRankingTests: XCTestCase {
         let reached: Set<Reaction> = [
             Reaction.resolve(pressed: true, event: nil, hovering: false),
             Reaction.resolve(pressed: false, event: .startled, hovering: false),
+            // A merge arrives the same way a ping does: as an event, which
+            // outranks a pointer resting there and loses to a hand on the
+            // badge.
+            Reaction.resolve(pressed: false, event: .cheered, hovering: false),
             Reaction.resolve(pressed: false, event: nil, hovering: true),
         ].compactMap { $0 }.reduce(into: Set()) { $0.insert($1) }
         XCTAssertEqual(reached, Set(Reaction.allCases),
                        "a reaction with no path to the screen is dead art")
+    }
+
+    /// Deliberately `startled`'s mirror: the same hop, a spark where the bang
+    /// is, and green instead of amber.
+    func testCheeringMirrorsStartling() {
+        let cheered = Reaction.cheered.style(tint: .bad)
+        let startled = Reaction.startled.style(tint: .good)
+        XCTAssertEqual(cheered.bob, startled.bob)
+        XCTAssertEqual(cheered.marks, [.spark, .none])
+        XCTAssertEqual(startled.marks, [.bang, .none])
+        // Both ignore the tint they are handed. They are news about one event
+        // rather than a reading of the queue, and a merge is green whatever
+        // the rest of the drawer looks like.
+        XCTAssertEqual(cheered.health, .good)
+        XCTAssertEqual(startled.health, .attention)
+    }
+
+    /// A hand on the badge still wins. It is the most immediate thing
+    /// happening to it, merge or no merge.
+    func testAHandOnTheBadgeOutranksAMerge() {
+        XCTAssertEqual(Reaction.resolve(pressed: true, event: .cheered,
+                                        hovering: false), .held)
     }
 }

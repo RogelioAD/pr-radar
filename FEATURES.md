@@ -177,6 +177,36 @@ Three rules keep it honest:
   somebody has approved this when the somebody is you is the list answering
   itself.
 
+### What the author said
+
+A title and a diff size tell you how big a review is. The **description** is
+where people write the things that decide whether to start it at all — *"don't
+review yet"*, *"part 2 of 3"*, *"only the last commit is new"* — and the row
+could not say any of it.
+
+So one line of it sits under the title, dimmed and clipped, with the rest on
+the tooltip. One line rather than three: it is context for the title rather
+than a second title, and a row that grew three lines of somebody's template
+would cost more than it told you.
+
+**Not the literal first line.** Real descriptions open with a template
+heading, an HTML comment nobody deleted, or a rule, and a row reading
+`## Summary` is worse than a row reading nothing because it looks like the
+feature working. Headings are skipped in both markdown forms — the `##` kind
+and the kind underlined with `---` on the next line — along with comments,
+rules, and the empty checkboxes a template leaves behind.
+
+It reads the **raw markdown** rather than GitHub's plain-text rendering, which
+was the first thing tried and is wrong for exactly the reason it looked right:
+`bodyText` is smaller on the wire and strips the markup, so a real pull request
+came back with its first line as the bare word `What` and the row printed it.
+The markup is what tells a heading from a sentence.
+
+A line wrapped wholly in bold is unwrapped, since that is a heading in
+disguise — but emphasis *inside* a sentence is left exactly as written.
+Stripping it is how `a **hard** no` becomes a different sentence in a flatter
+voice.
+
 ### What changed since you last reviewed it
 
 A re-requested pull request is the most wasteful row in the queue: you have
@@ -533,6 +563,40 @@ outlined. Red is still red either way; filling it is the row saying *this* is
 the thing to look at. A good verdict is unaffected — a filled green
 `lead: Alice` is the row being done rather than the row shouting, and two of
 those never happen at once.
+
+### Answering a thread
+
+The whole conversation has been on screen since the row learned to open its
+threads, and saying one word back meant a browser tab. That is an odd place to
+stop: a reply is a far smaller thing than the Approve button this app already
+has, and unlike an approval the person who wrote it can edit it afterwards.
+
+So every unresolved thread has a reply box under it. What it does **not** do is
+resolve anything — a reply and a resolution are two different claims, and the
+row deliberately only makes the first.
+
+- **The field keeps what you typed when a send fails.** Losing a sentence to a
+  dropped connection is the one outcome that would stop anybody using this
+  twice.
+- **The button goes dead while a reply is in flight.** A second press on one
+  already sending is how a sentence becomes two comments.
+
+### Asking somebody to look again
+
+A reviewer asked for changes, you fixed it, and nothing you do to the branch
+tells them so. The row offers **Ask Alice again**, which is GitHub's own
+re-request: they are notified, and nothing on the branch changes.
+
+It is offered **only** for reviewers who have already submitted a review. That
+is narrower than it sounds like it should be, and the reason is worth stating:
+somebody who simply has not looked yet is already in the request list, and
+re-adding them does nothing at all. The only thing that would notify them is
+removing and re-adding, which means a window where a failed second call has
+quietly dropped a reviewer off your pull request — not a trade worth making for
+a reminder. So the row says nothing rather than offering a button that looks
+like it worked.
+
+Bots are excluded by having no account id to name. There is nobody to ask.
 
 ### Waiting on them
 
@@ -985,7 +1049,17 @@ A pull request of yours being ready to merge still outranks both. That is about
 your own work and has nothing to do with what you parked.
 
 On the badge it also reacts to being touched: it wakes on hover, holds on while
-you drag it, and startles once when a new review arrives.
+you drag it, startles once when a new review arrives, and **cheers once when a
+pull request of yours is merged** — the same hop as the startle, with a spark
+where the bang is and green instead of amber. There was a reaction for bad news
+landing and none at all for the one unambiguously good thing that happens.
+
+It is read off the lifetime merge count the trophies already fetch, rather than
+by noticing a row disappear: a row disappears when a pull request is *closed*
+too, and congratulating somebody for abandoning one is the wrong half of the
+time to be cheerful. Both sides of the comparison have to be real numbers, so
+the first successful fetch after launch does not applaud a year of merges at
+once.
 
 **Choosing one.** Click the character in the drawer's header to cycle — each in
 turn, then off, then round again. Or pick one directly from the badge's

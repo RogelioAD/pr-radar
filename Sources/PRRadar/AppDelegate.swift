@@ -380,7 +380,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // standing in for "did not answer" would instead read as a real count
         // and tell the rules the viewer has never merged anything.
         let counted = reachable.compactMap(\.merged)
+        let previouslyMerged = mergedLifetime
         mergedLifetime = counted.isEmpty ? nil : counted.reduce(0, +)
+
+        // Something of yours went in.
+        //
+        // Read off the lifetime count the trophies already fetch rather than
+        // by noticing a row disappear: a row disappears when it is closed too,
+        // and congratulating somebody for abandoning a pull request is the
+        // wrong half of the time to be cheerful. This number only goes up for
+        // a merge.
+        //
+        // Both sides have to be real. nil on either means a round that did not
+        // answer, and the jump from "did not know" to a number is not news —
+        // it is the first successful fetch, and on launch that would applaud a
+        // year of merges at once.
+        if let now = mergedLifetime, let before = previouslyMerged, now > before {
+            Log.debug("merged \(now - before) since the last round")
+            state.cheer()
+        }
 
         Log.debug("refresh ok: \(items.count) items from \(reachable.count)/\(accounts.count) account(s)")
         state.authError = nil

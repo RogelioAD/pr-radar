@@ -54,6 +54,9 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
     /// See `SinceReview`.
     public var sinceReview: SinceReview?
 
+    /// The one line of the description worth showing. See `PRSummary`.
+    public var summary: String?
+
     public var id: String { "\(repo)#\(number)" }
     /// Short repo name without the owner prefix.
     public var repoShortName: String {
@@ -87,7 +90,8 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
     public init(repo: String, number: Int, title: String, url: URL, isDraft: Bool,
                 authorLogin: String, authorAvatarURL: URL?, pingedAt: Date,
                 account: String = "", nodeID: String? = nil, baseRef: String? = nil,
-                signals: ReviewSignals? = nil, sinceReview: SinceReview? = nil) {
+                signals: ReviewSignals? = nil, sinceReview: SinceReview? = nil,
+                summary: String? = nil) {
         self.repo = repo
         self.number = number
         self.title = title
@@ -101,6 +105,7 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
         self.baseRef = baseRef
         self.signals = signals
         self.sinceReview = sinceReview
+        self.summary = summary
     }
 }
 

@@ -360,7 +360,7 @@ public enum Mood: String, CaseIterable, Sendable {
 /// word, and a mascot type that shadows it makes every `Gesture` in the view
 /// layer ambiguous.
 public enum Reaction: String, CaseIterable, Sendable {
-    case waking, held, startled
+    case waking, held, startled, cheered
 
     /// Which reaction wins, given everything happening to the panel at once.
     ///
@@ -390,6 +390,18 @@ public enum Reaction: String, CaseIterable, Sendable {
         case .startled:
             return SpriteStyle(eyes: .wide, marks: [.bang, .none],
                                health: .attention, bob: [0, 2, 1, 0])
+        case .cheered:
+            // `startled`'s counterpart, and deliberately its mirror: the same
+            // hop, a spark where the bang is, and green instead of amber.
+            // There was a reaction for bad news arriving and none at all for
+            // the one unambiguously good thing that happens — something of
+            // yours going in.
+            //
+            // It ignores the tint it is handed, as `startled` does. Both are
+            // news about one event rather than a reading of the queue, and a
+            // merge is green whatever the rest of the drawer looks like.
+            return SpriteStyle(eyes: .open, marks: [.spark, .none],
+                               health: .good, bob: [0, 2, 1, 0])
         }
     }
 }

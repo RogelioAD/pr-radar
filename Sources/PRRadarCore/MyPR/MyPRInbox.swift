@@ -52,7 +52,8 @@ public struct MyPRInbox {
             if state == .commented { return nil }
             return Approval(login: login, state: state,
                             isLead: repoLeads.contains(login),
-                            submittedAt: review.submittedAt)
+                            submittedAt: review.submittedAt,
+                            nodeID: review.author?.id)
         }
 
         let awaiting = (node.reviewRequests?.nodes ?? []).compactMap { request -> String? in

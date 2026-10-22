@@ -831,6 +831,11 @@ struct DrawerView: View {
                         case .single(let item):
                             MyPRRowView(item: item, now: state.clock,
                                         isSelected: state.selection.id == item.id,
+                                        onReply: { thread, body in
+                                            await state.reply(to: thread, body: body,
+                                                              on: item)
+                                        },
+                                        onNudge: { state.nudge($0, on: item) },
                                         accountLabel: state.accountLabel(for: item.account),
                                         onOpen: { onOpenMyPR(item) },
                                         width: state.listContentWidth,
