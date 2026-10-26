@@ -213,29 +213,25 @@ A re-requested pull request is the most wasteful row in the queue: you have
 already read it, and the list hands it back with nothing to say whether twelve
 lines moved or the whole thing was rewritten.
 
-So a row you have reviewed before carries **`14 commits since your review`**,
-and pressing it opens GitHub's two-commit view — the diff between the commit
-you reviewed and the head — rather than the whole thing again. Every row this
-appears on is a re-review by construction: the rule below only keeps a pull
-request whose newest ping is newer than anything you did to it.
+So a row you have reviewed before offers **Open Changes Since Your Review** in
+its context menu, which opens GitHub's two-commit view — the diff between the
+commit you reviewed and the head — rather than the whole thing again. Every row
+this appears on is a re-review by construction: the rule below only keeps a
+pull request whose newest ping is newer than anything you did to it.
 
-It is a link only when **both ends of the range are known**. GitHub's range
+It used to be a chip on the row as well, reading `14 commits since your
+review`, beside the one below counting the same commits since PR Radar's run.
+Two counts of the same pushes, differing only in which reader they were
+measured from, read as one fact stated twice — and the count that decides
+something is the one below, which says whether the findings on the strip are
+worth re-running. What was worth keeping here was never the number but the
+link, so the link is what stayed.
+
+It is offered only when **both ends of the range are known**. GitHub's range
 form silently falls back to the entire diff when an end is missing, which would
 hand back the nine hundred lines this exists to avoid while looking like it had
 worked. A review whose commit was force-pushed out of the branch comes back
-with none, so that row says its piece and does not link.
-
-Three cases that had to be decided:
-
-- **Nothing new is said out loud.** `nothing new since your review` — a
-  re-request with no push behind it happens, and knowing the diff is the one
-  you already read is the most useful sentence available.
-- **A head that moved with no newer commits still counts.** A force-push can
-  rewrite committer dates so nothing looks newer than the review while the head
-  is plainly a different commit. The two commit ids settle it when the dates
-  cannot.
-- **A full page is a floor.** Twenty commits read and more behind them says
-  `20+`, never `20`.
+with none, so that row has nothing to open.
 
 The automatic review's pin is ignored here as it is in the rule below, for a
 different reason. There it stops PR Radar's own review counting as *you* having
@@ -250,14 +246,16 @@ verdict on one commit, and nothing on the row said which — so a review run on
 Monday still read as the current word on the code five pushes later.
 
 So a row whose branch has moved since the run carries
-**`3 commits since PR Radar's review`**, beside the chip above it. The count is
-taken off the same commit page, against the moment the run finished.
+**`3 commits since PR Radar's review`**, now the only chip in that band. The
+count is taken off the same commit page, against the moment the run finished;
+twenty read with more behind them says `20+`, never `20`.
 
-Two differences from the chip above, both deliberate:
+Two things it does not do, both deliberate:
 
 - **It never says *nothing new*.** Nearly every row in this queue carries a
   run, so a chip on all of them saying the findings are still current would be
-  a chip nobody reads. The one above is rare and worth a sentence either way.
+  a chip nobody reads, and a row with nothing to re-run should be a row with
+  nothing in that band.
 - **It is never a link.** A run is not a review GitHub knows about, so there is
   no commit recorded against it and no two-commit diff to open. That also means
   a force-push which rewrites committer dates reads here as nothing new — the

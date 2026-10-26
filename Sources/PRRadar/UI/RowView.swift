@@ -331,33 +331,31 @@ struct RowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// How far behind the two readings of this pull request have fallen —
-    /// yours, and PR Radar's.
+    /// How far behind PR Radar's reading of this pull request has fallen.
     ///
-    /// Its own band, outside `primary`, rather than more chips in the triage
-    /// flow. Everything in `primary` sits under the tap that opens the pull
-    /// request, and the first of these is a link of its own to a different
-    /// page — a press meant for the incremental diff that also opened the whole
-    /// diff behind it is the bug nobody reports and everybody works around. The
-    /// review strip is outside for the same reason.
+    /// It used to carry a second chip beside this one, counting the commits
+    /// since *your* last review. Two counts of the same commits, differing only
+    /// in which reader they were measured from, read as one fact stated twice —
+    /// and the one that decides something is this one: whether the findings
+    /// under it are worth re-running. The other reading is still on the row,
+    /// as **Open Changes Since Your Review** in the context menu, which is
+    /// where the part of it that was ever a link belongs.
     ///
-    /// One band for both because they are one sentence, asked of two readers,
-    /// and `ChipFlow` puts the second on its own line when the width runs out.
+    /// Its own band, outside `primary`, rather than a chip in the triage flow:
+    /// everything in `primary` sits under the tap that opens the pull request.
+    /// The review strip is outside for the same reason.
     @ViewBuilder
     private var sinceBand: some View {
-        ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
-            if let since = item.sinceReview { sinceReviewChip(since) }
-            if let run = sinceRun {
-                Chip(text: run.label, symbol: run.symbol, health: run.health)
-                    .help(run.help(now: now))
-            }
+        if let run = sinceRun {
+            Chip(text: run.label, symbol: run.symbol, health: run.health)
+                .help(run.help(now: now))
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Whether that band has anything in it, so an empty one costs no gap.
     private var showsSinceBand: Bool {
-        item.sinceReview != nil || sinceRun != nil
+        sinceRun != nil
     }
 
     /// What to say about how far PR Radar's reading has fallen behind, or nil
@@ -376,26 +374,6 @@ struct RowView: View {
         guard let run = item.sinceRun, run.hasMoved else { return nil }
         if let finishedAt = review?.finishedAt, finishedAt > run.ranAt { return nil }
         return run
-    }
-
-    /// What has landed since you last reviewed this one.
-    @ViewBuilder
-    private func sinceReviewChip(_ since: SinceReview) -> some View {
-        if let diff = since.incrementalDiff(of: item.url) {
-            Button { NSWorkspace.shared.open(diff) } label: {
-                Chip(text: since.label, symbol: since.symbol, health: since.health)
-            }
-            .buttonStyle(.plain)
-            .pressable()
-            .help(since.help(now: now))
-            .accessibilityLabel("\(since.label). Opens just what has changed.")
-        } else {
-            // No anchor, so no link. The sentence is still worth saying —
-            // it is the difference between re-reading nine hundred lines
-            // and knowing you have to.
-            Chip(text: since.label, symbol: since.symbol, health: since.health)
-                .help(since.help(now: now))
-        }
     }
 
     /// The whole row, spoken.
