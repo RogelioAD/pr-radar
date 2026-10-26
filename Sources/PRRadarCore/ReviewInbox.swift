@@ -29,13 +29,18 @@ public struct ReviewInbox {
     /// Node ids of reviews PR Radar left for me, keyed by the ping they answer.
     /// Empty by default, so the pin is inert everywhere that does not opt in.
     public let pins: [String: String]
+    /// When PR Radar last reviewed each pull request, by `repo#number`.
+    /// Empty by default, which simply means no row says anything about a run.
+    /// See `AutoReviewLog.lastRuns`.
+    public let runs: [String: Date]
 
     public init(viewerLogin: String, teams: [TeamRef], includeDrafts: Bool = true,
-                pins: [String: String] = [:]) {
+                pins: [String: String] = [:], runs: [String: Date] = [:]) {
         self.viewerLogin = viewerLogin
         self.teamSlugs = Set(teams.map(\.slug))
         self.includeDrafts = includeDrafts
         self.pins = pins
+        self.runs = runs
     }
 
     public func build(from searches: [String: SearchResult]) -> [ReviewItem] {
@@ -86,6 +91,7 @@ public struct ReviewInbox {
             baseRef: node.baseRefName,
             signals: signals(from: node),
             sinceReview: sinceReview(in: node, ignoring: pinned),
+            sinceRun: sinceRun(in: node, ranAt: runs["\(repo)#\(number)"]),
             summary: PRSummary.firstLine(of: node.body)
         )
     }
@@ -120,6 +126,19 @@ public struct ReviewInbox {
             headOid: node.head?.nodes.first?.commit?.oid,
             commitDates: page,
             total: node.recent?.totalCount ?? page.count)
+    }
+
+    /// What has landed since PR Radar last reviewed this pull request.
+    ///
+    /// nil when there has been no run to measure from. Counted off the same
+    /// commit page `sinceReview` uses — the page is already in hand, so a
+    /// second reader costs a filter and nothing else.
+    func sinceRun(in node: PRNode, ranAt: Date?) -> SinceRun? {
+        guard let ranAt else { return nil }
+        let page = node.recent?.nodes.compactMap { $0.commit?.committedDate } ?? []
+        return SinceRun.make(ranAt: ranAt,
+                             commitDates: page,
+                             total: node.recent?.totalCount ?? page.count)
     }
 
     /// What the row needs to triage this pull request, or nil when the payload

@@ -218,6 +218,50 @@ public struct AutoReviewLog: Codable, Equatable, Sendable {
         }
     }
 
+    /// Whether this record represents a review that actually happened.
+    ///
+    /// Three statuses and not four: `failed` ran, but it produced no findings,
+    /// so dating a "since PR Radar's review" chip from it would be measuring
+    /// from a review nobody can read. `skipped` never started.
+    private static func reviewed(_ record: AutoReviewRecord) -> Bool {
+        switch record.status {
+        case .ready, .posted, .dismissed: return true
+        case .queued, .running, .failed, .skipped: return false
+        }
+    }
+
+    /// When PR Radar last reviewed each pull request, by `repo#number`.
+    ///
+    /// Keyed by pull request rather than by ping, which is the one place this
+    /// log departs from its own keying — and deliberately. A re-request starts
+    /// a fresh record, so the ping-keyed answer for a row that has just been
+    /// pinged again is always "never", when the truth is that PR Radar read it
+    /// on Tuesday. The chip is about the code, not about the question.
+    public var lastRuns: [String: Date] {
+        var newest: [String: Date] = [:]
+        for (key, record) in records {
+            guard AutoReviewLog.reviewed(record),
+                  let finishedAt = record.finishedAt,
+                  let id = AutoReviewLog.pullRequest(ofPingKey: key)
+            else { continue }
+            if let existing = newest[id], existing >= finishedAt { continue }
+            newest[id] = finishedAt
+        }
+        return newest
+    }
+
+    /// The `repo#number` a ping key was built from.
+    ///
+    /// Read off the key rather than out of `record.subject`: the subject is
+    /// only written at post time, so a `ready` record — one waiting on you to
+    /// post it — has none, and that is exactly a row this has to answer for.
+    /// Neither half of `owner/name#number` can contain an `@`, and the
+    /// timestamp after it cannot either, so the split is unambiguous.
+    static func pullRequest(ofPingKey key: String) -> String? {
+        let id = key.prefix { $0 != "@" }
+        return id.isEmpty ? nil : String(id)
+    }
+
     /// The rows a decision is still owed on, that the search will not return.
     ///
     /// Persist first, then verify. The subject is drawn from straight away so

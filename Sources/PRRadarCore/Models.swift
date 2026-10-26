@@ -54,6 +54,12 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
     /// See `SinceReview`.
     public var sinceReview: SinceReview?
 
+    /// What has landed since PR Radar last reviewed this, when it has.
+    ///
+    /// nil where there has been no run to measure from, and optional for the
+    /// same persistence reason as everything above it. See `SinceRun`.
+    public var sinceRun: SinceRun?
+
     /// The one line of the description worth showing. See `PRSummary`.
     public var summary: String?
 
@@ -91,7 +97,7 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
                 authorLogin: String, authorAvatarURL: URL?, pingedAt: Date,
                 account: String = "", nodeID: String? = nil, baseRef: String? = nil,
                 signals: ReviewSignals? = nil, sinceReview: SinceReview? = nil,
-                summary: String? = nil) {
+                sinceRun: SinceRun? = nil, summary: String? = nil) {
         self.repo = repo
         self.number = number
         self.title = title
@@ -105,6 +111,7 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
         self.baseRef = baseRef
         self.signals = signals
         self.sinceReview = sinceReview
+        self.sinceRun = sinceRun
         self.summary = summary
     }
 }

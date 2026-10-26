@@ -243,6 +243,32 @@ dealt with the pull request; here it stops a review you did not read the code
 for from anchoring a diff labelled *since your review*. It went out under your
 name, but the sentence would not be true.
 
+### What changed since PR Radar reviewed it
+
+The same question, asked of the other reader. The findings on the strip are a
+verdict on one commit, and nothing on the row said which — so a review run on
+Monday still read as the current word on the code five pushes later.
+
+So a row whose branch has moved since the run carries
+**`3 commits since PR Radar's review`**, beside the chip above it. The count is
+taken off the same commit page, against the moment the run finished.
+
+Two differences from the chip above, both deliberate:
+
+- **It never says *nothing new*.** Nearly every row in this queue carries a
+  run, so a chip on all of them saying the findings are still current would be
+  a chip nobody reads. The one above is rare and worth a sentence either way.
+- **It is never a link.** A run is not a review GitHub knows about, so there is
+  no commit recorded against it and no two-commit diff to open. That also means
+  a force-push which rewrites committer dates reads here as nothing new — the
+  one case this cannot see, and the price of not storing a commit id per run.
+
+The run is looked up by pull request rather than by the ping it answered. A
+re-request starts a fresh record, so the ping-keyed answer for a row that has
+just been pinged again is always *never*, when the truth is that PR Radar read
+it on Tuesday. The chip is about the code, not about the question. A run that
+failed or was skipped is not a review to measure from.
+
 ### That you started it
 
 Snoozing gave the list a way to say *not now*. There was never one for *I am on

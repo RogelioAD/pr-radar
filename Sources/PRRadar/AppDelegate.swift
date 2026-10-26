@@ -534,7 +534,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Without this the automatic review's own comment would dismiss the
             // very PR it was posted to draw attention to.
             let inbox = ReviewInbox(viewerLogin: viewer.login, teams: viewer.teams,
-                                    pins: state.autoReviewLog.pins)
+                                    pins: state.autoReviewLog.pins,
+                                    runs: state.autoReviewLog.lastRuns)
             var result = AccountFetch(account: account,
                                       items: tagged(inbox.build(from: searches), with: account))
 
