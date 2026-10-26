@@ -1,8 +1,8 @@
 // Renders a character to a PNG, so art can be looked at without launching
 // anything.
 //
-//     swift run MascotPreview humanTorch /tmp/look.png
-//     swift run MascotPreview humanTorch /tmp/look.png --health bad --frame 3
+//     swift run MascotPreview rattle /tmp/look.png
+//     swift run MascotPreview rattle /tmp/look.png --health bad --frame 3
 //     swift run MascotPreview --sheet /tmp/sheet.png
 //
 // `Scripts/mascot.py --png` already does this for the characters drawn in

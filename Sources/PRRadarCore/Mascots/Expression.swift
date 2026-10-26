@@ -220,15 +220,6 @@ extension Mascot {
             // whole skull nodding.
             if f % 4 < 2 { shift(&grid, rows: 20..<24, by: 0, down: 1) }
 
-        case .humanTorch:
-            // The fire, in whichever form is showing: the flames he is made
-            // of when he is lit, and the one in his fist when he is not.
-            // Never out and never steady, which is what fire does and what
-            // a status light should.
-            let lick: Slot = [Slot.accent, .accent, .accentDim, .accent,
-                              .accentDim, .accent][f % 6]
-            repaintAccent(&grid, x: 0..<grid.width, y: 0..<grid.height, with: lick)
-
         // The original cast. Each keeps the one thing it always did — these
         // are the idles the 16-cell art was drawn around, at three times the
         // coordinates.

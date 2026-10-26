@@ -278,9 +278,6 @@ anything**, which is what makes it pleasant to hand to an agent:
   them into a Swift literal, then writes a PNG to look at. Authoring a 48x48
   sprite by hand and getting it symmetric to the pixel is not realistic; the
   script is also where the non-obvious rules are written down.
-  `--dragon` draws the personal one, whose flame is deliberately *not* in the
-  drawing: it is painted per frame from the mood's `Breath`, so how far he is
-  breathing is a readout of what the app is doing.
 - `PRRADAR_DEBUG=1` prints a hit-test zone map of the real laid-out drawer, and
   of the collapsed badge's four corner grips — including a probe of the panel
   corner outside the art, which must read `move` — so drag, resize and click

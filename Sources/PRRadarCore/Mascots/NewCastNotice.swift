@@ -28,9 +28,18 @@ public enum NewCastNotice {
     }
 
     /// Whether to show it. `acknowledged` is the cohort already dismissed.
+    ///
+    /// A dismissal naming a cohort this build does not have is read as having
+    /// seen everything, rather than as having seen nothing. It means the last
+    /// banner somebody dismissed was for a shelf that has since been taken out
+    /// — so the newest cohort here is one they were shown *before* it, and
+    /// announcing an older group because its successor was removed is not news,
+    /// it is the advert this type exists to avoid.
     public static func shouldShow(acknowledged: String?) -> Bool {
         guard let cohort else { return false }
-        return cohort.rawValue != acknowledged
+        guard let acknowledged else { return true }
+        guard let seen = MascotCohort(rawValue: acknowledged) else { return false }
+        return seen != cohort
     }
 
     /// What dismissing it records.
