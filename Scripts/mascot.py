@@ -511,17 +511,425 @@ def dragon():
     return traced("dragon", [r.replace('E', 'a') for r in _DRAGON])
 
 
+# ----------------------------------------------------------------- Christmas
+#
+# The December four, and the first cohort drawn with the `tone` pass doing
+# most of the work rather than the shading one.
+#
+# The reason is the subject matter. Every character before these is one
+# material — a hull, a sheet, a rind, bone — and one material is exactly what
+# `shade` is for: fill the silhouette with `#`, let the distance field light
+# it, done. A penguin is two materials in one outline and a Santa is four, and
+# a distance field knows nothing about where the white starts.
+#
+# So they are all drawn the same way: fill the whole silhouette with `#` so
+# the outline and the shading passes still have something to work on, and then
+# `tone` the interior into whatever that part is actually made of. `tone`
+# refuses to paint the boundary, which is the entire point — the rim stays `#`,
+# comes back outlined and shaded off the character's own ramp, and the flat
+# colour inside it reads as a plane rather than as a sticker.
+
+
+def disc(cx, cy, rx, ry, top=None, bottom=None):
+    """Row spans for the left half of an ellipse, clipped to the half's width.
+
+    Everything here is round — a head, a penguin, a muzzle, a pom — and a
+    circle authored as a column of hand-counted left edges is a circle with a
+    flat spot in it that nobody can find.
+    """
+    out = {}
+    lo = int(math.floor(cy - ry)) if top is None else top
+    hi = int(math.ceil(cy + ry)) if bottom is None else bottom
+    for y in range(max(0, lo), min(H - 1, hi) + 1):
+        t = 1 - ((y - cy) / ry) ** 2
+        if t <= 0:
+            continue
+        left = int(round(cx - rx * math.sqrt(t)))
+        if left <= HALF - 1:
+            out.setdefault(y, []).append((left, HALF - 1))
+    return out
+
+
+def pine():
+    """Pine: the tree, and the only character in the cast with no face.
+
+    That is the point of him rather than an omission. Every other mascot says
+    what the app is doing with two eyes and one lit part; a tree has no eyes
+    to say it with, so the lights say all of it — they are the tell, they are
+    what the blink closes, and they are what the sweep walks. `Mascot.eyes`
+    is empty for exactly this, and `Expression.frame` sends the eye pattern to
+    the tell instead when it is.
+
+    The garland is white and the bulbs hang off it, which is the one rule
+    this shelf cost the most to learn: a tell painted straight onto a body of
+    a similar hue disappears in the mood that matches it.
+
+    A white string was not enough on its own here, because the clash is
+    worse than his was. The tell goes green in the all-clear state and this
+    character *is* green, and the first ramp's lightest rung came out at
+    almost exactly `Health.good` — so the lights went out in the one mood
+    that should read as everything being fine. The ramp is a real spruce
+    now, dark enough that the brightest rung of the body is well below the
+    dimmest rung of any accent. The white only has to separate the bulbs
+    from each other.
+    """
+    g = blank()
+
+    # The star. Four points: a vertical bar four columns wide with a bar
+    # across it three rows thick. Three rather than two because a horizontal
+    # arm two rows deep is the same spur the three-column rule forbids,
+    # turned on its side — the outline pass inks both faces of it and the
+    # point comes back as a seam.
+    put(g, {y: [(left, 23)] for y, left in
+            {0: 22, 1: 22, 2: 21, 3: 18, 4: 16, 5: 18, 6: 21, 7: 22}.items()}, 'a')
+
+    # Three tiers, one left edge per row. Each starts further in than the row
+    # above it ends, which is the notch the outline pass turns into the line
+    # under a branch — and is the whole of what makes this read as a tree
+    # rather than as a cone.
+    put(g, {y: [(left, 23)] for y, left in
+            {8: 21, 9: 20, 10: 19, 11: 18, 12: 18, 13: 17, 14: 16, 15: 15,
+             16: 14, 17: 13,
+             18: 18, 19: 17, 20: 16, 21: 15, 22: 14, 23: 14, 24: 13, 25: 12,
+             26: 11, 27: 10, 28: 9,
+             29: 14, 30: 13, 31: 12, 32: 11, 33: 10, 34: 10, 35: 9, 36: 8,
+             37: 7, 38: 6, 39: 5, 40: 4}.items()}, '#')
+
+    put(g, {y: [(21, 23)] for y in range(41, 45)}, '#')   # trunk
+    put(g, {y: [(18, 23)] for y in range(45, 48)}, '#')   # the pot
+
+    # Trunk and pot, off the trophy shelf's bronze. A ramp is one hue and
+    # this one is spruce, whose darkest rung is not wood, it is shadow.
+    tone(g, {y: [(21, 23)] for y in range(41, 45)}, 'x')
+    tone(g, {y: [(18, 23)] for y in range(45, 48)}, 'z')
+
+    # The garland: white, and the thing the glow runs along.
+    tone(g, {13: [(15, 23)], 14: [(15, 23)]}, 'c')
+    tone(g, {23: [(12, 23)], 24: [(12, 23)]}, 'c')
+    tone(g, {35: [(7, 23)], 36: [(7, 23)]}, 'c')
+
+    # And the bulbs, hung *under* it rather than drawn on it. Sitting on the
+    # string they were three cells deep against the garland's two, so the
+    # white only showed as slivers between them and each tier came back as
+    # one orange bar. Hung below, the continuous line is the garland and the
+    # bulbs are what is on it.
+    #
+    # Two on the top tier, three on the middle, four on the bottom — which is
+    # what a string wound round a cone actually does, and is also what stops
+    # the three tiers reading as three copies of one band.
+    for top, columns in ((15, (16, 20)), (25, (13, 18, 22)), (37, (8, 13, 18, 22))):
+        for left in columns:
+            tone(g, {y: [(left, left + 2)] for y in range(top, top + 3)}, 'a')
+
+    return build("pine", g, specs=[(19, 20), (20, 19), (20, 20)])
+
+
+def pebble():
+    """Pebble: the penguin, named for the stone a male gives the one he is
+    courting, which is the only Christmas present in nature.
+
+    One silhouette, not two. He was a circle on top of a bigger circle for
+    two passes, which is the shape of a snowman and the shape of an owl and
+    is not the shape of a bird that swims: a penguin is a single teardrop,
+    narrow at the crown, barely pinched at the throat, widest two thirds of
+    the way down, and tapering onto his feet. Drawn as stacked discs the head
+    came out nearly as wide as the body and the waist between them read as a
+    join rather than as a neck.
+
+    The second thing the redraw is about is where the black goes. The first
+    pass painted a white front and a white face and left the black to be
+    whatever was round the outside, which is not how a penguin is marked: the
+    black comes *over* him. It runs down the sides of the face past the eye
+    to the throat, and down both sides of the belly, so the white is a panel
+    he is wearing rather than the shape of him with a dark rim.
+
+    He is also the reason the `tone` recipe in this section exists. A penguin
+    shaded off one ramp is a grey penguin: the distance field puts the light
+    at the top left and the dark at the bottom right, and a bird whose entire
+    point is a white front on a black back comes back as neither. The two are
+    painted and only the rim is left to the pass.
+    """
+    g = blank()
+
+    # Two ellipses that overlap for four rows, so the waist between them is a
+    # curve rather than a join. Still two calls, and the fix was never to
+    # stop using them: the first pass had a head twenty-two cells across on a
+    # body of twenty-five, which is a snowman whatever shape the outlines
+    # are. The head is twenty here against a belly of twenty-six, and the
+    # throat where they cross narrows to fourteen.
+    #
+    # Authored as a single run of left edges instead, he came back a
+    # rounded-off box: ten rows of perfectly vertical edge down each side of
+    # the head is a helmet, and nothing about the tones fixes it. A curve has
+    # to come from something that knows it is a curve.
+    put(g, disc(23.5, 13, 10, 11), '#')              # head
+    put(g, disc(23.5, 33, 13, 13), '#')              # body
+    put(g, {y: [(17, 23)] for y in range(20, 24)}, '#')   # the throat
+
+    # Flippers, hung off the shoulder. The inner columns run further in than
+    # the drawing needs, which is not sloppiness: the body narrows again
+    # below the belly, and a flipper whose inner edge stopped at its own
+    # outline met the body on a diagonal for the last few rows and came back
+    # outlined all the way round — two loose wings floating beside him.
+    #
+    # Tapered a column per row at both ends rather than arriving at full
+    # width in one. Squared off at the top it put a four-column step in the
+    # outline at the shoulder, which on a bird that is supposed to be one
+    # continuous teardrop is the one place a step cannot go.
+    put(g, cols({7: (30, 35), 8: (28, 37), 9: (27, 38),
+                 10: (26, 39), 11: (25, 40), 12: (24, 41)}), '#')
+
+    # Feet, and bigger than a penguin's really are. Two small slabs tucked
+    # under the belly read as something he is standing on rather than as part
+    # of him; these come out past his sides where they can be seen.
+    put(g, {y: [(13, 20)] for y in range(42, 47)}, '#')
+
+    # The white, painted rather than lit: a face panel and a belly panel, each
+    # well inside the silhouette so the black can come down past both.
+    #
+    # The face panel is the one shape here with straight sides, and that is
+    # deliberate. An ellipse narrows exactly where the eyes are widest, so
+    # either it swallowed the whole head — which turns the black into a cap
+    # he is wearing — or an eye box ran off the white onto the cheek.
+    #
+    # Both panels are well inside their outline, and the second pass at this
+    # drawing is mostly about how far inside. Drawn two cells from the edge
+    # the white *was* the head and the black was a cap sitting on it; three
+    # cells of cheek either side is what turns it back into a bird with a
+    # white face.
+    tone(g, {y: [(left, 23)] for y, left in
+             {8: 20, 9: 18, 10: 17, 11: 17, 12: 17, 13: 17, 14: 17, 15: 17,
+              16: 17, 17: 17, 18: 18, 19: 19, 20: 20}.items()}, 'W')
+    tone(g, disc(23.5, 35, 7.5, 8.5), 'W')
+    # And the black, which is most of him and all of it declared. The pass
+    # would have lit the top left of the crown, the back and both flippers.
+    tone(g, {y: [(15, 23)] for y in range(3, 10)}, 'D')
+    tone(g, cols({c: (28, 43) for c in range(12, 16)}), 'D')
+    # The whole flipper, top to bottom, and one rung lighter than the back it
+    # hangs in front of. That step is the only thing separating them — two
+    # lit cells side by side never get an outline between them. One rung and
+    # no more: at two the flipper stops reading as a black wing catching the
+    # light and starts reading as a panel let into his side.
+    tone(g, cols({c: (25, 40) for c in range(8, 13)}), 'S')
+    # The cheek: the black running down past the eye to the jaw. This is the
+    # marking that was missing, and without it the crown reads as a cap he is
+    # wearing rather than as the back of his own head.
+    tone(g, cols({c: (9, 21) for c in range(14, 17)}), 'S')
+
+    # Beak and feet. Off the trophy shelf's bronze rather than off his ramp:
+    # the ramp is one hue and that hue is slate, which has no orange in it.
+    tone(g, {16: [(21, 23)], 17: [(20, 23)], 18: [(20, 23)], 19: [(20, 23)]}, 'z')
+    tone(g, {20: [(21, 23)]}, 'x')
+    tone(g, {y: [(14, 19)] for y in range(43, 46)}, 'z')
+    tone(g, {46: [(14, 19)]}, 'x')
+
+    # The scarf: his tell, and the only thing on him the mood gets to colour.
+    # Sat on the throat, which is where the drawing is narrowest — a scarf is
+    # the one garment that explains a pinch rather than hiding one.
+    tone(g, {22: [(14, 23)], 23: [(13, 23)]}, 'a')
+    tone(g, {24: [(12, 23)], 25: [(12, 23)]}, 'N')
+    tone(g, cols({c: (26, 32) for c in range(12, 16)}), 'N')
+    tone(g, cols({c: (33, 35) for c in range(13, 16)}), 'M')
+
+    # No specular. The one place the pass would want it is the crown, and a
+    # white glint on a black head at this size is indistinguishable from an
+    # eye — which this character already has two of, four rows below it.
+    return build("pebble", g)
+
+
+def dasher():
+    """Dasher: the reindeer, drawn as a head because the antlers are the
+    whole silhouette and a full-length deer at 48 cells has none.
+
+    The antlers are the one place in this file where the three-row rule is
+    broken on purpose. A beam sweeping up and out keeps to it the whole way,
+    but the tine branching off it does not — it leaves the beam as a ten-row
+    vertical step, which the outline pass inks as a ten-cell line. That line
+    is the side of the tine. The rule is there to stop a *smooth* edge coming
+    back as fringe, and a fork in an antler is not a smooth edge; it is a
+    corner, and a corner is supposed to be a line.
+    """
+    g = blank()
+
+    # The antler beam, as a column at a time. Thinking in columns is the only
+    # way anything shaped along x ever works out here.
+    #
+    # Six and seven rows thick rather than the four they were first drawn at,
+    # and the reason is the sweep rather than the look. A spur that thin is
+    # all boundary: the outline pass inks every cell of it, the shading pass
+    # finds no `#` left to shade, and a band that only lights chassis and
+    # tell therefore dies halfway out and never reaches the tips.
+    put(g, cols({17: (13, 20), 16: (11, 19), 15: (9, 17), 14: (7, 15),
+                 13: (6, 13), 12: (5, 12), 11: (4, 11), 10: (3, 10),
+                 9: (2, 9), 8: (2, 8), 7: (3, 8), 6: (4, 9), 5: (5, 10)}), '#')
+    # And the tine off it, tapered at the tip so it is a point rather than a
+    # post with a flat top.
+    put(g, cols({11: (1, 11), 12: (0, 12), 13: (0, 13), 14: (1, 15)}), '#')
+
+    put(g, disc(23.5, 27, 11.5, 10.5), '#')          # head
+    put(g, disc(23.5, 38, 7.5, 7), '#')              # muzzle
+
+    # Ears, out sideways from under the antlers.
+    put(g, cols({4: (23, 26), 5: (22, 27), 6: (21, 27), 7: (21, 28),
+                 8: (20, 28), 9: (20, 28), 10: (20, 28), 11: (20, 28)}), '#')
+
+    # The blaze down the front of the face, and the pale muzzle. Both painted:
+    # the pass lights from the upper left, and a deer's markings run down the
+    # middle whatever the light is doing.
+    tone(g, {y: [(20, 23)] for y in range(19, 33)}, 'W')
+    tone(g, disc(23.5, 38, 5.5, 5), 'W')
+    # The ears are darker inside than the head they sit on.
+    tone(g, cols({c: (22, 26) for c in range(6, 11)}), 'S')
+
+    # The nose: his tell, and the one thing anybody looks at on a reindeer.
+    tone(g, {36: [(21, 23)], 40: [(21, 23)]}, 'N')
+    tone(g, {y: [(20, 23)] for y in range(37, 40)}, 'a')
+
+    # Above the eye rather than on it: the eye pass paints over whatever the
+    # box covers, so a highlight inside it is a highlight nobody ever sees.
+    return build("dasher", g, specs=[(17, 21), (18, 20), (18, 21)])
+
+
+def nick():
+    """Nick: Santa, redrawn, and the lesson of the redraw is that a beard is
+    not a shape — it is three shapes with lines between them.
+
+    The first pass had a nose, a beard and nothing else, and at badge size it
+    read as a face in a hood with a soother in it. Nothing was wrong with the
+    silhouette; what was missing was every *internal* edge. A moustache is
+    what tells a beard from a bib, a shadow under the moustache is what tells
+    a moustache from the beard it sits on, and a mouth is what stops the
+    whole lower half being one cream mass. None of those change the
+    silhouette by a single cell, and all of them are the difference between a
+    character and a blob.
+
+    The nose is twice the size it was for the same reason. It is one of his
+    two tells and the other one is on top of his hat, so at 48 cells a nose
+    drawn to scale is four cells of mood colour in the middle of all that
+    white — which is not a nose, it is a mistake.
+    """
+    g = blank()
+
+    put(g, disc(23.5, 4.5, 4.5, 4.5), '#')           # the bobble
+    # The hat: one left edge per row, flaring to the brim.
+    put(g, {y: [(left, 23)] for y, left in
+            {6: 20, 7: 19, 8: 19, 9: 18, 10: 17, 11: 16, 12: 15, 13: 14,
+             14: 13, 15: 12, 16: 11}.items()}, '#')
+    put(g, {y: [(9, 23)] for y in range(16, 22)}, '#')    # the fur brim
+
+    # The head. Not an ellipse: an ellipse under a hat brim comes to a point
+    # where the two meet, so it hangs off him like an ornament instead of
+    # being his head. It has to be wide where the brim is and round only at
+    # the chin — but *curved* down the sides, which the first pass was not.
+    # Straight from the brim to the cheekbone it came back as a box with a
+    # hat on, and no amount of detail inside a box reads as a head.
+    head = {20: 12, 21: 11, 22: 11, 23: 10, 24: 10, 25: 10, 26: 10, 27: 10,
+            28: 10, 29: 11, 30: 11, 31: 12, 32: 13, 33: 14, 34: 15, 35: 17,
+            36: 19}
+    put(g, {y: [(left, 23)] for y, left in head.items()}, '#')
+
+    # The beard, which is also the bottom of his silhouette. It leaves the
+    # face at the cheekbone, flares past the jaw and tapers again.
+    put(g, {y: [(left, 23)] for y, left in
+            {30: 10, 31: 9, 32: 8, 33: 8, 34: 7, 35: 7, 36: 7, 37: 7, 38: 7,
+             39: 7, 40: 8, 41: 8, 42: 9, 43: 10, 44: 12, 45: 14, 46: 17,
+             47: 20}.items()}, '#')
+
+    # Fur, brim, moustache and beard: all the same white, and none of it off
+    # his ramp. His ramp is one hue and that hue is pillar-box red, so its
+    # lightest rung is pink — which on a beard is not white hair, it is a
+    # beard somebody has spilled something on.
+    tone(g, disc(23.5, 4.5, 3.5, 3.5), 'c')
+    tone(g, {y: [(9, 23)] for y in range(17, 21)}, 'c')
+    tone(g, {21: [(10, 23)]}, 'e')                        # under the brim
+    tone(g, {y: [(8, 23)] for y in range(27, 44)}, 'c')
+    tone(g, {y: [(11, 23)] for y in range(44, 46)}, 'e')
+    tone(g, {46: [(18, 23)]}, 'e')
+
+    # Skin, painted back over the middle of the beard. Bronze off the trophy
+    # shelf rather than a rung of his own, for the same reason the beard is
+    # not pink. What is left of the white either side of it is the whiskers.
+    #
+    # It tracks the head's own edge at the forehead — one cell in, never two,
+    # because `#` on this character shades to pillar-box red and a bare
+    # column of it between the skin and the outline is a maroon stripe down
+    # the side of his face. Below the eyes it pulls in much faster than the
+    # head does, and the gap that opens up is the whiskers.
+    tone(g, {y: [(left, 23)] for y, left in
+             {20: 13, 21: 12, 22: 12, 23: 11, 24: 11, 25: 11, 26: 12, 27: 13,
+              28: 14, 29: 15, 30: 16, 31: 16, 32: 17, 33: 18, 34: 19}.items()}, 'z')
+
+    # The moustache: two sweeps of white under the nose, dropping at the
+    # outer end. This is the line that turns the beard into a beard.
+    tone(g, {35: [(14, 23)], 36: [(13, 23)], 37: [(13, 23)]}, 'c')
+    tone(g, {38: [(14, 23)]}, 'e')      # and the shadow it casts on the beard
+
+    # A mouth in the gap under it. Two rows of the ramp's own darkest rung,
+    # which on a red character is maroon rather than black — a hole punched
+    # in a beard with `outline` reads as damage.
+    tone(g, {39: [(20, 23)], 40: [(21, 23)]}, 'D')
+
+    # The tell: the bobble on his hat and his nose. Two spots a long way
+    # apart, and neither of them a cheek — a patch of colour beside the nose
+    # reads as one bar straight across his face, and moved far enough out to
+    # stop doing that it is sitting on the beard.
+    tone(g, {29: [(21, 23)], 34: [(21, 23)]}, 'N')
+    tone(g, {y: [(20, 23)] for y in range(30, 34)}, 'a')
+    # A solid core in a white rim rather than a core, a ring and a rim: at
+    # four cells across, the middle ring is one cell wide and what comes back
+    # is a button with a hole in it.
+    tone(g, disc(23.5, 4.5, 2.5, 2.5), 'a')
+
+    # On the hat: the only part of him the shading pass actually touches, and
+    # so the only part a highlight can land on. The face and the beard are
+    # painted, and `specular` will not overwrite a tone somebody placed.
+    return build("nick", g, specs=[(16, 12), (17, 11), (17, 12)])
+
+
+# The December four's own ramps, here rather than only in Swift so the preview
+# shows what the app will. A character previewed in the demo greyscale is a
+# character whose palette nobody looks at until it is already shipped.
+RAMPS = {
+    'pine':   [(.016, .055, .039), (.031, .102, .071), (.055, .157, .106),
+               (.086, .227, .149), (.137, .318, .204), (.278, .467, .329)],
+    'pebble': [(.043, .051, .075), (.086, .106, .149), (.149, .180, .247),
+               (.251, .298, .388), (.871, .898, .937), (.988, .992, 1.00)],
+    'dasher': [(.145, .090, .055), (.235, .149, .090), (.349, .227, .137),
+               (.498, .337, .212), (.686, .525, .373), (.922, .843, .753)],
+    'nick':   [(.188, .027, .047), (.310, .047, .071), (.455, .078, .102),
+               (.627, .122, .145), (.800, .306, .306), (.969, .722, .698)],
+}
+
+CHRISTMAS = ['pine', 'pebble', 'dasher', 'nick']
+
+
 if __name__ == '__main__':
+    grey = [(.13, .15, .17), (.27, .29, .33), (.44, .46, .50),
+            (.64, .67, .71), (.84, .86, .89), (.97, .98, .98)]
+    ember = [(.169, .051, .047), (.286, .090, .071), (.431, .153, .098),
+             (.616, .251, .129), (.800, .408, .180), (.957, .729, .349)]
+
+    # The shelf, which is four characters rather than one. `--png` takes a
+    # directory here instead of a file, because four drawings do not fit in
+    # one path.
+    if '--christmas' in sys.argv:
+        out = sys.argv[sys.argv.index('--png') + 1] if '--png' in sys.argv else None
+        for name in CHRISTMAS:
+            rows = globals()[name]()
+            print(f"// {name}")
+            print(swift(rows))
+            if out:
+                png(f"{out.rstrip('/')}/{name}.png", rows, RAMPS[name],
+                    tint=(.98, .62, .16))
+        raise SystemExit(0)
+
     rows = dragon() if '--dragon' in sys.argv else (demo() if '--demo' in sys.argv else None)
     if rows is None:
         print(__doc__)
-        raise SystemExit("nothing to draw: pass --demo or --dragon, or import this module")
+        raise SystemExit("nothing to draw: pass --demo, --dragon or --christmas, "
+                         "or import this module")
     print(swift(rows))
     if '--png' in sys.argv:
-        grey = [(.13, .15, .17), (.27, .29, .33), (.44, .46, .50),
-                (.64, .67, .71), (.84, .86, .89), (.97, .98, .98)]
-        ember = [(.169, .051, .047), (.286, .090, .071), (.431, .153, .098),
-                 (.616, .251, .129), (.800, .408, .180), (.957, .729, .349)]
         png(sys.argv[sys.argv.index('--png') + 1], rows,
             ember if '--dragon' in sys.argv else grey,
             tint=(.98, .62, .16))

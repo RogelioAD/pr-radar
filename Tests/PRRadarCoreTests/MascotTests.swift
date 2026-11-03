@@ -92,7 +92,12 @@ final class MascotTests: XCTestCase {
     /// Eyes have to sit symmetrically about the centre line, or a face reads
     /// as a pixel off even though every feature is where it was drawn.
     func testEyesArePlacedSymmetricallyAboutTheCentre() {
+        // A faceless character has no eye boxes at all, and that is a thing
+        // to declare rather than a thing to forget: `eyes` empty is what
+        // sends the eye pattern to the tell instead. What is checked here is
+        // that nobody has *one* of them.
         for mascot in Mascot.all where mascot.mirrored {
+            guard !mascot.eyes.isEmpty else { continue }
             XCTAssertEqual(mascot.eyes.count, 2, "\(mascot.name)")
             let left = mascot.eyes[0], right = mascot.eyes[1]
             let n = mascot.eyeSize, w = mascot.sprite.width
@@ -178,10 +183,30 @@ final class MascotTests: XCTestCase {
             let shut = mascot.frame(eyes: .shut)
             let open = mascot.frame(eyes: .open)
             XCTAssertNotEqual(shut, open, "\(mascot.name) looks the same shut as open")
-            let box = mascot.eyes[0]
+            guard let box = mascot.eyes.first else { continue }
             XCTAssertEqual(open[box.x + mascot.eyeSize / 2, box.y + mascot.eyeSize / 2],
                            mascot.eyeInk,
                            "\(mascot.name) open eye has no ink in the middle of it")
+        }
+    }
+
+    /// The half of the line above that a faceless character has to answer on
+    /// its own. "Not the same shut as open" is satisfied by any difference at
+    /// all; what is actually promised is that the thing carrying the mood is
+    /// what closes, because there is nothing else on the drawing that could.
+    func testAFacelessCharacterBlinksWithItsTell() {
+        for mascot in Mascot.all where mascot.eyes.isEmpty {
+            let open = mascot.frame(eyes: .open)
+            for pattern in [EyePattern.shut, .glance, .wide, .dead] {
+                let applied = mascot.frame(eyes: pattern)
+                let moved = mascot.tell.filter { applied[$0.x, $0.y] != open[$0.x, $0.y] }
+                XCTAssertFalse(moved.isEmpty,
+                               "\(mascot.name) ignores \(pattern) entirely")
+            }
+            // And shutting has to read as *less*, not as something else.
+            let shut = mascot.frame(eyes: .shut)
+            XCTAssertTrue(mascot.tell.allSatisfy { shut[$0.x, $0.y] == .accentDim },
+                          "\(mascot.name) does not put its lights out")
         }
     }
 
@@ -190,7 +215,8 @@ final class MascotTests: XCTestCase {
         for mascot in [Mascot.scoot, .wobble, .boo, .flit] {
             XCTAssertEqual(mascot.bobScale, 2, "\(mascot.name) floats")
         }
-        for mascot in [Mascot.blip, .bloop, .gourd, .rattle] {
+        for mascot in [Mascot.blip, .bloop, .gourd, .rattle,
+                       .pine, .pebble, .dasher, .nick] {
             XCTAssertEqual(mascot.bobScale, 1, "\(mascot.name) stands on something")
         }
     }
@@ -224,7 +250,8 @@ final class MascotTests: XCTestCase {
         XCTAssertNotNil(Mascot.blip.glassBounds)
         XCTAssertNotNil(Mascot.scoot.glassBounds)
         XCTAssertNotNil(Mascot.wobble.glassBounds)
-        for mascot in [Mascot.bloop, .boo, .flit, .gourd, .rattle] {
+        for mascot in [Mascot.bloop, .boo, .flit, .gourd, .rattle,
+                       .pine, .pebble, .dasher, .nick] {
             XCTAssertNil(mascot.glassBounds,
                          "\(mascot.name) has no visor and should have no glass")
         }
@@ -244,7 +271,8 @@ final class MascotTests: XCTestCase {
     /// to be kept working.
     func testEveryCharacterSweepsAndEverySweepIsUsed() {
         let used = Set(Mascot.all.map(\.sweep))
-        for kind in [SweepKind.visor, .hud, .beam, .psi, .wisp, .echo, .flicker, .marrow] {
+        for kind in [SweepKind.visor, .hud, .beam, .psi, .wisp, .echo, .flicker,
+                     .marrow, .tinsel, .flurry, .tines, .tally] {
             XCTAssertTrue(used.contains(kind), "\(kind) belongs to nobody")
         }
     }
@@ -345,6 +373,149 @@ final class MascotTests: XCTestCase {
         let reach = (0..<15).flatMap { changed(.flit, $0).map(\.y) }
         XCTAssertGreaterThan(reach.max() ?? 0, 40,
                              "the sonar should carry past his feet")
+    }
+
+    /// And the same question for the December four. Asked the same way, of
+    /// whatever the sweep *changed* rather than of accent cells alone: three
+    /// of these four are drawn almost entirely in materials that are neither
+    /// chassis nor tell, and an accent-only measurement calls that nothing.
+    func testTheChristmasSweepsAreEachTheirOwnThing() {
+        func changed(_ m: Mascot, _ frame: Int) -> [Point] {
+            let plain = m.frame(eyes: .open, frame: frame, sweeping: false)
+            let swept = m.frame(eyes: .open, frame: frame, sweeping: true)
+            return swept.litPoints.filter { swept[$0.x, $0.y] != plain[$0.x, $0.y] }
+                + plain.litPoints.filter { swept[$0.x, $0.y] != plain[$0.x, $0.y] }
+        }
+        func travel(_ m: Mascot, _ frames: Range<Int>) -> (x: Double, y: Double) {
+            let s: [(x: Double, y: Double)] = frames.compactMap { frame in
+                let pts = changed(m, frame)
+                guard !pts.isEmpty else { return nil }
+                return (pts.reduce(0.0) { $0 + Double($1.x) } / Double(pts.count),
+                        pts.reduce(0.0) { $0 + Double($1.y) } / Double(pts.count))
+            }
+            let xs = s.map(\.x), ys = s.map(\.y)
+            return ((xs.max() ?? 0) - (xs.min() ?? 0), (ys.max() ?? 0) - (ys.min() ?? 0))
+        }
+
+        // Pine's lights walk down him and hold on each tier. Descending is
+        // shared with Rattle; holding is shared with Rattle. What is his is
+        // that each stop is one swag rather than a stripe across everything
+        // at that height, so no frame of it is more than a few rows deep.
+        let pine = travel(.pine, 0..<9)
+        XCTAssertGreaterThan(pine.y, 8, "the lights should walk down him")
+        for frame in 0..<12 {
+            let ys = changed(.pine, frame).map(\.y)
+            let depth = (ys.max() ?? 0) - (ys.min() ?? 0)
+            XCTAssertLessThan(depth, 10, "frame \(frame) is a stripe, not a swag")
+        }
+        // Held, not slid. Asked of which swag is lit rather than of the whole
+        // frame, because his idle twinkles the bulbs every single frame — so
+        // no two frames of him are ever identical, however still the sweep
+        // is. Rattle can be measured the other way; this one cannot.
+        let plainPine = Mascot.pine.frame(eyes: .open, frame: 0, sweeping: false)
+        let swags = (0..<12).map { frame in
+            Set(changed(.pine, frame)
+                .filter { plainPine[$0.x, $0.y] == .cream }
+                .map { $0.y * 48 + $0.x })
+        }
+        XCTAssertGreaterThan(zip(swags, swags.dropFirst()).filter { $0 == $1 && !$0.isEmpty }.count, 3,
+                             "the lights are sliding, not stepping")
+        // And the star takes a turn, or the topper would be the one piece of
+        // him the sweep never touched.
+        let crown = Mascot.pine.tell.filter { $0.y < 8 }
+        XCTAssertFalse(crown.isEmpty, "the star is not where this test thinks")
+        let topped = (0..<12).filter { frame in
+            let swept = Mascot.pine.frame(eyes: .open, frame: frame, sweeping: true)
+            return crown.allSatisfy { swept[$0.x, $0.y] == .light }
+        }
+        XCTAssertFalse(topped.isEmpty, "the star never lights")
+
+        // Nick's crosses and does not descend, which is what tells the two
+        // horizontal sweeps apart.
+        //
+        // Asked of the band's leading edge and of its shape rather than of
+        // its centre of mass, which on this character says very little: he
+        // is a narrow hat on a wide beard, so a column at his edge has a
+        // completely different centre from one up his middle whatever the
+        // band is doing, and the vertical reading that falls out of that is
+        // the drawing talking, not the sweep.
+        let lead = (0..<18).map { changed(.nick, $0).map(\.x).max() ?? 0 }
+        for (here, next) in zip(lead, lead.dropFirst()) {
+            XCTAssertLessThanOrEqual(here, next, "the band went backwards")
+        }
+        XCTAssertGreaterThan((lead.last ?? 0) - (lead.first ?? 0), 20,
+                             "the band should cross him")
+        // And it is a column while it does it. Nobody else in the cast
+        // touches four columns and thirty rows in the same frame.
+        for frame in 0..<18 {
+            let xs = Set(changed(.nick, frame).map(\.x))
+            XCTAssertLessThanOrEqual(xs.count, 4, "frame \(frame) is not a band")
+        }
+
+        // Pebble's snow falls. Measured down one column of flakes well clear
+        // of him rather than over the whole frame: nine flakes at four
+        // different head starts have a centre of mass that barely moves, and
+        // the thing being claimed is that each flake descends, not that the
+        // weather as a whole does.
+        let column = (1..<10).map { frame in
+            changed(.pebble, frame).filter { $0.x <= 4 }.map(\.y).min() ?? -1
+        }
+        XCTAssertFalse(column.contains(-1), "a frame with no flake in that column")
+        for (above, below) in zip(column, column.dropFirst()) {
+            XCTAssertLessThan(above, below, "the flakes are not falling")
+        }
+
+        // And it is the only sweep drawn mostly in empty space. Every other
+        // one lights something the character is made of.
+        //
+        // Counted over a run rather than in one frame: nine flakes of two
+        // cells each is a small enough sample that a single frame can land
+        // on an even split, which says nothing either way.
+        var outside = 0, onHim = 0
+        for frame in 0..<12 {
+            let plain = Mascot.pebble.frame(eyes: .open, frame: frame, sweeping: false)
+            for point in changed(.pebble, frame) {
+                if plain[point.x, point.y] == nil { outside += 1 } else { onHim += 1 }
+            }
+        }
+        XCTAssertGreaterThan(outside, onHim,
+                             "the snow should mostly be falling past him")
+
+        // Dasher's pulse climbs out along the antlers: it gets further from
+        // the centre line, and it stays in the top of him. The alien expands
+        // too, from a point and in every direction — this one goes out along
+        // two limbs and nowhere else.
+        //
+        // The nose is excluded from both halves of this. It is lit by the
+        // flare rather than by the band — the band never gets near it — so
+        // counting it would say the pulse reaches rows and distances it
+        // never travels to.
+        let plainDeer = Mascot.dasher.frame(eyes: .open, frame: 0, sweeping: false)
+        func band(_ frame: Int) -> [Point] {
+            changed(.dasher, frame).filter {
+                switch plainDeer[$0.x, $0.y] {
+                case .accent, .accentMid, .accentDim: return false
+                default: return true
+                }
+            }
+        }
+        // A whole lap. Sampled over ten frames this read as a pulse that
+        // stopped two thirds of the way out, because ten frames is two
+        // thirds of a lap — the measurement was short, not the sweep.
+        let out = (0..<20).map { band($0).map { max(22 - $0.x, $0.x - 25) }.max() ?? 0 }
+        XCTAssertGreaterThan(out.max() ?? 0, 12, "the pulse never reaches the tines")
+        XCTAssertNotEqual(out.min(), out.max(), "the pulse is not travelling out")
+        let low = (0..<20).flatMap { band($0).map(\.y) }.max() ?? 48
+        XCTAssertLessThan(low, 24, "the pulse should stay in the antlers")
+
+        // And the nose does flare, once a lap, or his tell would be the one
+        // part of him the sweep never touched.
+        let flares = (0..<24).filter { frame in
+            let swept = Mascot.dasher.frame(eyes: .open, frame: frame, sweeping: true)
+            return Mascot.dasher.tell.contains { swept[$0.x, $0.y] == .light }
+        }
+        XCTAssertFalse(flares.isEmpty, "the nose never flares")
+        XCTAssertLessThan(flares.count, 12, "the nose is just permanently on")
     }
 
     /// Rattle's pulse stops on each bone rather than sliding past them, which
@@ -668,6 +839,8 @@ final class MascotCycleTests: XCTestCase {
         XCTAssertEqual(Mascot.cohort(.og).map(\.id), [.pip, .byte, .widget, .nimbus])
         XCTAssertEqual(Mascot.cohort(.space).map(\.id), [.blip, .scoot, .wobble, .bloop])
         XCTAssertEqual(Mascot.cohort(.october2026).map(\.id), [.boo, .flit, .gourd, .rattle])
+        XCTAssertEqual(Mascot.cohort(.december2026).map(\.id),
+                       [.pine, .pebble, .dasher, .nick])
         XCTAssertEqual(Mascot.cohort(.custom).map(\.id), [],
                        "nothing this build ships belongs on a fork's shelf")
     }

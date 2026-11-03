@@ -958,7 +958,7 @@ press.
 ## Mascots
 
 A small pixel-art character that keeps you company in the drawer and, by
-default, replaces the floating icon entirely. **Thirteen of them**, on four
+default, replaces the floating icon entirely. **Sixteen of them**, on five
 shelves, and none of them go away.
 
 **OG Mascots** — the first cast, drawn at 16 cells and retired when the
@@ -991,6 +991,34 @@ because they leave. They do not.
 | **Gourd** | a jack-o'-lantern, the only one lit from inside |
 | **Rattle** | a skeleton; the nose hollow glows and a spark sits in his ribs |
 
+**December 2026** — the Christmas four, and the first shelf whose art is
+mostly hand-placed tone rather than the shading pass. Everyone before them is
+one material; a penguin is two in one outline and a Santa is four, and a
+distance field knows nothing about where the white of a beard starts.
+
+Pine is the first character with **no eyes at all**, which is a change to the
+model rather than to the art. `Mascot.eyes` is empty, and `Expression.frame`
+sends the eye pattern to the tell instead: the lights go out where everybody
+else's eyes close, flare where one would widen, and go dark off his own ramp
+for the state that draws everyone else's as crosses. A faceless sprite with
+nothing in place of a face is not a mascot without eyes, it is a mascot that
+has stopped answering the thing every other one answers.
+
+He is also where the tell-against-body rule got expensive. His readout is the
+string and his body is green, so the all-clear state — the one that means
+everything is fine — was a tree with its lights off, because the first ramp's
+lightest rung came out at almost exactly `Health.good`. The fix was both
+halves: a white garland so the bulbs separate from each other, and a real
+spruce ramp dark enough that the brightest rung of the body sits below the
+dimmest rung of any accent.
+
+| | |
+|---|---|
+| **Pine** | a Christmas tree, and the only character in the cast with no face. The lights are the tell, the blink and the sweep all at once |
+| **Pebble** | a penguin in a scarf, named for the stone a male gives the one he is courting. Dark eyes on a white face, like Byte's |
+| **Dasher** | a reindeer. You know which part of him takes the colour |
+| **Nick** | Santa; the bobble on his hat and his nose carry the mood, and his sweep crosses him twice |
+
 ### The mascot room
 
 The **smiling face in the footer** opens a room of the whole cast, four to a
@@ -999,8 +1027,8 @@ accent border and its name in the accent colour. A **No mascot** line under
 the shelves puts the plain tile back, so the room can say "none" rather than
 leaving the context menu as the only way to.
 
-A room rather than a longer pop-up menu: twelve names in a list is a list you
-read, twelve faces in a grid is a set you recognise, and recognising them is
+A room rather than a longer pop-up menu: sixteen names in a list is a list you
+read, sixteen faces in a grid is a set you recognise, and recognising them is
 the whole transaction. Settings keeps its picker — now grouped the same way —
 for anyone who already knows which one they want. Each cell's tooltip carries
 the blurb and what the character's tell is, which is the one place either is
@@ -1008,13 +1036,13 @@ still said.
 
 Characters are drawn **whole** here, not cropped to the head the way the
 drawer's header lockup is. A room is the one surface with space for it, and
-half a character is a poor way to be asked to choose between twelve. Each is
+half a character is a poor way to be asked to choose between sixteen. Each is
 framed to its own columns rather than the perch's, which reserves a mood-mark
 gutter on the right that `idle` never draws into — centring a name under the
 perch put every label a third of a gutter left of the character it belonged
 to.
 
-They are also **held still**. Twelve timelines animating at once is a screen
+They are also **held still**. Sixteen timelines animating at once is a screen
 that will not sit still long enough to be read, and the badge is where a
 character is supposed to move.
 
@@ -1051,7 +1079,7 @@ room:
 
 ```
 ┌────────────────────────────────────────────────────┐
-│  👻               October 2026                   ×  │
+│  🎄              December 2026                   ×  │
 │                Pick one in the mascot room.         │
 └────────────────────────────────────────────────────┘
 ```

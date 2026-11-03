@@ -56,6 +56,18 @@ public enum SweepKind: Sendable {
     case flicker
     /// A pulse stepping down the spine, one rib at a time.
     case marrow
+    /// Lights walked down a tree a tier at a time, holding on each, with the
+    /// star flaring at the top of every lap.
+    case tinsel
+    /// Snow: flakes falling past a character rather than anything crossing
+    /// it. The only sweep that is mostly drawn outside the silhouette.
+    case flurry
+    /// A charge climbing out along a pair of antlers, both at once, and the
+    /// nose flaring as each one launches.
+    case tines
+    /// A band crossing a body from one side to the other — twice a cycle,
+    /// because the second pass is the one that is checking.
+    case tally
 }
 
 /// Which section of the mascot room a character belongs to.
@@ -79,6 +91,9 @@ public enum MascotCohort: String, CaseIterable, Sendable {
     /// The Halloween four. Dated because there may be another cohort later,
     /// not because they go away — they do not.
     case october2026
+    /// The Christmas four. Dated for the same reason as October's, and like
+    /// October's they stay on the shelf in March.
+    case december2026
     /// Anything this build did not ship. A fork's own.
     case custom
 
@@ -89,12 +104,14 @@ public enum MascotCohort: String, CaseIterable, Sendable {
         case .og:          return "OG Mascots"
         case .space:       return "Out of this World"
         case .october2026: return "October 2026"
+        case .december2026: return "December 2026"
         case .custom:      return nil
         }
     }
 
     /// Ordered as the room stacks them: oldest first, yours last.
-    public static let ordered: [MascotCohort] = [.og, .space, .october2026, .custom]
+    public static let ordered: [MascotCohort] = [.og, .space, .october2026,
+                                                .december2026, .custom]
 }
 
 public enum MascotID: String, CaseIterable, Sendable {
@@ -104,6 +121,7 @@ public enum MascotID: String, CaseIterable, Sendable {
     case pip, byte, widget, nimbus
     case blip, scoot, wobble, bloop
     case boo, flit, gourd, rattle
+    case pine, pebble, dasher, nick
 
     /// The picker, for anyone who finds it by clicking: each character in
     /// turn, then off, then round again.
@@ -211,6 +229,11 @@ public struct Mascot: Identifiable, Sendable, Equatable {
         }
     }
     /// Top-left of each eye box.
+    ///
+    /// Empty for a character with no face. That is not the same as a
+    /// character whose eyes are hard to see: Pine has none at all, and what
+    /// answers the eye pattern instead is his tell — the lights go out where
+    /// everybody else's eyes close. See `Expression.frame`.
     public let eyes: [Point]
     /// Eye boxes are square and this is their side. The alien's is half again
     /// the others — the whole joke of him is the eyes.
@@ -1010,12 +1033,308 @@ extension Mascot {
 }
 
 
+
+// MARK: - The December four
+//
+// The first cohort whose art is mostly `tone` rather than `shade`, and the
+// reason is in `Scripts/mascot.py`: everyone before these is one material,
+// and a penguin is two in one outline while a Santa is four. The shading pass
+// lights a distance field, which is exactly right for a hull and knows
+// nothing about where the white of a beard starts.
+
+extension Mascot {
+    public static let pine = Mascot(
+        id: .pine, name: "Pine", tellName: "the lights and the star",
+        blurb: "The tree. No face — the lights say it all.",
+        sprite: Sprite([
+            "......................aaaa......................",
+            "......................aaaa......................",
+            ".....................aaaaaa.....................",
+            "..................aaaaaaaaaaaa..................",
+            "................aaaaaaaaaaaaaaaa................",
+            "..................aaaaaaaaaaaa..................",
+            ".....................aaaaaa.....................",
+            "......................aaaa......................",
+            ".....................kWHHHk.....................",
+            "....................kWHHHHHk....................",
+            "...................kWWHHHHHHk...................",
+            "..................kWWWHHHHHHHk..................",
+            "..................kWWWHHHHHHHk..................",
+            ".................kcccccccccccck.................",
+            "................kcccccccccccccck................",
+            "...............kaaaWaaaHHaaaHaaak...............",
+            "..............kWaaaHaaaHHaaaHaaaBk..............",
+            ".............kkkkkaHaaaHHaaaHakkkkk.............",
+            "..................kWWHHHHHHBBk..................",
+            ".................kWWXHHHHHHBBBk.................",
+            "................kWWXXHHHHHHBBBHk................",
+            "...............kWWWWHHHHHHHHBBHHk...............",
+            "..............kWWWWHHHHHHHHHHBHHHk..............",
+            "..............kcccccccccccccccccck..............",
+            ".............kcccccccccccccccccccck.............",
+            "............kaaaWHaaaHaaaaHaaaHHaaak............",
+            "...........kWaaaHHaaaHaaaaHaaaHHaaaBk...........",
+            "..........kWWaaaHHaaaHaaaaHaaaHHaaaBSk..........",
+            ".........kkkkkHHHHHHHHHHHHHHHHHHHHkkkkk.........",
+            "..............kWWWHHHHHHHHHHHHBBBk..............",
+            ".............kWWWHHHHHHHHHHHHHHBBBk.............",
+            "............kWWWHHHHHHHHHHHHHHHHBBHk............",
+            "...........kWWWHHHHHHHHHHHHHHHHHHBHBk...........",
+            "..........kWWWHHHHHHHHHHHHHHHHHHHHHHBk..........",
+            "..........kWWWHHHHHHHHHHHHHHHHHHHBHBBk..........",
+            ".........kcccccccccccccccccccccccccccck.........",
+            "........kcccccccccccccccccccccccccccccck........",
+            ".......kaaaWHaaaBHaaaHaaaaHaaaBBaaaBBaaak.......",
+            "......kWaaaHHaaaBBaaaHaaaaHaaaBBaaaBBaaaBk......",
+            ".....kWWaaaHBaaaBBaaaHaaaaHaaaBBaaaBSaaaSBk.....",
+            "....kkkkkkkkkkkkkkkkkHHHHHHkkkkkkkkkkkkkkkkk....",
+            ".....................kxxxxk.....................",
+            ".....................kxxxxk.....................",
+            ".....................kxxxxk.....................",
+            ".....................kxxxxk.....................",
+            "..................kkkzzzzzzkkk..................",
+            "..................kzzzzzzzzzzk..................",
+            "..................kkkkkkkkkkkk..................",
+        ]),
+        // No eyes, and the only character in the cast with none. Every other
+        // one says what the app is doing with two of them and one lit part; a
+        // tree has nothing to say it with but the string, so the string says
+        // all of it — it carries the mood, it is what the blink puts out, and
+        // it is what the sweep walks.
+        //
+        // `eyeInk` and `eyeSize` are still here because the initialiser asks
+        // for them and a fork's call shape must not change. Nothing reads
+        // them while `eyes` is empty; `.accent` is the honest value anyway,
+        // since the lights are drawn in it.
+        eyes: [], eyeSize: 1, eyeInk: .accent,
+        sweep: .tinsel,
+        // A real spruce, and dark on purpose. The first ramp here was a
+        // friendlier green whose lightest rung came out at (0.27, 0.56, 0.33)
+        // — which is `Health.good` with the lights off. His whole readout is
+        // the string, so the one mood that means everything is fine was the
+        // one mood in which he had no readout at all. Every rung of the body
+        // now sits well below every rung of every accent.
+        ramp: ChassisRamp(deep: RGB(0.016, 0.055, 0.039), shade: RGB(0.031, 0.102, 0.071), mid: RGB(0.055, 0.157, 0.106),
+                          base: RGB(0.086, 0.227, 0.149), light: RGB(0.137, 0.318, 0.204), spec: RGB(0.278, 0.467, 0.329)),
+        // The star and the top tier. A tree crops from the top like everybody
+        // else, and the topper is the one piece of tell that is never in
+        // doubt about where it is.
+        headRows: 20, cohort: .december2026)
+}
+
+extension Mascot {
+    public static let pebble = Mascot(
+        id: .pebble, name: "Pebble", tellName: "his scarf",
+        blurb: "The penguin. Named for the only present in nature.",
+        sprite: Sprite([
+            "................................................",
+            "................................................",
+            "................................................",
+            "...................kkkkkkkkkk...................",
+            "..................kDDDDDDDDDDk..................",
+            ".................kDDDDDDDDDDDDk.................",
+            "................kDDDDDDDDDDDDDDk................",
+            "...............kDDDDDDDDDDDDDDDDk...............",
+            "...............kDDDDDDDDDDDDDDDDk...............",
+            "..............kSSDDDDDDDDDDDDDDSSk..............",
+            "..............kSSWWWWWWWWWWWWWWSSk..............",
+            "..............kSSWWWWWWWWWWWWWWSSk..............",
+            "..............kSSWWWWWWWWWWWWWWSSk..............",
+            "..............kSSWWWWWWWWWWWWWWSSk..............",
+            "..............kSSWWWWWWWWWWWWWWSSk..............",
+            "..............kSSWWWWWWWWWWWWWWSSk..............",
+            "..............kSSWWWWzzzzzzWWWWSSk..............",
+            "..............kSSWWWzzzzzzzzWWWSSk..............",
+            "...............kSWWWzzzzzzzzWWBSk...............",
+            "...............kSWWWzzzzzzzzWBBSk...............",
+            "................kWWWWxxxxxxWBBBk................",
+            ".................kWWWHHHHHHBBBk.................",
+            ".................kaaaaaaaaaaaak.................",
+            "...............kkaaaaaaaaaaaaaakk...............",
+            "............k.kNNNNNNNNNNNNNNNNNNk.k............",
+            "...........kNkNNNNNNNNNNNNNNNNNNNNkNk...........",
+            "..........kSNNNNWHHHHHHHHHHHHHHHNNNNSk..........",
+            ".........kSSNNNNHHHHHWWWWWWHHHHHNNNNSSk.........",
+            "........kSSSNNNNHHHWWWWWWWWWWHHHNNNNSSSk........",
+            "........kSSSNNNNHHWWWWWWWWWWWWHHNNNNSSSk........",
+            ".......kSSSSNNNNHWWWWWWWWWWWWWWHNNNNSSSSk.......",
+            ".......kSSSSNNNNHWWWWWWWWWWWWWWHNNNNSSSSk.......",
+            ".......kSSSSNNNNWWWWWWWWWWWWWWWWNNNNSSSSk.......",
+            ".......kSSSSSMMMWWWWWWWWWWWWWWWWMMMSSSSSk.......",
+            ".......kSSSSSMMMWWWWWWWWWWWWWWWWMMMSSSSSk.......",
+            ".......kSSSSSMMMWWWWWWWWWWWWWWWWMMMSSSSSk.......",
+            "........kSSSSDDDWWWWWWWWWWWWWWWWDDDSSSSk........",
+            "........kSSSSDDDWWWWWWWWWWWWWWWWDDDSSSSk........",
+            ".........kSSSDDDWWWWWWWWWWWWWWWWDDDSSSk.........",
+            "..........kSSDDDHWWWWWWWWWWWWWWHDDDSSk..........",
+            "...........kSDDDHWWWWWWWWWWWWWWHDDDSk...........",
+            "............kDDDHHWWWWWWWWWWWWHBDDDk............",
+            ".............kDDHHHWWWWWWWWWWBBBDDk.............",
+            ".............kzzzzzzHWWWWWWBzzzzzzk.............",
+            ".............kzzzzzzHBBBBSSBzzzzzzk.............",
+            ".............kzzzzzzBkkkkkkSzzzzzzk.............",
+            ".............kkkkkkkk......kkkkkkkk.............",
+            "................................................",
+        ]),
+        // Dark, like Byte's, and for the same reason: his face is white, and
+        // a white eye on a white patch is a character with no eyes at all.
+        // The mood still reads — it is wound round his neck.
+        // Bead eyes, and five cells rather than six. His white face mask had
+        // to come in three columns either side before the black read as the
+        // back of his head instead of a cap he was wearing — and a mask that
+        // narrow cannot hold two six-cell eyes with a gap between them.
+        eyes: [Point(17, 11), Point(26, 11)], eyeSize: 5, eyeInk: .outline,
+        sweep: .flurry,
+        // A ramp with a cliff in it, between `base` and `light`, which no
+        // other character has and this one needs. A penguin is two values
+        // with nothing in between; spread evenly over six rungs he comes out
+        // grey from end to end, which is what the first pass was — a slate
+        // bird rather than a black and white one.
+        ramp: ChassisRamp(deep: RGB(0.043, 0.051, 0.075), shade: RGB(0.086, 0.106, 0.149), mid: RGB(0.149, 0.180, 0.247),
+                          base: RGB(0.251, 0.298, 0.388), light: RGB(0.871, 0.898, 0.937), spec: RGB(0.988, 0.992, 1.000)),
+        headRows: 28, cohort: .december2026)
+}
+
+extension Mascot {
+    public static let dasher = Mascot(
+        id: .dasher, name: "Dasher", tellName: "his nose",
+        blurb: "The reindeer. You know the one.",
+        sprite: Sprite([
+            "............kk....................kk............",
+            "...........kWWk..................kWWk...........",
+            "........kk.kWWk..................kWWk.kk........",
+            ".......kWWkWHHk..................kWWWkHHk.......",
+            "......kWWHWHHHk..................kWWWWHHHk......",
+            ".....kWWHHHHBBk..................kWWHWHHBBk.....",
+            ".....kWHHHHHBBk..................kWWHHHBBBk.....",
+            ".....kWWHHHHBBk..................kWWHHBBBBk.....",
+            ".....kWkkBHBBSk..................kWHHHBkkSk.....",
+            ".....kk..kHHBBBk................kWHHBBk..kk.....",
+            ".....k....kBBBBk................kHBBSk....k.....",
+            "...........kBBBHk..............kWHBSk...........",
+            "............kBBHk..............kWBSk............",
+            ".............kBHWk............kWHBk.............",
+            "..............kHWk............kWHk..............",
+            "..............kHWk............kWBk..............",
+            "...............kWk............kWk...............",
+            "...............kHk..kkkkkkkk..kWk...............",
+            "................kWkkWWWWWWWHkkBk................",
+            "................kWWWWWWWWWWWHHBk................",
+            "........kkkk...kWWXWWWWWWWWWHHBBk...kkkk........",
+            "......kkWWHk..kWWXXWWWWWWWWWHHBBHk..kWWWkk......",
+            ".....kSSSSSk.kWWWHWHWWWWWWWWHHHBHHk.kSSSSSk.....",
+            "....kWSSSSSk.kWWWWHHWWWWWWWWHHBBHHk.kSSSSSBk....",
+            "....kWSSSSSHkWWHHHHHWWWWWWWWHHHHWHWkHSSSSSBk....",
+            "....kWSSSSSHWWHHHHHHWWWWWWWWHHHHHHHHBSSSSSSk....",
+            "....kWSSSSSHWHHHHHHHWWWWWWWWHHHHHHHHBSSSSSSk....",
+            ".....kkWHHHHHHHHHHHHWWWWWWWWHHHHHHHHSSSSSkk.....",
+            ".......kkkkkWHHHHHHHWWWWWWWWHHHHHHHBkkkkk.......",
+            "............kWHHHHHHWWWWWWWWHHHHBBSk............",
+            "............kHWHWHHHWWWWWWWWHHHBBSSk............",
+            ".............kHHHWHHWWWWWWWWHHBBSDk.............",
+            ".............kHHWHHHWWWWWWWWHHHBSDk.............",
+            "..............kHWWHHHHHHHHHHHHBBDk..............",
+            "...............kWWWHWWWWWWWWHBBSk...............",
+            "................kWWWWWWWWWWWWBSk................",
+            "................kWWWWNNNNNNWWWSk................",
+            "................kWWWaaaaaaaaWWSk................",
+            "................kHWWaaaaaaaaWWSk................",
+            "................kWWWaaaaaaaaWWDk................",
+            "................kHWWWNNNNNNWWWDk................",
+            ".................kHWWWWWWWWWWDk.................",
+            ".................kHHWWWWWWWWSDk.................",
+            "..................kkHHBBSSSSkk..................",
+            "....................kkkkkkkk....................",
+            "................................................",
+            "................................................",
+            "................................................",
+        ]),
+        // Dark, like Byte's, Pebble's and Nick's — the cast's animals and
+        // its people all have them, and its machines do not. Drawn in the
+        // accent they were two seven-cell lamps either side of a five-cell
+        // nose, so the loudest thing on a reindeer was not the nose. Which
+        // is the one joke the character has.
+        eyes: [Point(14, 22), Point(28, 22)], eyeSize: 6, eyeInk: .outline,
+        sweep: .tines,
+        ramp: ChassisRamp(deep: RGB(0.145, 0.090, 0.055), shade: RGB(0.235, 0.149, 0.090), mid: RGB(0.349, 0.227, 0.137),
+                          base: RGB(0.498, 0.337, 0.212), light: RGB(0.686, 0.525, 0.373), spec: RGB(0.922, 0.843, 0.753)),
+        // He is head all the way down — the nose is row 37, and a crop above
+        // it is a header mascot with no mood left to show.
+        headRows: 44, cohort: .december2026)
+}
+
+extension Mascot {
+    public static let nick = Mascot(
+        id: .nick, name: "Nick", tellName: "the bobble on his hat and his nose",
+        blurb: "Santa. Has a list, and is checking it.",
+        sprite: Sprite([
+            "................................................",
+            ".....................kkkkkk.....................",
+            "....................kcccccck....................",
+            "...................kccaaaacck...................",
+            "...................kcaaaaaack...................",
+            "...................kcaaaaaack...................",
+            "...................kccaaaacck...................",
+            "...................kWccccccHk...................",
+            "...................kWWWHHHHBk...................",
+            "..................kWWWHHHHHHBk..................",
+            ".................kWWWHHHHHHBBHk.................",
+            "................kXWWHHHHHHHHBHHk................",
+            "...............kXXWHHHHHHHHHHHHHk...............",
+            "..............kWWWWHHHHHHHHHHHHHHk..............",
+            ".............kWWWWHHHHHHHHHHHHHHHHk.............",
+            "............kWWWWHHHHHHHHHHHHHHHHHHk............",
+            ".........kkkWWWHHHHHHHHHHHHHHHHHHHHHkkk.........",
+            ".........kcccccccccccccccccccccccccccck.........",
+            ".........kcccccccccccccccccccccccccccck.........",
+            ".........kcccccccccccccccccccccccccccck.........",
+            ".........kccczzzzzzzzzzzzzzzzzzzzzzccck.........",
+            ".........kkezzzzzzzzzzzzzzzzzzzzzzzzekk.........",
+            "...........kzzzzzzzzzzzzzzzzzzzzzzzzk...........",
+            "..........kzzzzzzzzzzzzzzzzzzzzzzzzzzk..........",
+            "..........kzzzzzzzzzzzzzzzzzzzzzzzzzzk..........",
+            "..........kzzzzzzzzzzzzzzzzzzzzzzzzzzk..........",
+            "..........kWzzzzzzzzzzzzzzzzzzzzzzzzBk..........",
+            "..........kcczzzzzzzzzzzzzzzzzzzzzzcck..........",
+            "..........kccczzzzzzzzzzzzzzzzzzzzccck..........",
+            "...........kccczzzzzzNNNNNNzzzzzzccck...........",
+            "..........kccccczzzzaaaaaaaazzzzccccck..........",
+            ".........kcccccczzzzaaaaaaaazzzzcccccck.........",
+            "........kcccccccczzzaaaaaaaazzzcccccccck........",
+            "........kccccccccczzaaaaaaaazzccccccccck........",
+            ".......kccccccccccczzNNNNNNzzccccccccccck.......",
+            ".......kcccccccccccccccccccccccccccccccck.......",
+            ".......kcccccccccccccccccccccccccccccccck.......",
+            ".......kcccccccccccccccccccccccccccccccck.......",
+            ".......kcccccceeeeeeeeeeeeeeeeeeeecccccck.......",
+            ".......kccccccccccccDDDDDDDDcccccccccccck.......",
+            "........kccccccccccccDDDDDDcccccccccccck........",
+            "........kcccccccccccccccccccccccccccccck........",
+            ".........kcccccccccccccccccccccccccccck.........",
+            "..........kkcccccccccccccccccccccccckk..........",
+            "............kkeeeeeeeeeeeeeeeeeeeekk............",
+            "..............kkkeeeeeeeeeeeeeekkk..............",
+            ".................kkkeeeeeeeekkk.................",
+            "....................kkkkkkkk....................",
+        ]),
+        // Dark, like Byte's and Pebble's. Drawn in the accent they came out
+        // the same colour as his nose and his cheeks, four rows above them
+        // and twice the size — which on a face that size is not a pair of
+        // eyes with a nose under them, it is one blue mass with a hat on.
+        eyes: [Point(15, 23), Point(27, 23)], eyeSize: 6, eyeInk: .outline,
+        sweep: .tally,
+        ramp: ChassisRamp(deep: RGB(0.188, 0.027, 0.047), shade: RGB(0.310, 0.047, 0.071), mid: RGB(0.455, 0.078, 0.102),
+                          base: RGB(0.627, 0.122, 0.145), light: RGB(0.800, 0.306, 0.306), spec: RGB(0.969, 0.722, 0.698)),
+        headRows: 40, cohort: .december2026)
+}
+
 extension Mascot {
     /// Every character this build ships, in the order the room stacks them
     /// and the order clicking the mascot cycles them.
     public static let all: [Mascot] = [pip, byte, widget, nimbus,
                                        blip, scoot, wobble, bloop,
-                                       boo, flit, gourd, rattle]
+                                       boo, flit, gourd, rattle,
+                                       pine, pebble, dasher, nick]
 
     /// The characters on one shelf, in cast order.
     public static func cohort(_ cohort: MascotCohort) -> [Mascot] {

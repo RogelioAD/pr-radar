@@ -72,17 +72,57 @@ extension Mascot {
                       breath: Breath = .steady,
                       powered: Bool = false) -> Sprite {
         var grid = art(powered: powered)
+        let face = face(powered: powered)
+        // Where the lamps are, read off the art *before* the idle runs.
+        //
+        // Taken afterwards this misses some of them, and in a way that only
+        // shows on one character: Pine's twinkle flares a quarter of his
+        // bulbs to `light`, which is not an accent rung and so is not a tell
+        // cell any more. A blink that asked the grid which cells were lit
+        // therefore put out three bulbs in four and left the rest burning.
+        let lamps = face.eyes.isEmpty
+            ? grid.litPoints.filter { isTell(grid[$0.x, $0.y]) } : []
         tic(&grid, frame: frame, breath: breath)
         if breathes { breathe(&grid, frame: frame, breath: breath) }
-        let face = face(powered: powered)
-        for box in face.eyes {
-            drawEye(&grid, at: box, size: face.size, pattern: pattern)
+        if face.eyes.isEmpty {
+            unlit(&grid, lamps: lamps, pattern: pattern)
+        } else {
+            for box in face.eyes {
+                drawEye(&grid, at: box, size: face.size, pattern: pattern)
+            }
         }
         if sweeping { sweep(&grid, frame: frame) }
         return grid
     }
 
     // MARK: - Eyes
+
+    /// What a character with no face does where everybody else's eyes are
+    /// drawn.
+    ///
+    /// The pattern still has to land somewhere. A sprite with no eye boxes
+    /// and nothing in its place is a character that looks identical awake
+    /// and asleep — which is not "a mascot without eyes", it is a mascot
+    /// that has stopped responding to the thing every other one responds to.
+    ///
+    /// So it lands on the tell. For the tree that is literally right: the
+    /// lights are the face, so the lights go out when a face would close,
+    /// flare when one would widen, and go dark off the character's own ramp
+    /// for the state that draws everybody else's eyes as crosses.
+    private func unlit(_ grid: inout Sprite, lamps: [Point], pattern: EyePattern) {
+        let tone: Slot?
+        switch pattern {
+        case .open:   tone = nil
+        case .wide:   tone = .light
+        case .glance: tone = .accentMid
+        case .shut:   tone = .accentDim
+        // Not dim but *off*, in a rung of the body — the one state where the
+        // lights are not lit at all rather than lit low.
+        case .dead:   tone = .chassisShade
+        }
+        guard let tone else { return }
+        for point in lamps { grid.plot(point.x, point.y, tone) }
+    }
 
     private func drawEye(_ grid: inout Sprite, at box: Point, size: Int? = nil,
                          pattern: EyePattern) {
@@ -219,6 +259,62 @@ extension Mascot {
             // His jaw. Two rows, so it reads as chattering rather than as the
             // whole skull nodding.
             if f % 4 < 2 { shift(&grid, rows: 20..<24, by: 0, down: 1) }
+
+        case .pine:
+            // The string twinkles, and the star pulses over the top of it.
+            //
+            // Which bulb is lit comes off where the bulb is as well as off
+            // the frame, which is the whole of the difference between a
+            // string of lights and a tree that flashes. `repaintAccent` is
+            // no use here for exactly that reason: it takes a rectangle and
+            // paints every tell cell in it the same tone, and every tell
+            // cell on this character is a bulb.
+            let star: Slot = f % 8 < 4 ? .accent : .accentMid
+            for point in grid.litPoints where isTell(grid[point.x, point.y]) {
+                // The topper is one object and pulses as one. Diced by the
+                // same rule as the bulbs it came back as four flickering
+                // fragments rather than a star.
+                guard point.y >= 8 else {
+                    grid.plot(point.x, point.y, star)
+                    continue
+                }
+                // Four phases, and none of them `accentDim`. His body is a
+                // dark spruce by design, and the dim rung is the accent
+                // blended most of the way into whatever is behind it — so a
+                // bulb parked there is a bulb nobody can see, on the one
+                // character whose entire readout is bulbs. The string runs
+                // between full and bright instead, which is also what a
+                // string of lights with a couple of blown-out ones does.
+                let phase = (point.x / 4 + point.y / 6 + f) % 4
+                grid.plot(point.x, point.y,
+                          phase == 0 ? .light
+                        : phase == 3 ? .accentMid : .accent)
+            }
+
+        case .pebble:
+            // The head tips, which is the whole of what a penguin standing
+            // still does. Down to row 21, so the scarf stays where it was
+            // wound rather than travelling with him.
+            let tip = [0, 0, 1, 1, 0, 0, -1, -1][f % 8]
+            if tip != 0 { shift(&grid, rows: 0..<22, by: tip) }
+            repaintAccent(&grid, x: 0..<grid.width, y: 22..<38,
+                          with: f % 8 < 4 ? .accent : .accentDim)
+
+        case .dasher:
+            // The ears flick. Taken as a band across the whole head rather
+            // than as two patches, because the ears are not a separate thing
+            // in the art — they are the widest rows of it.
+            let flick = [0, 0, 1, 1, 0, 0, -1, -1][f % 8]
+            if flick != 0 { shift(&grid, rows: 19..<27, by: flick) }
+            repaintAccent(&grid, x: 0..<grid.width, y: 35..<42,
+                          with: f % 6 < 3 ? .accent : .accentDim)
+
+        case .nick:
+            // The pom nods. One row, and only the top nine: a hat that
+            // travelled further than that would leave his head behind it.
+            if f % 8 < 4 { shift(&grid, rows: 0..<10, by: 0, down: 1) }
+            repaintAccent(&grid, x: 0..<grid.width, y: 30..<40,
+                          with: f % 10 < 5 ? .accent : .accentDim)
 
         // The original cast. Each keeps the one thing it always did — these
         // are the idles the 16-cell art was drawn around, at three times the
@@ -399,6 +495,10 @@ extension Mascot {
         case .echo:    sonar(&grid, frame: frame)
         case .flicker: candle(&grid, frame: frame)
         case .marrow:  spine(&grid, frame: frame)
+        case .tinsel:  lights(&grid, frame: frame)
+        case .flurry:  snow(&grid, frame: frame)
+        case .tines:   antlers(&grid, frame: frame)
+        case .tally:   list(&grid, frame: frame)
         }
     }
 
@@ -505,6 +605,222 @@ extension Mascot {
             let y = head + band
             guard rows.contains(y) else { continue }
             paintRow(&grid, y, lead: band == 0, strength: band == 0 ? 2 : 1)
+        }
+    }
+
+    /// Pine's lights, walked down the tree a tier at a time and held on each,
+    /// with the star flaring at the top of every lap.
+    ///
+    /// Stepping rather than sliding, which it shares with Rattle's spine and
+    /// is the only thing it shares with anything. What makes it his is what
+    /// it steps *on*: the garland, which is neither chassis nor tell but the
+    /// white the bulbs hang from. Rattle's band lights a three-row stripe
+    /// across everything it crosses; this lights one swag and the bulbs on
+    /// it, and nothing in between.
+    ///
+    /// The tiers are found by clustering the white into bands rather than
+    /// written down, so a redraw that moves a branch moves the sweep with it.
+    private func lights(_ grid: inout Sprite, frame: Int) {
+        let strung = grid.litPoints
+            .filter { grid[$0.x, $0.y] == .cream }
+            .sorted { ($0.y, $0.x) < ($1.y, $1.x) }
+        guard let crown = strung.first?.y else { return }
+        var tiers: [[Point]] = []
+        for point in strung {
+            if let last = tiers.last?.last, point.y - last.y <= 2 {
+                tiers[tiers.count - 1].append(point)
+            } else {
+                tiers.append([point])
+            }
+        }
+
+        // One stop per tier and one for the star, held three frames apiece so
+        // each is seen rather than flicked through — the same bargain the
+        // skeleton's pulse makes, for the same reason.
+        let at = (abs(frame) / 3) % (tiers.count + 1)
+        guard at < tiers.count else {
+            // The star. It is above every garland, so the band never reaches
+            // it and without this the topper would be the one part of him
+            // the sweep left alone.
+            for point in grid.litPoints
+            where point.y < crown && isTell(grid[point.x, point.y]) {
+                grid.plot(point.x, point.y, .light)
+            }
+            return
+        }
+
+        let tier = tiers[at]
+        let top = tier[0].y
+        for point in tier { grid.plot(point.x, point.y, .accent) }
+        // The bulbs hang under the swag they belong to, so the band reaches
+        // down past the white rather than stopping at it.
+        for point in grid.litPoints
+        where (top...(top + 5)).contains(point.y) && isTell(grid[point.x, point.y]) {
+            grid.plot(point.x, point.y, .light)
+        }
+        for point in tier {
+            for dx in -1...1 { brighten(&grid, point.x + dx, point.y + 2, by: 1) }
+        }
+    }
+
+    /// Pebble's weather: flakes falling past him.
+    ///
+    /// The only sweep in the cast that is mostly drawn *outside* the
+    /// silhouette, and the only one with no band in it at all. A penguin has
+    /// no beam, no glass and nothing to pulse — what says the app is looking
+    /// is that the world around him is still moving.
+    ///
+    /// The flakes are written down rather than generated, and that is not
+    /// fussiness. The badge draws one frame at a time from the frame number
+    /// alone and redraws from scratch, so anything that came out of a
+    /// generator would be somewhere else every time the same frame came round
+    /// — which is not snow, it is static.
+    private func snow(_ grid: inout Sprite, frame: Int) {
+        // Column, rate, and how far down it already was. Nine, at two rates,
+        // spread across the full width: fewer than that reads as rain, and
+        // one rate reads as a curtain being lowered.
+        let flakes: [(x: Int, rate: Int, phase: Int)] = [
+            (3, 2, 0), (8, 3, 11), (13, 2, 26), (19, 3, 5), (24, 2, 17),
+            (29, 3, 33), (35, 2, 8), (40, 3, 21), (45, 2, 41),
+        ]
+        let f = abs(frame)
+        for flake in flakes {
+            let y = (f * flake.rate / 2 + flake.phase) % grid.height
+            // The flake and the cell it has just left, rather than a cross.
+            // Drawn as a cross each one came back with the layout's halo
+            // round all five arms, which at badge size is not snow — it is
+            // nine little buttons pinned to the air beside him.
+            for (dx, dy) in [(0, 0), (0, -1)] {
+                let x = flake.x + dx, at = y + dy
+                guard x >= 0, x < grid.width, at >= 0, at < grid.height else { continue }
+                let core = dx == 0 && dy == 0
+                if grid[x, at] == nil {
+                    grid.plot(x, at, core ? .accentMid : .accentDim)
+                } else if core {
+                    paintCell(&grid, x, at, lead: false, strength: 2)
+                }
+            }
+        }
+    }
+
+    /// Dasher's charge: a pulse climbing out along both antlers at once, and
+    /// the nose flaring as each one leaves the skull.
+    ///
+    /// Measured as a distance out from the centre line rather than as a row
+    /// or a column, which is what makes it his: an antler is not a shape
+    /// along x or along y, it is a pair of them going outwards together. The
+    /// alien's rings are the only other sweep that expands, and his expand in
+    /// every direction from a point rather than out along two limbs.
+    ///
+    /// Confined to the top of him, because that is where the antlers are and
+    /// a pulse that carried on down his face would be somebody else's band.
+    /// The reach is read off the art inside that band rather than taken as
+    /// half the width, so it stops at the tips instead of carrying on into
+    /// the air past them.
+    private func antlers(_ grid: inout Sprite, frame: Int) {
+        let rows = sweepRows(of: grid)
+        let depth = max(2, rows.count * 2 / 5)
+        let crown = rows.lowerBound...min(grid.height - 1, rows.lowerBound + depth)
+        // The centre line falls between two columns, so a distance has to be
+        // measured from each of them. Taken from `width / 2` alone, the pulse
+        // reached one column further on the left than on the right.
+        let left = grid.width / 2 - 1, right = grid.width / 2
+        // Off the cells a band can actually light rather than off the whole
+        // silhouette, and that is not a detail. An antler tapers to a point
+        // that is pure outline, which a band deliberately leaves alone — so
+        // a span measured off the drawing spends its last third painting
+        // nothing, and the pulse appears to stop short of the tips and wait.
+        let reach = carrying(grid)
+            .filter { crown.contains($0.y) }
+            .map { max(left - $0.x, $0.x - right) }
+            .max() ?? 0
+        let span = max(1, reach + 1)
+        let head = abs(frame) % span
+        for band in 0..<3 {
+            let out = head - band
+            guard out >= 0 else { continue }
+            for y in crown {
+                paintCell(&grid, left - out, y, lead: band == 0, strength: band == 0 ? 2 : 1)
+                paintCell(&grid, right + out, y, lead: band == 0, strength: band == 0 ? 2 : 1)
+            }
+        }
+        // The flare. The nose is well below the crown, so the band itself
+        // never reaches it — without this his tell would be the one part of
+        // him the sweep did not touch.
+        //
+        // Everything but the eyes. An accent-eyed character's eyes are tell
+        // cells by the time this runs — the eye pass has already drawn them
+        // — so a flare over every tell cell whitens both of them at once,
+        // three frames in every lap. On a lamp that is a pulse; on a face it
+        // is a character flinching. Dasher's own eyes went dark for a
+        // different reason and no longer need this, which is exactly when a
+        // guard is worth keeping: the next one to sweep this way will not
+        // know the rule and will not have to.
+        guard head < 3 else { return }
+        for point in grid.litPoints
+        where isTell(grid[point.x, point.y]) && !isEye(point) {
+            grid.plot(point.x, point.y, .light)
+        }
+    }
+
+    /// Whether a cell is inside a declared eye box, with a cell of margin for
+    /// the startled lens — which is the same box one bigger all round.
+    private func isEye(_ point: Point) -> Bool {
+        eyes.contains { box in
+            (box.x - 1...box.x + eyeSize).contains(point.x)
+                && (box.y - 1...box.y + eyeSize).contains(point.y)
+        }
+    }
+
+    /// Nick reading his list: a band crossing him from one side to the other.
+    ///
+    /// The one sweep that travels across a *body*. Blip's crosses as well,
+    /// but his only ever touches glass — so on a character made of chassis
+    /// and cloth this is an axis nobody else in the cast uses.
+    ///
+    /// Twice a cycle, and the second pass is the brighter one, which is the
+    /// joke and is also the only thing that makes a wrapping band look like
+    /// reading rather than like a photocopier. Same direction both times: a
+    /// band that came back the way it went is a pendulum.
+    private func list(_ grid: inout Sprite, frame: Int) {
+        let xs = carrying(grid).map(\.x)
+        guard let low = xs.min(), let high = xs.max() else { return }
+        let span = max(1, high - low + 1)
+        let step = abs(frame) % 36
+        let checking = step >= 18
+        let head = low + (step % 18) * span / 18
+        for band in 0..<3 {
+            let x = head - band
+            guard x >= low else { continue }
+            for y in 0..<grid.height {
+                paintCell(&grid, x, y, lead: band == 0,
+                          strength: band == 0 ? (checking ? 3 : 2) : 1)
+            }
+        }
+    }
+
+    /// The cells a travelling band can actually light: chassis and tell, and
+    /// nothing else. The same filter `sweepRows` uses, lifted out because
+    /// three of the December sweeps need the cells rather than the rows.
+    private func carrying(_ grid: Sprite) -> [Point] {
+        grid.litPoints.filter {
+            guard let slot = grid[$0.x, $0.y] else { return false }
+            return slot.isChassis || isTell(slot)
+        }
+    }
+
+    /// One cell of a travelling band. `paintRow` is this across a row; the
+    /// December four needed it across a column, a diagonal and a pair of
+    /// distances, so the rule about what a band may touch lives here and the
+    /// four of them only decide where to walk.
+    private func paintCell(_ grid: inout Sprite, _ x: Int, _ y: Int,
+                           lead: Bool, strength: Int) {
+        guard x >= 0, x < grid.width, y >= 0, y < grid.height,
+              let slot = grid[x, y] else { return }
+        if isTell(slot) {
+            grid.plot(x, y, lead ? .light : .accent)
+        } else if slot.isChassis {
+            brighten(&grid, x, y, by: strength)
         }
     }
 
