@@ -849,6 +849,30 @@ Some details that had to be decided:
 
 ## The drawer
 
+### Keeping it open
+
+The drawer folds away by itself in three places: when you click outside it,
+when another app takes the front, and when you open a pull request. All three
+are the same statement — you are looking somewhere else now, and a panel
+floating over what you are looking at should get out of the way.
+
+**Keep the drawer open** in Settings → General turns all three off. It is off
+by default, because a floating panel that never closes is permanently in the
+way of somebody who did not ask for one. Turned on, it is also open from
+launch rather than from the first click of the session: a drawer you have to
+re-open once a day is not on screen, it is one click from being on screen,
+which is what it already was.
+
+What it does not touch is the deliberate closes. The × in the header, Escape
+and the hot key still fold it away. A pin that swallowed those would be a
+setting you could only turn off from inside the window it was holding open.
+
+The bargain it makes is that hover only works in the key window of an active
+app, so a pinned drawer sitting behind another app is inert — no row
+highlights, no underlined titles — until you click it. That is the reason the
+automatic close existed in the first place, and the reason this is a setting
+rather than the behaviour.
+
 ### Why the filters are still their own band
 
 Folding them into the tab strip was tried and reverted. The two bands look half

@@ -307,6 +307,11 @@ final class PanelController {
     /// active status the same way keeps one rule rather than two. Becoming
     /// active again re-takes key, for the paths that do not go through a
     /// collapse at all.
+    ///
+    /// A pinned drawer stays open through this and is therefore inert while
+    /// another app is in front — which is the bargain the setting makes, and
+    /// why it is off by default. The re-key on becoming active is what brings
+    /// it back, and it was already there.
     private func observeActivation() {
         let centre = NotificationCenter.default
         activationObservers = [
@@ -314,7 +319,7 @@ final class PanelController {
                                object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in
                     Log.debug("app resigned active (expanded=\(self?.state.expanded ?? false))")
-                    self?.setExpanded(false)
+                    self?.autoCollapse()
                 }
             },
             centre.addObserver(forName: NSApplication.didBecomeActiveNotification,
@@ -397,9 +402,43 @@ final class PanelController {
 
     func toggle() { setExpanded(!state.expanded) }
 
-    func setExpanded(_ expanded: Bool) {
+    /// Shuts the drawer because the app decided to, rather than because
+    /// somebody asked.
+    ///
+    /// Clicking away, the app losing active status and opening a pull request
+    /// are all the same thing said three ways: you are looking somewhere else
+    /// now, so the panel floating over what you are looking at gets out of the
+    /// way. Somebody who has pinned the drawer has said they want it there
+    /// anyway, and all three stop.
+    ///
+    /// The deliberate closes do not come through here, and must not: the close
+    /// box, Escape and the hot key still fold it away while pinned. A pin that
+    /// swallowed those would be a setting you could only turn off from inside
+    /// the window it was holding open.
+    func autoCollapse() {
+        guard !state.drawerPinned else { return }
+        setExpanded(false)
+    }
+
+    func setExpanded(_ expanded: Bool, activating: Bool = true) {
         guard state.expanded != expanded, !isAnimatingFrame else { return }
-        expanded ? expand() : collapse()
+        expanded ? expand(activating: activating) : collapse()
+    }
+
+    /// Opens a pinned drawer at launch, without taking the keyboard.
+    ///
+    /// A pin says the drawer belongs on screen, and a drawer that has to be
+    /// clicked open once per launch is not on screen — it is one click from
+    /// being on screen, which is what it already was.
+    ///
+    /// `activating: false` is the whole of the difference, and it matters
+    /// because of where this runs: the commonest way to have both this and
+    /// "Open at login" on is to have turned them both on, and an app that
+    /// seizes the keyboard partway through someone's login is a worse problem
+    /// than the one the pin solves.
+    func restorePinnedDrawer() {
+        guard state.drawerPinned, !state.expanded else { return }
+        setExpanded(true, activating: false)
     }
 
     /// Unfolds the drawer out of the badge.
@@ -407,7 +446,7 @@ final class PanelController {
     /// The state flips first so the drawer is being drawn while the window
     /// grows, which is what makes the travel visible at all — an empty window
     /// changing size shows nothing.
-    private func expand() {
+    private func expand(activating: Bool = true) {
         state.expanded = true
         // `Carousel` is for sitting there clicking the mascot, so the count
         // starts again every time the drawer does.
@@ -419,8 +458,17 @@ final class PanelController {
         }
         // A non-activating panel would otherwise leave the rows unclickable,
         // and a borderless one only takes key because FloatingPanel allows it.
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        //
+        // Skipped for a drawer being restored at launch — see
+        // `restorePinnedDrawer`. It comes back inert, exactly as a pinned
+        // drawer does whenever another app is in front, and the activation
+        // observer re-keys it the moment anybody clicks it.
+        if activating {
+            NSApp.activate(ignoringOtherApps: true)
+            panel.makeKeyAndOrderFront(nil)
+        } else {
+            panel.orderFrontRegardless()
+        }
         installOutsideClickMonitor()
         installKeyMonitor()
         animate(to: targetFrame(), curve: .easeOut) { [weak self] in
@@ -1154,7 +1202,7 @@ final class PanelController {
             guard let self else { return }
             let mouse = NSEvent.mouseLocation
             if !self.panel.frame.contains(mouse) {
-                Task { @MainActor in self.setExpanded(false) }
+                Task { @MainActor in self.autoCollapse() }
             }
         }
     }

@@ -100,15 +100,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // context menu and a notification's Open button all arrive here.
             self?.state.markOpened(item)
             NSWorkspace.shared.open(item.url)
-            self?.panel.setExpanded(false)
+            // Automatic rather than deliberate: you asked for the browser, not
+            // for the drawer to shut. Somebody who has pinned it keeps it.
+            self?.panel.autoCollapse()
         }
         panel.onOpenMyPR = { [weak self] item in
             NSWorkspace.shared.open(item.url)
-            self?.panel.setExpanded(false)
+            self?.panel.autoCollapse()
         }
         panel.onRefresh = { [weak self] in self?.refreshNow() }
         panel.menuProvider = { [weak self] in self?.buildMenu() }
         panel.show()
+        // After `show()`, which parks the badge: the drawer unfolds out of that
+        // frame, so it has to exist before this animates away from it.
+        panel.restorePinnedDrawer()
 
         // Only does anything when the cheap search found nothing, and it runs
         // off the launch path because it starts somebody else's shell.

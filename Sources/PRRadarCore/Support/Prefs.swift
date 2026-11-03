@@ -34,6 +34,7 @@ public enum Prefs {
         static let seenCastNotice = "mascot.seenCastNotice"
         static let trophies = "trophies.state"
         static let drawerRoom = "drawer.room"
+        static let drawerPinned = "drawer.pinned"
         /// Superseded by `drawerRoom`. Still read once, to carry an upgrader
         /// who left the drawer sitting in the trophy room.
         static let legacyShowingTrophies = "drawer.showingTrophies"
@@ -324,6 +325,23 @@ public enum Prefs {
     }
 
     private static let noRoomValue = "none"
+
+    /// Whether the drawer stays open instead of folding away when you look
+    /// elsewhere.
+    ///
+    /// Off by default, and it has to be: the drawer is a panel that floats over
+    /// whatever you are working in, and one that never closes is one that is
+    /// permanently in the way of somebody who did not ask for that.
+    ///
+    /// What it suppresses is only the *automatic* closes — clicking away, the
+    /// app losing active status, and opening a pull request. The deliberate
+    /// ones all still work, because a pin that swallowed the close box would
+    /// be a setting you could not get out of from the window it was holding
+    /// open. See `PanelController.autoCollapse`.
+    public static var drawerPinned: Bool {
+        get { defaults.bool(forKey: Key.drawerPinned) }
+        set { defaults.set(newValue, forKey: Key.drawerPinned) }
+    }
 
     public static var selectedTab: DrawerTab {
         get {

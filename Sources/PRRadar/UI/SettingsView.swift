@@ -166,6 +166,17 @@ struct SettingsView: View {
 
         Divider()
 
+        // Named for what it does rather than for the mechanism — "pin" is what
+        // this is called everywhere else and is also the one word a reader
+        // could take as "stick it to the top of the screen".
+        toggle("Keep the drawer open",
+               help: "Stop the drawer folding away when you click somewhere "
+                   + "else, switch apps, or open a pull request. The close box "
+                   + "and Escape still shut it.",
+               isOn: $state.drawerPinned)
+
+        Divider()
+
         toggle("Celebrate a cleared queue",
                help: "Show the achievement banner when the last review is done",
                isOn: $state.celebrateCleared)

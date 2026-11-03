@@ -372,6 +372,18 @@ final class AppState: ObservableObject {
         didSet { Prefs.celebrateCleared = celebrateCleared }
     }
 
+    /// Whether the drawer stays put instead of folding away when you look
+    /// elsewhere.
+    ///
+    /// Read by `PanelController.autoCollapse`, which is the one door every
+    /// automatic close goes through. Nothing has to be told when this changes:
+    /// turning it on while the drawer is open leaves an open drawer, and
+    /// turning it off leaves one that will close the next time you click away
+    /// — which is what both of those words mean.
+    @Published var drawerPinned: Bool = Prefs.drawerPinned {
+        didSet { Prefs.drawerPinned = drawerPinned }
+    }
+
     /// Which repository the update check watches, as the settings field holds
     /// it — which is not always something worth storing.
     ///
