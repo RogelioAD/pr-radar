@@ -1458,6 +1458,288 @@ request, under your own name, that cannot be taken back.
 every row, because the state this feature exists to produce is otherwise
 reachable only by spending real money on somebody's real PR.
 
+## The desk lock
+
+The padlock sits left of the glasses, and it is the one you press on your way
+out of the chair. It covers the screen and holds the Mac awake behind it, so a
+review that was running when you left is finished when you get back.
+
+A plain press puts up **PR Radar's own away screen**. Option-click locks the
+Mac **for real**, through the system. Both hold the Mac awake, and neither ever
+sees your password.
+
+Two problems, and they only look unrelated. Walk away from a running review and
+it fails in one of two ways: the Mac idles into sleep and the run stops
+halfway, or it stays awake and the screen is open to whoever walks past the
+desk. Solving either one alone would not be worth a control in the most
+contested 440pt in the app. Solving both is.
+
+**Locking does not pause anything.** This is the misconception the feature
+exists to correct, and it is worth saying plainly because people lock less than
+they should on the strength of believing the opposite. A locked Mac still runs
+every process on it. A review started before the lock keeps going behind it,
+posts its comments, and is done when you come back. What stops a run is *sleep*
+— which is why the padlock does both things and why a button that only locked
+would have been a button that appeared to solve this and did not.
+
+### The away screen
+
+The default press, and the reason this is not just a lock button. A black cover
+goes up on every display with the one thing the system lock can never tell you
+on it:
+
+```
+                                🔒
+
+                               Away
+
+   PR RADAR                            CLAUDE
+   Reviewing 2 pull requests           2 sessions working
+   elevation-mobile#418 · 12:04        pr-radar (beta) · running Bash
+   elevation-mobile#412 · 3:31         sticky-rsvp · running Task
+   3 queued                               ↳ Explore · Map the events feed
+                                       4 waiting for you
+
+                Press any key to sign back in
+```
+
+**Nothing that can change size moves anything else.** The lock and the title
+are pinned at a fixed distance from the top, the hint is pinned to the bottom,
+and the columns hang from a fixed line below the title and grow downward into
+the space between. A centred layout would have been easier and is wrong here:
+an agent finishing would nudge the title up, which from across a room reads as
+the screen doing something — and the one promise this screen makes is that it
+is sitting still.
+
+**Two headings, because the two halves are answerable by different people.**
+PR Radar is work this app started and can speak for. Claude is your own
+sessions, which it can only observe from the outside — and a reader who cannot
+tell those apart cannot tell which half to trust.
+
+The stopwatches advance every second, so from the doorway you can see the
+difference between *still going* and *stuck*. When a column has nothing
+working it dims, which reads as idle from across a room without you having to
+get close enough to read it.
+
+### Where the Claude column comes from
+
+Claude Code appends one JSON object per line to
+`~/.claude/projects/<slug>/<session>.jsonl`. PR Radar reads the **tail** of
+each transcript that has been touched in the last half hour. Nothing is
+written, locked or truncated; the only obligation this feature has towards
+Claude Code is to stay entirely out of its way.
+
+What each line means:
+
+- **`pr-radar (beta) · running Bash`** — mid-turn, and what it is running.
+  The last entry is an assistant message with a tool call in it.
+- **`· thinking`** — a tool result just came back and the model is composing.
+- **`· waiting for you`** — the turn ended with no tool call. Your move.
+  Only `assistant` and `user` entries decide this. The transcript also carries
+  bookkeeping between turns — attachments, system lines, snapshots — and
+  letting one of those set the state made a session that was genuinely mid-tool
+  read as idle whenever the read happened to land after one.
+- **`· stalled`** — mid-turn but silent for five minutes. Usually a session
+  that was interrupted, or whose terminal went away. Five minutes is generous
+  on purpose: a build or a test suite is legitimately one tool call that runs
+  for minutes, and calling that stalled would make the most interesting line on
+  the screen the least trustworthy one.
+
+Sessions waiting on you collapse into a single count as soon as anything is
+working. Six terminals sitting at a prompt are one fact, not six lines, and the
+lines they would take are the ones the working sessions need.
+
+### Agents
+
+A subagent is not an operating-system process, so none of this comes from the
+process table. It comes from a pairing Claude Code already writes down: an
+`Agent` call carries an id, its result carries the same id, and **a call with
+no result yet is an agent still running**. Both the `Agent` and `Task`
+spellings are accepted, because the name has changed before and the cost of
+accepting both is one `||`. Those are listed indented under the
+session that launched them, by `subagent_type` and the one-line description the
+call was given.
+
+Up to **ten agents** are named, then the rest become `+4 more agents`. Ten is
+where a list stops being a glance and becomes a page: you cannot read twenty
+descriptions from a doorway, and that far down the screen the question has gone
+back to *how many* from *which*. The budget is shared across sessions, and the
+overflow counts agents on sessions too far down to be named at all — otherwise
+the number would be true about the part of the screen that fitted rather than
+about the machine.
+
+Descriptions are clipped to one line. That is not cosmetic: a line that wraps
+is a line of unpredictable height, and every line below it moves when it does.
+
+An agent's own transcript lines are marked `isSidechain` and are deliberately
+ignored when deciding what the *session* is doing. Without that, an agent's
+last word reads as the session going quiet — at the exact moment the session is
+in fact waiting on that very agent.
+
+PR Radar's own reviews also run through Claude Code, in throwaway worktrees.
+Those are recognised and filed under the PR Radar heading, which already names
+them by pull request, rather than listed a second time as anonymous temp
+directories.
+
+### What it does not see
+
+Stated because a feed is trusted in proportion to knowing its edges:
+
+- **It reads the end of each transcript, not all of it.** An agent launched
+  further back than the last 256KB of a long session is not listed. This is the
+  one piece of under-reporting worth knowing about, and it is not theoretical:
+  a sweep of this machine's transcripts found every historical agent call
+  sitting well outside that window.
+- **It is somebody else's file format.** A line that will not parse is skipped
+  rather than reported. If Claude Code renames a field this column quietly
+  shows less, which is the failure worth preferring — a status screen that
+  breaks loudly is worse than one that admits to less.
+- **Recency stands in for alive.** A session is listed because its transcript
+  moved in the last half hour, not because a process was found. A terminal you
+  closed stops writing and falls off by itself.
+- **It refreshes every four seconds**, not every second. The stopwatches tick
+  faster than the list behind them, because *which sessions exist* changes on
+  the scale of a turn — and asking the filesystem sixty times a minute would be
+  a cost paid against the very work this screen exists to protect.
+
+Any key, any click, any nudge of the trackpad raises the unlock prompt. The
+Dock and menu bar are hidden and Command-Tab is turned off while it is up —
+that last one matters more than it looks, because without it the cover stays on
+top while your *keystrokes* go to whatever was switched to underneath, which is
+typing blind into an invisible app and worse than no cover at all.
+
+### Getting past it locks the Mac for real
+
+The away screen is a cover, not a lock, and a cover on its own is worth very
+little. **Command-Space reaches Spotlight before any app sees the key** —
+system hotkeys are handled by the window server above every application — and
+from Spotlight you can launch anything. That one chord made the first version
+of this screen worthless, and it is not a hole an app can plug: blocking it
+outright needs an event tap and the Input Monitoring permission that comes with
+it, which means a background app holding the permanent right to read every
+keystroke on the machine, to defend a screen it could instead simply lock.
+
+So the cover does not try to win that fight. It notices it has lost one.
+
+While a cover is up, PR Radar watches whether it is still the frontmost app.
+The moment it is not — Spotlight, Mission Control, a click that landed
+somewhere else — **the screen is handed to the real system lock**. There is no
+longer any state in which that watch stands down; that was the bug. The cover comes down without reporting an
+unlock, so the Mac stays held awake and the desk stays locked; only the thing
+doing the work has changed. Unlocking is then the login window's business,
+exactly as an Option-click would have been.
+
+The attempt to get past the deterrent is what produces the boundary. Polled
+every six tenths of a second rather than waited for as a notification, because
+a notification that does not arrive leaves the cover standing with the bypass
+wide open.
+
+Quitting is covered the same way. Force Quit, a `pkill`, an installer replacing
+the running build — any exit this app is *told about* locks the screen on the
+way out rather than letting the cover vanish into an open desktop.
+
+### What is still true
+
+- **A kill that runs no code cannot be caught.** `kill -9` takes the cover down
+  with the process and nothing locks. That is the honest limit: every exit the
+  app is asked to make is closed, not every exit there is.
+- **SSH and fast user switching** reach the machine without touching the
+  screen, and no app running as you can close those doors.
+- **Force quit is left reachable on purpose.** If authentication ever failed to
+  come back, Command-Option-Escape is what ends it, and the alternative is
+  holding the power button down on your own Mac — and it now locks the screen
+  on its way out anyway.
+
+When the room is not one to trust, Option-click and skip the middle step.
+
+One guard runs before anything is covered: if this Mac cannot raise an unlock
+prompt at all — no password on the account, authentication unavailable to this
+process — the away screen is refused and the padlock turns orange with the
+reason. A cover with no way past it, on a Mac whose owner is standing right
+there, is the one outcome worth checking for in advance rather than discovering
+at the first keystroke.
+
+### PR Radar never sees your password
+
+**The away screen has no way to dismiss itself, and that is the design.** Touch
+the keyboard or the trackpad and the Mac locks for real; you come back in
+through the login window. Option-click goes straight there without the middle
+step. Either way your password goes where it always goes — Touch ID, Apple
+Watch unlock and a password manager all work, and none of it routes through
+this app.
+
+It did once raise an in-app prompt through `LAContext`, and that turned out to
+be a hole rather than a convenience. The prompt had to out-rank a cover sitting
+at the shielding level, so the cover dropped to an ordinary window level while
+it was up; and the focus sentry had to stand down, so that a legitimate prompt
+was not mistaken for a bypass. Those two concessions overlapped. For the few
+seconds of the prompt the cover was both out-ranked and unguarded, and anything
+already on screen could be clicked straight through to the desktop.
+
+Nothing was lost by removing it. The login window takes Touch ID and the same
+account password, so handing the screen straight to it costs one keystroke and
+closes the hole completely.
+
+**There is no text field on the away screen, and the absence is the design.**
+
+It is worth stating what was deliberately **not** built, because it is the
+obvious design and it is a bad one. A full-screen panel of PR Radar's own, that
+swallows the keyboard and compares what you type against your account password,
+would hold the one secret on this machine worth stealing, would train the habit
+of typing that password into whatever happens to ask for it, and would strand
+you at a dead screen on your own Mac the first time it crashed mid-lock — and
+it would look, in a screenshot, exactly like the thing that steals passwords for
+a living. Three costs and nothing bought. The login window already does this
+correctly.
+
+### How it knows you are back
+
+While the lock is held, PR Radar takes a `beginActivity` assertion with
+`.idleSystemSleepDisabled`. You can see it, and see that it is PR Radar's:
+
+```sh
+pmset -g assertions
+```
+
+**The away screen holds the display on; the system lock lets it sleep.** Only
+*system* sleep stops work, so that half is held in both. The screen differs
+because the two covers want opposite things from it: the away screen exists to
+be read from the doorway, and one that goes dark after ten minutes is not a
+status board — worse, a dark screen is indistinguishable from across a room
+from a Mac that has slept and taken the work with it. The login window has
+nothing worth reading, so burning a backlight there would buy nothing.
+
+A dark screen is therefore a choice either way, and Option-click is how you
+ask for one.
+
+The assertion is released by **watching the real lock state**, not by waiting to
+be told about it. Every few seconds the app asks the window server whether the
+screen is still locked, and lets go the moment it is not. The notification it
+could have subscribed to instead is undocumented, and the cost of one that never
+arrives is a Mac that quietly never sleeps again until the app quits — a symptom
+nobody would ever trace back to a padlock they pressed hours earlier.
+
+If the screen does not actually lock, the assertion is dropped immediately and
+the padlock turns orange with the reason in its tooltip. A Mac held awake with
+its screen open is the worst of the three available outcomes, and it must never
+be the one you get from pressing a button marked *lock*.
+
+### Two things it cannot do
+
+Both are the system declining to be overruled by an app, and both are worth
+knowing before you trust a long run to it:
+
+- **Closing the lid still sleeps a laptop.** Leave it open.
+- **Choosing Sleep from the Apple menu still sleeps the Mac.**
+
+The padlock disables itself, with a reason in the tooltip, on any macOS that
+does not give it a way to lock the screen that it would be safe to trust. That
+is not hypothetical: this feature's first implementation used `CGSession
+-suspend`, and macOS 26 removed the menu extra that carried it. A test asserting
+the tool existed is what caught it. A lock that silently stopped locking is the
+one failure this feature cannot afford, because you find out by coming back,
+hours later, to an open Mac you had trusted.
+
 ## The plain-English lens
 
 Review language is written by people and bots who already know the codebase.

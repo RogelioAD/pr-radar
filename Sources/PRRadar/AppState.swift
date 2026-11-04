@@ -471,6 +471,69 @@ final class AppState: ObservableObject {
         autoReviewLog[item.pingKey] = record
     }
 
+    // MARK: - The desk lock
+
+    /// Whether this Mac can be locked at all, answered once at launch.
+    ///
+    /// A `let`, because the tool it looks for ships with the OS and does not
+    /// come and go while the app is running. Asking per-render would be a
+    /// filesystem hit on every pass of the header for an answer that cannot
+    /// have changed.
+    let deskLockAvailable = DeskLock.isAvailable()
+
+    /// Why the last press did not lock, or nil.
+    ///
+    /// Live and never persisted. A failure is about the state of the machine a
+    /// second ago, and one restored at launch would be a warning about a lock
+    /// nobody attempted.
+    @Published var deskLockError: String?
+
+    weak var deskLock: DeskLockCoordinator?
+
+    /// `hard` is the genuine macOS lock, reached by Option-clicking. The plain
+    /// press puts up PR Radar's own away screen, which can say what is running
+    /// and is a deterrent rather than a boundary — see `AwayController`.
+    func lockDesk(hard: Bool = false) { deskLock?.lock(hard: hard) }
+
+    /// The Claude half of the away screen.
+    ///
+    /// Refreshed on its own slower beat by `AwayController` rather than
+    /// recomputed as the view draws: the stopwatches tick every second and
+    /// this costs a directory scan and a few hundred kilobytes of file, which
+    /// is cheap once every few seconds and wasteful sixty times a minute.
+    ///
+    /// Empty until the first scan, which reads as "nothing running" for a
+    /// moment. That is the right way round: a screen that claimed work was in
+    /// flight before it had looked would be lying in the one direction that
+    /// matters, since the whole point is deciding whether it is safe to leave.
+    @Published var claudeFeed: ClaudeFeed.Digest = ClaudeFeed.digest([])
+
+    /// What the away screen should be showing right now.
+    ///
+    /// Assembled here because this is the only place that can see both halves:
+    /// the log knows a ping is `running` and for how long, and `items` is what
+    /// turns that ping key into `repo#number`. A run whose row has since gone
+    /// is still named, by its key, rather than dropped — an unexplained
+    /// stopwatch is better than a review that silently stopped being mentioned.
+    func awayStatus(now: Date = Date()) -> AwayScreen.Status {
+        let labels = Dictionary(
+            items.map { ($0.pingKey, "\($0.repo)#\($0.number)") },
+            uniquingKeysWith: { first, _ in first })
+
+        let running = autoReviewLog.records.compactMap { key, record -> AwayScreen.Job? in
+            guard record.status == .running else { return nil }
+            return AwayScreen.Job(
+                label: labels[key] ?? key,
+                // A running record with no start is still running. Shown at
+                // 0:00 rather than dropped: a stopwatch that has not started
+                // is odd, and a review that quietly stopped being mentioned
+                // is the thing this screen exists to rule out.
+                elapsed: RunTime.elapsed(startedAt: record.startedAt,
+                                         finishedAt: nil, now: now) ?? 0)
+        }
+        return AwayScreen.status(running: running, queued: reviewQueue.count)
+    }
+
     // MARK: - The plain-English lens
 
     /// Whether the drawer is showing plain-English readings.

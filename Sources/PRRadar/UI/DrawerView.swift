@@ -345,6 +345,7 @@ struct DrawerView: View {
             Text("PR Radar")
                 .font(.system(size: 12.5, weight: .semibold))
             Spacer()
+            deskLock
             lensToggle
             updateChip
             Button(action: onCollapse) {
@@ -359,6 +360,57 @@ struct DrawerView: View {
         .padding(.horizontal, 12)
         .frame(height: Layout.headerHeight - Layout.resizeEdge)
         .contentShape(Rectangle())
+    }
+
+    /// The desk lock: cover the screen, and hold the Mac awake behind it so
+    /// whatever is running finishes.
+    ///
+    /// A plain press puts up PR Radar's own away screen, which says what is
+    /// still running and is dismissed by the system's authentication prompt.
+    /// **Option**-click locks the Mac for real. The soft one is the default
+    /// because it is the one wanted most days — a deterrent against the
+    /// colleague who nudges the trackpad, plus a status you can read from the
+    /// doorway — and because the hard one is still a modifier away on the day
+    /// the room is not one to trust. Neither ever sees your password.
+    ///
+    /// Beside the lens because the two are the same kind of statement — about
+    /// how you are using the app right now, not about any one pull request —
+    /// and to the left of it because this is the one you reach for while
+    /// standing up to leave. The close box stays furthest right, where a press
+    /// aimed at it cannot land on something that takes the screen.
+    ///
+    /// Present in a room, unlike the lens. The lens needs a list to put itself
+    /// over; walking away from the desk is something you do from wherever you
+    /// happen to be in the app, and a lock that disappeared depending on which
+    /// tab was open would be a lock you stopped trusting to be there.
+    ///
+    /// Disabled rather than hidden when the Mac cannot be locked, which is the
+    /// opposite of the lens's rule and for the opposite reason: a missing lens
+    /// costs a reading, and a missing lock is discovered by coming back to an
+    /// unlocked Mac. The tooltip says why.
+    @ViewBuilder
+    private var deskLock: some View {
+        // Read at press time rather than tracked, because this is the only
+        // moment it matters and a published modifier-flag state would redraw
+        // the header every time a thumb brushed Option.
+        Button { state.lockDesk(hard: NSEvent.modifierFlags.contains(.option)) } label: {
+            // The failed state gets its own glyph rather than a tint. Every
+            // other signal in this header is a colour on a shape that stays
+            // put, and this is the one place where the shape has to carry the
+            // message on its own: the press that failed may have been the last
+            // thing done before turning away from the screen.
+            Image(systemName: state.deskLockError == nil ? "lock" : "lock.slash")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(state.deskLockError == nil ? .secondary : Color.orange)
+                .frame(width: 18, height: Layout.headerHeight - Layout.resizeEdge)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!state.deskLockAvailable)
+        .help(DeskLock.help(available: state.deskLockAvailable,
+                            error: state.deskLockError))
+        .accessibilityLabel("Lock the screen and keep this Mac awake")
+        .headerControl()
     }
 
     /// The lens: review language in plain English, for reading only.

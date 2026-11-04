@@ -49,6 +49,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return coordinator
     }()
 
+    private lazy var deskLock: DeskLockCoordinator = {
+        let coordinator = DeskLockCoordinator(state: state)
+        state.deskLock = coordinator
+        return coordinator
+    }()
+
     private let pathMonitor = NWPathMonitor()
     /// Assumed true until the monitor says otherwise, so a slow first callback
     /// cannot swallow the launch fetch.
@@ -92,6 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the header button can be pressed. Otherwise the first press of the
         // lens does nothing, and only a poll would fix it.
         _ = lens
+        // The same, and it matters more here: a lock that does nothing the
+        // first time it is pressed is discovered by walking away from an
+        // unlocked Mac.
+        _ = deskLock
 
         panel = PanelController(state: state)
         panel.onOpen = { [weak self] item in
@@ -176,6 +186,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // An away screen must never come down into an unlocked desktop just
+        // because this app was asked to quit. See `lockOnExitIfCovered`.
+        deskLock.lockOnExitIfCovered()
         pollTask?.cancel()
         clockTask?.cancel()
         updateTask?.cancel()
