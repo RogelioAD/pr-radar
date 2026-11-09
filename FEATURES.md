@@ -267,33 +267,6 @@ just been pinged again is always *never*, when the truth is that PR Radar read
 it on Tuesday. The chip is about the code, not about the question. A run that
 failed or was skipped is not a review to measure from.
 
-### That you started it
-
-Snoozing gave the list a way to say *not now*. There was never one for *I am on
-it*: you open a pull request, read four hundred lines, get pulled into
-something else, and the row you come back to is identical to one you have never
-touched.
-
-So opening a row records that it happened, and the row says **`opened 3d ago`**
-until it is dealt with. It is deliberately the weakest claim the app can make —
-that you opened the thing, never that you read it or got anywhere — because
-that is the only part it actually witnessed.
-
-- **The earliest open is the one kept.** Opening it a fourth time is not a
-  fresh start; the interesting number is how long this has been going on, and
-  keeping the latest would reset the clock exactly when it has most to say.
-- **A day, not three.** The two clocks either side of this one use the
-  staleness ladder, which turns amber after a day and red after three. This
-  measures a thing you started and did not finish, where an afternoon is
-  ordinary and a day is already worth a word.
-- **There is no expiry**, where the snooze has one. A snooze is a promise about
-  a time and goes stale on its own; this stays true until the pull request is
-  dealt with — and being dealt with is exactly what takes it out of the fetch.
-- **`Not mine` clears it.** The record can be wrong in one direction: you
-  opened it, decided it was not yours, and said so somewhere this app cannot
-  see. Nothing else would clear it short of reviewing a pull request you are
-  not going to review.
-
 ### What counts as waiting on you
 
 Both `review-requested:@me` and `team-review-requested:` for every team you

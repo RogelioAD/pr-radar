@@ -795,14 +795,6 @@ struct DrawerView: View {
                                 onSnooze: { state.snooze(item, until: $0) },
                                 onWake: state.showingSnoozed ? { state.wake(item) } : nil,
                                 wakesAt: state.wakeTime(for: item),
-                                openedLabel: state.opened.label(for: item.pingKey,
-                                                                now: state.clock),
-                                openedHealth: state.opened.health(for: item.pingKey,
-                                                                  now: state.clock),
-                                openedHelp: state.opened.help(for: item.pingKey,
-                                                              now: state.clock),
-                                onForgetOpened: state.opened.wasOpened(item.pingKey)
-                                    ? { state.opened.forget(item.pingKey) } : nil,
                                 lensReading: { state.lensReading(for: $0) },
                                 rowKey: state.rowKey(.reviews, item.id)) {
                             onOpen(item)

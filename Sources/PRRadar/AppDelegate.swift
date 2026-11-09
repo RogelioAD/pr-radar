@@ -77,6 +77,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Registered rather than set, so it lives in the registration domain:
         // anyone who has chosen their own `NSInitialToolTipDelay` keeps it.
         UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 250])
+        // Features that have been removed, and the records they left in
+        // somebody's plist. The sweep existed and was never called, which is
+        // how a retired feature's data outlived it by two releases.
+        Prefs.clearRetiredKeys()
         guard !anotherCopyIsRunning() else {
             // Before any UI exists, so a duplicate never gets as far as
             // placing a panel.
@@ -105,10 +109,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         panel = PanelController(state: state)
         panel.onOpen = { [weak self] item in
-            // Recorded here rather than in the row, because this is the one
-            // place a review request is opened from — the row's tap, its
-            // context menu and a notification's Open button all arrive here.
-            self?.state.markOpened(item)
             NSWorkspace.shared.open(item.url)
             // Automatic rather than deliberate: you asked for the browser, not
             // for the drawer to shut. Somebody who has pinned it keeps it.

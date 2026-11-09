@@ -180,11 +180,6 @@ final class AppState: ObservableObject {
         if kept != resolvedLocally { resolvedLocally = kept }
     }
 
-    /// Review requests you have opened and not finished with. See `Opened`.
-    @Published var opened: Opened = Prefs.opened {
-        didSet { Prefs.opened = opened }
-    }
-
     /// Review requests put down until later. See `Snoozes`.
     @Published var snoozes: Snoozes = Prefs.snoozes {
         didSet { Prefs.snoozes = snoozes }
@@ -1350,14 +1345,6 @@ final class AppState: ObservableObject {
         snoozes.snooze(item.pingKey, until: wake)
     }
 
-    /// Records that a row was opened. Called from the one place that opens
-    /// one, so there is no second path that could forget to.
-    func markOpened(_ item: ReviewItem) {
-        var updated = opened
-        updated.open(item.pingKey, at: Date())
-        if updated != opened { opened = updated }
-    }
-
     func wake(_ item: ReviewItem) {
         snoozes.wake(item.pingKey)
         // Nothing left to look at, so stop looking at it. The same rule the
@@ -1378,13 +1365,6 @@ final class AppState: ObservableObject {
         pruned.prune(known: known, now: clock)
         if pruned != snoozes { snoozes = pruned }
         if showingSnoozed && snoozedItems.isEmpty { showingSnoozed = false }
-
-        // Same round, same rule. A pull request that has left the fetch has
-        // been reviewed, merged or closed, and there is nothing left to
-        // remember about having opened it.
-        var stillOpen = opened
-        stillOpen.prune(known: known)
-        if stillOpen != opened { opened = stillOpen }
     }
 
     /// The My PRs list as the drawer actually lays it out: lone PRs and stack

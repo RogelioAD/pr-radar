@@ -1,83 +1,13 @@
 import XCTest
 @testable import PRRadarCore
 
-/// Having started something, and who is sitting on your work.
-final class OpenedAndLoadTests: XCTestCase {
+/// Who is sitting on your work, which repos the drawer is narrowed to, and
+/// the commands the branch chips hand you.
+final class ReviewerLoadTests: XCTestCase {
 
     let now = Date(timeIntervalSince1970: 1_700_000_000)
 
     func ago(_ hours: Double) -> Date { now.addingTimeInterval(-hours * 3_600) }
-
-    // MARK: - Opened
-
-    func testRecordsAnOpen() {
-        var opened = Opened()
-        opened.open("k", at: ago(2))
-        XCTAssertTrue(opened.wasOpened("k"))
-        XCTAssertEqual(opened.openedAt("k"), ago(2))
-        XCTAssertEqual(opened.label(for: "k", now: now), "opened 2h ago")
-    }
-
-    /// Opening it a fourth time is not a fresh start. The interesting number
-    /// is how long this has been going on, and keeping the latest would reset
-    /// the clock exactly when it has most to say.
-    func testKeepsTheEarliestOpen() {
-        var opened = Opened()
-        opened.open("k", at: ago(30))
-        opened.open("k", at: ago(1))
-        XCTAssertEqual(opened.openedAt("k"), ago(30))
-    }
-
-    func testAnUnopenedRowSaysNothing() {
-        let opened = Opened()
-        XCTAssertNil(opened.label(for: "k", now: now))
-        XCTAssertNil(opened.help(for: "k", now: now))
-        XCTAssertFalse(opened.wasOpened("k"))
-    }
-
-    /// An afternoon of having something open is ordinary. Four days of it is
-    /// the point — so one day, not the three the waiting clocks use.
-    func testGoesAmberAfterADay() {
-        var opened = Opened()
-        opened.open("fresh", at: ago(5))
-        opened.open("stale", at: ago(30))
-        XCTAssertEqual(opened.health(for: "fresh", now: now), .neutral)
-        XCTAssertEqual(opened.health(for: "stale", now: now), .attention)
-    }
-
-    func testForgettingClearsIt() {
-        var opened = Opened()
-        opened.open("k", at: now)
-        opened.forget("k")
-        XCTAssertFalse(opened.wasOpened("k"))
-    }
-
-    /// No expiry here, where the snooze has one. A snooze is a promise about a
-    /// time and goes stale on its own; "you opened this" stays true until the
-    /// pull request is dealt with — which is what takes it out of the fetch.
-    func testPruneOnlyDropsWhatTheFetchLost() {
-        var opened = Opened()
-        opened.open("gone", at: ago(500))
-        opened.open("here", at: ago(500))
-        opened.prune(known: ["here"])
-        XCTAssertFalse(opened.wasOpened("gone"))
-        XCTAssertTrue(opened.wasOpened("here"), "age alone never drops one")
-    }
-
-    func testAPartialRoundPrunesNothing() {
-        var opened = Opened()
-        opened.open("k", at: now)
-        opened.prune(known: nil)
-        XCTAssertTrue(opened.wasOpened("k"))
-    }
-
-    func testSurvivesARoundTrip() {
-        var opened = Opened()
-        opened.open("k", at: now)
-        XCTAssertEqual(Opened.decoded(from: opened.encoded()), opened)
-        XCTAssertTrue(Opened.decoded(from: nil).isEmpty)
-        XCTAssertTrue(Opened.decoded(from: Data("rubbish".utf8)).isEmpty)
-    }
 
     // MARK: - Reviewer load
 

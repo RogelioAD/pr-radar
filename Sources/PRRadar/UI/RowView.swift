@@ -46,12 +46,6 @@ struct RowView: View {
     var onWake: (() -> Void)?
     /// When this row wakes, if it is asleep.
     var wakesAt: Date?
-    /// What the row says about having been opened, or nil if it has not been.
-    var openedLabel: String?
-    var openedHealth: Health = .neutral
-    var openedHelp: String?
-    /// Forgets that it was opened, for the row that says so.
-    var onForgetOpened: (() -> Void)?
     /// The plain-English reading for a piece of text, or nil for its own words.
     ///
     /// A lookup rather than a flag and a store, so this row cannot accidentally
@@ -82,7 +76,6 @@ struct RowView: View {
         VStack(alignment: .leading, spacing: 6) {
             primary
             if let wakesAt { sleepBand(wakesAt) }
-            if let openedLabel { openedBand(openedLabel) }
             if showsSinceBand { sinceBand }
             if let review {
                 strip(review)
@@ -304,28 +297,6 @@ struct RowView: View {
             if let onWake {
                 RowButton(title: "Wake now", symbol: "sun.max",
                           health: .running, action: onWake)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// That you started this one and did not finish.
-    ///
-    /// The weakest claim the app can make and the only one it witnessed: you
-    /// opened it. Never that you read it, never that you got anywhere.
-    @ViewBuilder
-    private func openedBand(_ label: String) -> some View {
-        ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
-            Chip(text: label, symbol: "book", health: openedHealth)
-                .help(openedHelp ?? "")
-            if let onForgetOpened {
-                // Because the record can be wrong in the one direction that
-                // matters: you opened it, decided it was not yours, and told
-                // somebody so in a channel this app cannot see. Nothing else
-                // clears it short of reviewing a pull request you are not
-                // going to review.
-                RowButton(title: "Not mine", symbol: "xmark",
-                          health: .neutral, action: onForgetOpened)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

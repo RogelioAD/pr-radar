@@ -16,7 +16,6 @@ public enum Prefs {
         static let sortOrder = "list.sortOrder"
         static let reviewFilter = "list.reviewFilter"
         static let snoozes = "list.snoozes"
-        static let opened = "list.opened"
         static let hotKey = "hotkey.chord"
         static let drawerContentHeight = "drawer.contentHeight"
         static let selectedTab = "drawer.selectedTab"
@@ -111,12 +110,6 @@ public enum Prefs {
     public static var snoozes: Snoozes {
         get { Snoozes.decoded(from: defaults.data(forKey: Key.snoozes)) }
         set { defaults.set(newValue.encoded(), forKey: Key.snoozes) }
-    }
-
-    /// Review requests you have opened and not yet dealt with. See `Opened`.
-    public static var opened: Opened {
-        get { Opened.decoded(from: defaults.data(forKey: Key.opened)) }
-        set { defaults.set(newValue.encoded(), forKey: Key.opened) }
     }
 
     /// The system-wide chord that opens the drawer, as `opt+shift+r`.
@@ -655,22 +648,34 @@ public enum Prefs {
 
     // MARK: - Retired settings
 
-    /// Clears what the resolve feature left behind.
+    /// Clears what removed features left behind.
     ///
-    /// Resolve ran a skill against your own pull requests, in your own
-    /// checkout, and was removed because the thing it saved was never the slow
-    /// part: the pre-commit hook it had to sit through is the same hook you sit
+    /// Worth doing rather than leaving orphaned, because not all of these are
+    /// flags. `resolve.log` held every run's table — drafted replies, shas,
+    /// failure text — and `list.opened` held a date per pull request. Both are
+    /// somebody's record of their own work, sitting in a plist no code reads
+    /// any more.
+    ///
+    /// **Resolve** ran a skill against your own pull requests, in your own
+    /// checkout. It went because the thing it saved was never the slow part:
+    /// the pre-commit hook it had to sit through is the same hook you sit
     /// through, so the run cost what doing it by hand costs and spent money on
     /// top.
     ///
-    /// Worth clearing rather than leaving orphaned, because one of these keys
-    /// is not a flag. `resolve.log` held every run's table — drafted replies,
-    /// shas, failure text — and that is somebody's work sitting in a plist no
-    /// code reads any more.
-    public static func clearRetiredResolveKeys() {
+    /// **Opened** put an `opened 3h ago` chip on a row you had clicked into,
+    /// with a *Not mine* button to take it off again. It went because neither
+    /// half said what it meant: the chip recorded the weakest fact the app had
+    /// — that a browser was opened — and the button was named for the reason
+    /// you might press it rather than the one thing it did, which was clear
+    /// the chip.
+    ///
+    /// Called once per launch. A no-op on a machine that never ran either
+    /// feature, and `removeObject` on an absent key is free.
+    public static func clearRetiredKeys() {
         for key in ["resolve.skill", "resolve.mode", "resolve.repos",
                     "resolve.outOfScope", "resolve.pending", "resolve.gates",
-                    "resolve.budget", "resolve.timeoutMinutes", "resolve.log"] {
+                    "resolve.budget", "resolve.timeoutMinutes", "resolve.log",
+                    "list.opened"] {
             defaults.removeObject(forKey: key)
         }
     }
