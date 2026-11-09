@@ -33,6 +33,52 @@ public enum AwayScreen {
         public let isWorking: Bool
     }
 
+    // MARK: - Fitting a screen that is not the one it was designed on
+
+    /// The width one column is given, and the gap between two of them.
+    ///
+    /// Fixed, so neither column slides sideways as its longest line changes —
+    /// the same promise the rest of this screen makes about sitting still.
+    public static let columnWidth: CGFloat = 480
+    public static let columnGap: CGFloat = 56
+    /// The least space left either side of the pair. Not a margin anyone will
+    /// measure; it is what stops a column ending exactly at the bezel.
+    public static let sideMargin: CGFloat = 40
+
+    /// Where the two columns go on a screen of a given width.
+    public enum Columns: Equatable, Sendable {
+        /// Side by side, which is what the screen is for: the question is which
+        /// of the two is still going, and two columns are compared at a glance.
+        case sideBySide(width: CGFloat)
+        /// One above the other, on a display too narrow to set them beside each
+        /// other. Worse to scan and still legible, which is the right trade —
+        /// the alternative is a second column clipped at the bezel, and half a
+        /// column answers nothing at all.
+        case stacked(width: CGFloat)
+    }
+
+    /// A pure rule rather than a `GeometryReader` guess, because this is the
+    /// part of a multi-display setup that cannot be checked by looking: the
+    /// cover on the display you are *not* sitting at is the one that has to be
+    /// right, and nobody walks round the desk to find out.
+    public static func columns(forWidth width: CGFloat) -> Columns {
+        let both = columnWidth * 2 + columnGap + sideMargin * 2
+        guard width < both else { return .sideBySide(width: columnWidth) }
+        // Never below a width a `repo#1234 · 12:04` line survives at.
+        return .stacked(width: max(240, min(columnWidth, width - sideMargin * 2)))
+    }
+
+    /// How far down the lock and the title sit.
+    ///
+    /// 96 on anything with the height to spare, which is every modern display
+    /// and was the only case the fixed number was ever tried against. A short
+    /// secondary — an older 768-line panel, a projector — has to give that
+    /// space to the columns instead, and the anchor is still fixed *for that
+    /// screen*, which is all the no-movement promise requires.
+    public static func headerTop(forHeight height: CGFloat) -> CGFloat {
+        height >= 900 ? 96 : max(24, height * 0.09)
+    }
+
     /// How many runs are named before the rest become a count.
     ///
     /// Three. This is read from across a room, by someone who wants one bit of

@@ -1528,6 +1528,29 @@ PR Radar is work this app started and can speak for. Claude is your own
 sessions, which it can only observe from the outside — and a reader who cannot
 tell those apart cannot tell which half to trust.
 
+**Every display, and the whole of each one.** A cover is built and ordered in
+per screen, so a second monitor is covered rather than left showing the desktop
+beside a screen that says *Away*. Keyboard focus goes to the display you were
+actually at; a press on any of them locks the Mac for real.
+
+Each cover is laid out for the screen it landed on rather than for the one this
+was designed against. Two columns side by side wherever they fit — which is any
+ordinary display and the ultrawide this was found on — and stacked below about
+1100pt across, because half a column clipped at a bezel answers nothing. On a
+short panel the title gives up some of its distance from the top rather than
+pushing the columns off the bottom. The anchors are still fixed; they are fixed
+*per screen*, which is all the promise above requires.
+
+Plugging a display in or out rebuilds the covers against the new arrangement,
+and takes the front back as it does — a hotplug briefly loses focus, and being
+dropped to the login window for connecting a monitor is how a deterrent stops
+being worth using.
+
+If there is no display to cover at all — every one asleep, a clamshell whose
+external screen has gone — the press falls through to the system lock instead
+of reporting success. An uncovered Mac held awake is the one outcome worse than
+either lock, and it would have been reached by pressing a padlock.
+
 The stopwatches advance every second, so from the doorway you can see the
 difference between *still going* and *stuck*. When a column has nothing
 working it dims, which reads as idle from across a room without you having to

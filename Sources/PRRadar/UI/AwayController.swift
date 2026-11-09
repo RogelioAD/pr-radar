@@ -62,15 +62,20 @@ final class AwayController {
 
     // MARK: - Putting it up
 
-    func show(state: AppState) {
-        guard windows.isEmpty else { return }
+    /// Puts a cover on every display, and says whether it managed to.
+    ///
+    /// False means there was no display to cover — every one of them asleep, a
+    /// clamshell whose external screen has gone. The caller must not treat that
+    /// as a lock: an uncovered Mac being held awake is the one outcome worse
+    /// than either kind of lock, and it is reached by pressing a button marked
+    /// with a padlock.
+    @discardableResult
+    func show(state: AppState) -> Bool {
+        guard windows.isEmpty else { return isShowing }
 
-        for screen in NSScreen.screens {
-            windows.append(AwayWindow(screen: screen, state: state, controller: self))
-        }
-        // Key so that keystrokes land here rather than in whatever was in
-        // front, and active so the presentation options below apply to us.
-        windows.first?.makeKeyAndOrderFront(nil)
+        place(state: state)
+        guard isShowing else { return false }
+        // Active so the presentation options below apply to us.
         NSApp.activate(ignoringOtherApps: true)
         enterKiosk()
 
@@ -89,6 +94,40 @@ final class AwayController {
                 self.rebuild(state: state)
             }
         }
+        return true
+    }
+
+    /// One cover per display, and every one of them ordered in.
+    ///
+    /// **The ordering is the whole of this, and it is what was wrong.** A
+    /// window was built for every screen and only the first was ever ordered
+    /// front; the rest were constructed, framed, and never shown. So a Mac with
+    /// a second display covered one of them and left the other sitting there
+    /// with the desktop on it — the branch names, the diff, whatever was open —
+    /// while the first said *Away*. On a single-screen Mac the two behave
+    /// identically, which is why it was not noticed from the chair.
+    ///
+    /// `orderFrontRegardless` rather than `orderFront`, because this runs
+    /// before the app is activated and an inactive app's `orderFront` is
+    /// allowed to be deferred. A cover that appears a moment after the one
+    /// beside it is a flicker; one that does not appear at all is the bug
+    /// above, and the stronger call cannot produce it.
+    private func place(state: AppState) {
+        // Compared by frame rather than by object: `NSScreen` instances are
+        // not stable between calls, so `===` against `NSScreen.main` silently
+        // never matches and the key would always fall back to screen zero.
+        let focused = NSScreen.main?.frame
+        var key: AwayWindow?
+        for screen in NSScreen.screens {
+            let window = AwayWindow(screen: screen, state: state, controller: self)
+            window.orderFrontRegardless()
+            windows.append(window)
+            if screen.frame == focused { key = window }
+        }
+        // Key so that keystrokes land here rather than in whatever was in
+        // front. Any of the covers would swallow them; this is the one being
+        // looked at, so it is the one that should visibly have the focus.
+        (key ?? windows.first)?.makeKeyAndOrderFront(nil)
     }
 
     /// Hides the Dock and menu bar and, most of the point, turns off
@@ -110,13 +149,27 @@ final class AwayController {
                                      .disableHideApplication]
     }
 
+    /// Starts the covers again against the displays as they now are.
+    ///
+    /// Rebuilt wholesale rather than diffed. A display arriving is not the only
+    /// thing this notification carries — a resolution change, a rearrangement,
+    /// a screen becoming the main one all land here too, and every one of them
+    /// moves frames the covers were sized against. Working out which windows
+    /// could be kept would be a lot of care spent on an event that happens
+    /// perhaps twice a day and costs a redraw.
     private func rebuild(state: AppState) {
         for window in windows { window.orderOut(nil) }
         windows.removeAll()
-        for screen in NSScreen.screens {
-            windows.append(AwayWindow(screen: screen, state: state, controller: self))
-        }
-        windows.first?.makeKeyAndOrderFront(nil)
+        place(state: state)
+
+        // Taken back and re-armed, exactly as on the way up. Plugging a monitor
+        // in takes the front away for a moment, and the sentry reads losing the
+        // front as somebody getting past the cover — for which the penalty is
+        // the login window. Connecting a display is not an attempt to bypass
+        // anything, and being dropped to a password prompt for doing it is how
+        // a deterrent stops being worth using.
+        NSApp.activate(ignoringOtherApps: true)
+        shownAt = Date()
     }
 
     // MARK: - Handing over

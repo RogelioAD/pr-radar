@@ -26,10 +26,11 @@ struct AwayView: View {
     @ObservedObject var state: AppState
     var onUnlock: () -> Void
 
-    /// Where the lock sits, measured from the top of the display, and how much
-    /// room the title block is given. Both fixed: they are the anchors
-    /// everything else is positioned against, so neither may depend on content.
-    private let headerTop: CGFloat = 96
+    /// How much room the title block is given. Fixed: it is an anchor
+    /// everything else is positioned against, so it may not depend on content.
+    ///
+    /// Its distance from the top of the display is fixed too, but per screen
+    /// rather than per app — see `AwayScreen.headerTop`.
     private let headerHeight: CGFloat = 112
     /// The gap between the title block and the columns. Also fixed, for the
     /// same reason.
@@ -46,51 +47,77 @@ struct AwayView: View {
     private var claude: ClaudeFeed.Digest { state.claudeFeed }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            Color.black
-            VStack(spacing: 0) {
-                header
-                    .frame(height: headerHeight)
-                    .padding(.top, headerTop)
+        // Measured rather than asked of `NSScreen`, because a cover is sized to
+        // exactly one display and this is the only thing in the app that knows
+        // *which*. A second monitor is rarely the same shape as the first, and
+        // every number below used to be chosen for whichever one the app
+        // happened to be developed on.
+        GeometryReader { geometry in
+            ZStack(alignment: .top) {
+                Color.black
+                VStack(spacing: 0) {
+                    header
+                        .frame(height: headerHeight)
+                        .padding(.top, AwayScreen.headerTop(forHeight: geometry.size.height))
 
-                // Side by side rather than stacked: the question is which of
-                // the two is still going, and two columns are compared at a
-                // glance where a single list has to be read. Top-aligned, so
-                // a long column never pushes a short one down.
-                HStack(alignment: .top, spacing: 56) {
-                    section(title: "PR Radar",
-                            headline: radar.headline,
-                            lines: radar.lines,
-                            isWorking: radar.isWorking)
-                    section(title: "Claude",
-                            headline: claude.headline,
-                            lines: claude.lines,
-                            isWorking: claude.isWorking)
+                    columns(AwayScreen.columns(forWidth: geometry.size.width))
+                        .padding(.top, columnsTop)
+
+                    // Takes up whatever the columns did not. This is what lets
+                    // them grow downward instead of pushing the hint around.
+                    Spacer(minLength: 24)
+
+                    // Says what actually happens, not what you wish happened.
+                    // "Unlock" promised this screen could let you back in by
+                    // itself; it cannot, and will not pretend to — a keypress
+                    // hands the Mac to the login window, and being surprised by
+                    // that at the keyboard is how you learn not to trust it.
+                    Text("Press any key to sign back in")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.28))
+                        .padding(.bottom, 56)
                 }
-                .padding(.top, columnsTop)
-
-                // Takes up whatever the columns did not. This is what lets
-                // them grow downward instead of pushing the hint around.
-                Spacer(minLength: 24)
-
-                // Says what actually happens, not what you wish happened.
-                // "Unlock" promised this screen could let you back in by
-                // itself; it cannot, and will not pretend to — a keypress
-                // hands the Mac to the login window, and being surprised by
-                // that at the keyboard is how you learn not to trust it.
-                Text("Press any key to sign back in")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.28))
-                    .padding(.bottom, 56)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .background(Color.black)
         .ignoresSafeArea()
         .onReceive(tick) { now = $0 }
         // A trackpad nudge is the commonest way this gets touched, and it
         // should behave like any key: ask, rather than sit there.
         .contentShape(Rectangle())
         .onTapGesture { onUnlock() }
+    }
+
+    /// The two columns, set beside each other or above one another according to
+    /// what the display can hold. See `AwayScreen.columns`.
+    ///
+    /// Top-aligned when side by side, so a long column never pushes a short one
+    /// down; left-aligned when stacked, so the two still start on one edge.
+    @ViewBuilder
+    private func columns(_ layout: AwayScreen.Columns) -> some View {
+        switch layout {
+        case .sideBySide(let width):
+            HStack(alignment: .top, spacing: AwayScreen.columnGap) {
+                radarSection(width: width)
+                claudeSection(width: width)
+            }
+        case .stacked(let width):
+            VStack(alignment: .leading, spacing: 28) {
+                radarSection(width: width)
+                claudeSection(width: width)
+            }
+        }
+    }
+
+    private func radarSection(width: CGFloat) -> some View {
+        section(title: "PR Radar", headline: radar.headline,
+                lines: radar.lines, isWorking: radar.isWorking, width: width)
+    }
+
+    private func claudeSection(width: CGFloat) -> some View {
+        section(title: "Claude", headline: claude.headline,
+                lines: claude.lines, isWorking: claude.isWorking, width: width)
     }
 
     private var header: some View {
@@ -114,7 +141,8 @@ struct AwayView: View {
     private func section(title: String,
                          headline: String,
                          lines: [String],
-                         isWorking: Bool) -> some View {
+                         isWorking: Bool,
+                         width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
@@ -138,6 +166,6 @@ struct AwayView: View {
                     .truncationMode(.tail)
             }
         }
-        .frame(width: 480, alignment: .leading)
+        .frame(width: width, alignment: .leading)
     }
 }

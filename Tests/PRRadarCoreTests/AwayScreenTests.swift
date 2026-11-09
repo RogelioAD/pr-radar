@@ -92,4 +92,84 @@ final class AwayScreenTests: XCTestCase {
                                        queued: 0)
         XCTAssertEqual(status.lines, ["elevation/app#418:2026-01-01 · 0:45"])
     }
+
+    // MARK: - Fitting whichever display it landed on
+
+    /// Every display anyone reviews on. Side by side is the layout the screen
+    /// was designed around, and these must not lose it.
+    func testAnOrdinaryDisplayKeepsTheTwoColumnsSideBySide() {
+        let widths: [CGFloat] = [
+            2_560,   // the ultrawide this was found on
+            1_728,   // 16" MacBook Pro, default scaling
+            1_512,   // 14" MacBook Pro
+            1_440,   // 13" at the common scaled size
+            1_280,   // an old secondary, and the floor worth calling roomy
+        ]
+        for width in widths {
+            XCTAssertEqual(AwayScreen.columns(forWidth: width),
+                           .sideBySide(width: AwayScreen.columnWidth),
+                           "\(width) should still fit two columns")
+        }
+    }
+
+    /// A portrait monitor is the common case here, and the one that was
+    /// clipped: two 480pt columns and their gap do not fit across 1080pt with
+    /// anything left for a margin.
+    func testANarrowDisplayStacksRatherThanClips() {
+        guard case .stacked(let width) = AwayScreen.columns(forWidth: 1_080) else {
+            return XCTFail("a 1080pt-wide display cannot hold two columns")
+        }
+        XCTAssertEqual(width, AwayScreen.columnWidth)
+    }
+
+    /// A stacked column keeps its full width for as long as one fits — 480pt
+    /// has room to spare on anything 560pt across.
+    func testAStackedColumnKeepsItsWidthWhileItFits() {
+        guard case .stacked(let width) = AwayScreen.columns(forWidth: 800) else {
+            return XCTFail("expected a stack")
+        }
+        XCTAssertEqual(width, AwayScreen.columnWidth)
+    }
+
+    /// Below that it gives up the fixed width rather than the margin, because
+    /// a column ending at the bezel reads as cut off whether or not it is.
+    func testAVerySmallDisplayNarrowsTheColumn() {
+        guard case .stacked(let width) = AwayScreen.columns(forWidth: 500) else {
+            return XCTFail("expected a stack")
+        }
+        XCTAssertEqual(width, 500 - AwayScreen.sideMargin * 2)
+        XCTAssertLessThan(width, AwayScreen.columnWidth)
+    }
+
+    /// Never narrower than a `repo#1234 · 1:02:33` line survives at. Past that
+    /// the screen has stopped answering its question and should say so at a
+    /// readable size rather than shrink politely.
+    func testTheColumnHasAFloor() {
+        guard case .stacked(let width) = AwayScreen.columns(forWidth: 200) else {
+            return XCTFail("expected a stack")
+        }
+        XCTAssertEqual(width, 240)
+    }
+
+    /// The boundary, written down so that changing a constant has to be
+    /// deliberate: exactly enough room is enough.
+    func testTheBoundaryIsExact() {
+        let both = AwayScreen.columnWidth * 2 + AwayScreen.columnGap
+            + AwayScreen.sideMargin * 2
+        XCTAssertEqual(AwayScreen.columns(forWidth: both),
+                       .sideBySide(width: AwayScreen.columnWidth))
+        guard case .stacked = AwayScreen.columns(forWidth: both - 1) else {
+            return XCTFail("one point short is short")
+        }
+    }
+
+    /// The title block keeps its distance from the top on anything tall
+    /// enough, and gives ground only on a screen that cannot spare it.
+    func testTheHeaderKeepsItsAnchorOnATallScreenAndYieldsOnAShortOne() {
+        XCTAssertEqual(AwayScreen.headerTop(forHeight: 1_440), 96)
+        XCTAssertEqual(AwayScreen.headerTop(forHeight: 900), 96)
+        XCTAssertLessThan(AwayScreen.headerTop(forHeight: 768), 96)
+        // Still clear of the top edge, however short the screen.
+        XCTAssertGreaterThanOrEqual(AwayScreen.headerTop(forHeight: 200), 24)
+    }
 }

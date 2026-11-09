@@ -57,16 +57,25 @@ final class DeskLockCoordinator {
         // that has slept and taken the work with it.
         awake.begin(display: !hard)
 
-        guard hard else {
+        if !hard {
             // Never cover a screen this app cannot uncover again. See
             // `AwayController.unavailableReason`.
             if let why = AwayController.unavailableReason() {
                 failed(why)
                 return
             }
-            away.show(state: state)
-            Log.debug("away screen up; holding the system awake")
-            return
+            if away.show(state: state) {
+                Log.debug("away screen up; holding the system awake")
+                return
+            }
+            // There was no display to cover — every one asleep, or a clamshell
+            // whose external screen has gone. Falls through to the system lock
+            // rather than returning: an uncovered Mac held awake is the one
+            // outcome worse than either lock, and the button that produced it
+            // was marked with a padlock. The display goes back to its normal
+            // timeout on the way, since there is now nothing to read.
+            Log.debug("no display to cover; using the system lock instead")
+            awake.begin(display: false)
         }
 
         do {
