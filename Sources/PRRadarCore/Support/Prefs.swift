@@ -39,6 +39,7 @@ public enum Prefs {
         /// who left the drawer sitting in the trophy room.
         static let legacyShowingTrophies = "drawer.showingTrophies"
         static let reviewAuto = "review.auto"
+        static let reviewStopped = "review.stopped"
         static let reviewSkill = "review.skill"
 
         static let claudePath = "review.claudePath"
@@ -406,6 +407,25 @@ public enum Prefs {
     public static var autoReview: Bool {
         get { defaults.bool(forKey: Key.reviewAuto) }
         set { defaults.set(newValue, forKey: Key.reviewAuto) }
+    }
+
+    /// Why automatic review switched itself off, kept so the answer outlives
+    /// the launch it was decided in.
+    ///
+    /// Stored rather than held in memory because the whole point of the rule
+    /// that writes it is that it fires unattended: a Mac left running overnight
+    /// is also a Mac that gets restarted, and the switch being off is the part
+    /// that survives. Cleared by switching the feature back on.
+    public static var autoReviewStopped: String? {
+        get { defaults.string(forKey: Key.reviewStopped) }
+        set {
+            let trimmed = newValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let trimmed, !trimmed.isEmpty {
+                defaults.set(trimmed, forKey: Key.reviewStopped)
+            } else {
+                defaults.removeObject(forKey: Key.reviewStopped)
+            }
+        }
     }
 
     /// The review skill to run, as the user types it — `/my-review`.

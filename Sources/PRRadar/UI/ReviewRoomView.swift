@@ -109,7 +109,12 @@ struct ReviewRoomView: View {
                 .accessibilityLabel("Review automatically")
         }
 
-        if !state.canAutoReview {
+        // Above the setup notes, because it is the newer news: a switch that
+        // moved by itself is a different question from one that was never
+        // turned on, and it is the one somebody is standing here asking.
+        if let stopped = state.autoReviewStopped, !state.autoReviewEnabled {
+            caution(stopped + " Switch it back on once the cause is dealt with.")
+        } else if !state.canAutoReview {
             note(state.claudePath == nil
                  ? "Claude Code is not installed, so there is nothing to run."
                  : "Name a review skill below and this can be switched on.")

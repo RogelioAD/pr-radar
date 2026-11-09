@@ -251,23 +251,39 @@ final class AutoReviewCoordinator {
             // it started.
             publishQueue()
             if consecutiveFailures >= Self.failureLimit {
-                state.autoReviewEnabled = false
-                state.lastError = "Automatic review turned itself off after "
-                    + "\(Self.failureLimit) failures in a row."
-                consecutiveFailures = 0
+                stop("Automatic review switched itself off after "
+                     + "\(Self.failureLimit) reviews failed in a row.")
                 return
             }
         }
+    }
+
+    /// Switches the feature off, and leaves an account of why that outlives the
+    /// minute it was decided in.
+    ///
+    /// `lastError` alone was not enough and could not have been: the next
+    /// refresh overwrites it with whatever that round had to say, and it is
+    /// sixty seconds away at most. So the feature turned itself off — which it
+    /// does, by design, while nobody is at the desk — and by the time anyone
+    /// looked there was a switch in the off position and no account of who had
+    /// moved it. `autoReviewStopped` is kept until the switch goes back on.
+    private func stop(_ reason: String) {
+        state.autoReviewEnabled = false
+        state.autoReviewStopped = reason
+        state.lastError = reason
+        consecutiveFailures = 0
+        Log.debug("automatic review switched itself off: \(reason)")
     }
 
     // MARK: - One review
 
     private func review(_ item: ReviewItem) async {
         let key = item.pingKey
-        startTimes.append(Date())
+        let startedAt = Date()
+        startTimes.append(startedAt)
         update(key) { record in
             record.status = .running
-            record.startedAt = Date()
+            record.startedAt = startedAt
             record.attempts += 1
         }
         state.reviewInFlight = key
@@ -303,7 +319,15 @@ final class AutoReviewCoordinator {
                 await post(item, composed)
             }
         } catch let failure as AutoReviewFailure {
-            fail(key, failure.message)
+            // The hour's ceiling is a ceiling on reviews, and a run that never
+            // reached the skill was not one. Left counted, a repository the
+            // network could not be bothered with would eat the whole hour's
+            // budget in about four seconds.
+            if !failure.ranTheSkill,
+               let index = startTimes.lastIndex(of: startedAt) {
+                startTimes.remove(at: index)
+            }
+            fail(key, failure.message, ranTheSkill: failure.ranTheSkill)
         } catch {
             fail(key, AutoReviewRecord.truncated(error.localizedDescription))
         }
@@ -358,8 +382,8 @@ final class AutoReviewCoordinator {
         else { throw AutoReviewFailure.noClone(item.repo) }
 
         let ref = Workspace.ref(forPR: item.number)
-        _ = try await Self.runGit(["-C", clone.path, "fetch", "origin", "--force",
-                                   Workspace.fetchRefspec(forPR: item.number)])
+        _ = try await Self.fetch(["-C", clone.path, "fetch", "origin", "--force",
+                                  Workspace.fetchRefspec(forPR: item.number)])
 
         let path = FileManager.default.temporaryDirectory
             .appendingPathComponent(Workspace.worktreeName(
@@ -405,7 +429,7 @@ final class AutoReviewCoordinator {
     private func diffRange(for item: ReviewItem, clone: URL, worktree: URL) async -> String {
         if let branch = item.baseRef, !branch.isEmpty {
             let target = Workspace.baseRef(forPR: item.number)
-            let fetched = try? await Self.runGit(
+            let fetched = try? await Self.fetch(
                 ["-C", clone.path, "fetch", "origin", "--force",
                  Workspace.baseRefspec(branch: branch, forPR: item.number)])
             if fetched != nil,
@@ -436,17 +460,44 @@ final class AutoReviewCoordinator {
         }
     }
 
+    /// Every git this class runs is preparing a checkout, never reviewing, so
+    /// it throws `.checkout` rather than the `.exited` a skill produces.
+    ///
+    /// That used to be the same case, and the collision is what made a resolver
+    /// blinking indistinguishable from a review that ran and failed: the row
+    /// said "The review failed", the attempt was spent, and the strike was
+    /// counted. Nothing had reviewed anything.
     private static func runGit(_ arguments: [String]) async throws -> String {
         guard let git = ProcessRunner.firstExecutable(
             among: ["/usr/bin/git", "/opt/homebrew/bin/git", "/usr/local/bin/git"])
-        else { throw AutoReviewFailure.unparseable("git was not found") }
+        else { throw AutoReviewFailure.checkout("git was not found") }
 
         let result = try await ProcessRunner.run(
             executable: git, arguments: arguments, timeout: 120)
         guard result.exitCode == 0 else {
-            throw AutoReviewFailure.exited(code: result.exitCode, stderr: result.stderr)
+            throw AutoReviewFailure.checkout(
+                result.stderr.isEmpty ? "git exited with code \(result.exitCode)"
+                                      : result.stderr)
         }
         return result.stdout
+    }
+
+    /// A git that reaches the network, asked again while the fault reads as the
+    /// network's rather than the repository's. See `GitFault`.
+    ///
+    /// Here rather than in `runGit` because most of what this class runs is
+    /// local — a worktree, a merge-base — and a local command that failed will
+    /// fail again in two seconds. Only the fetches have anything to gain.
+    private static func fetch(_ arguments: [String]) async throws -> String {
+        for delay in GitFault.retryDelays {
+            do { return try await runGit(arguments) }
+            catch let failure as AutoReviewFailure where failure.isWorthRetrying {
+                Log.debug("fetch failed on the network — asking again in "
+                          + "\(Int(delay))s: \(failure.message)")
+                try? await Task.sleep(for: .seconds(delay))
+            }
+        }
+        return try await runGit(arguments)
     }
 
     // MARK: - Posting and deciding
@@ -642,17 +693,34 @@ final class AutoReviewCoordinator {
         state.autoReviewLog[key] = record
     }
 
-    private func fail(_ key: String, _ message: String) {
+    /// Writes down a failure, and decides whether it counts.
+    ///
+    /// `ranTheSkill` is the whole of that decision — see
+    /// `AutoReviewFailure.ranTheSkill`. A run stopped before the skill started
+    /// still becomes a `failed` record, because the row has to say something
+    /// and an hour's backoff is the right pace to try again at; it simply does
+    /// not spend the pull request's attempts or move the feature closer to
+    /// switching itself off.
+    private func fail(_ key: String, _ message: String, ranTheSkill: Bool = true) {
         // Logged as well as stored. The record is the only other copy and it is
         // routinely overwritten — a retry starts by clearing the row — so
         // without this a failure that somebody retried before mentioning it
         // leaves nothing behind to diagnose.
-        Log.debug("review failed [\(key)]: \(message)")
-        consecutiveFailures += 1
+        //
+        // Worded by which of the two it was, because the log is where this
+        // gets diagnosed and the old line said "review failed" for a fetch that
+        // never reached the network — an hour of reading it as a skill that
+        // kept producing the same error.
+        Log.debug((ranTheSkill ? "review failed [" : "review did not start [")
+                  + "\(key)]: \(message)")
+        if ranTheSkill { consecutiveFailures += 1 }
         update(key) { record in
             if record.runSeconds == nil {
                 record.runSeconds = record.startedAt.map { -$0.timeIntervalSinceNow }
             }
+            // Handed back, so two bad fetches cannot exhaust a pull request's
+            // budget without a word of it having been read.
+            if !ranTheSkill { record.attempts = max(0, record.attempts - 1) }
             record.status = .failed
             record.failure = message
             record.finishedAt = Date()

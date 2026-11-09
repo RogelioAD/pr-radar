@@ -176,4 +176,43 @@ extension AutoReviewParserTests {
         guard case .failure(let failure) = result else { return XCTFail("expected a failure") }
         XCTAssertTrue(failure.message.contains("said nothing"), failure.message)
     }
+
+    // MARK: - Whether a failure is a verdict on the review
+
+    /// The distinction the attempt budget and the three-strikes switch both
+    /// hang off. A review that ran and failed is a fact about the review; one
+    /// stopped before it started is a fact about the morning.
+    func testOnlyAFailureFromTheSkillCountsAsAReview() {
+        XCTAssertTrue(AutoReviewFailure.timedOut(seconds: 900).ranTheSkill)
+        XCTAssertTrue(AutoReviewFailure.exited(code: 1, stderr: "boom").ranTheSkill)
+        XCTAssertTrue(AutoReviewFailure.unparseable("not JSON").ranTheSkill)
+
+        XCTAssertFalse(AutoReviewFailure.notInstalled.ranTheSkill)
+        XCTAssertFalse(AutoReviewFailure.noClone("acme/widgets").ranTheSkill)
+        XCTAssertFalse(AutoReviewFailure.checkout("Could not resolve host").ranTheSkill)
+    }
+
+    /// A checkout says so, rather than claiming a review happened and failed.
+    /// The wording is the whole point: the row used to read "The review
+    /// failed" for a fetch that never reached the network.
+    func testACheckoutFailureSaysItWasTheCheckout() {
+        let message = AutoReviewFailure
+            .checkout("fatal: unable to access '…': Could not resolve host: github.com")
+            .message
+        XCTAssertTrue(message.hasPrefix("Could not prepare the checkout:"), message)
+        XCTAssertTrue(message.contains("Could not resolve host"), message)
+        XCTAssertFalse(message.contains("The review failed"), message)
+    }
+
+    /// Only a checkout is ever retried, and only when the network is what went
+    /// wrong. A skill that exited non-zero has had its turn.
+    func testOnlyATransientCheckoutIsWorthRetrying() {
+        XCTAssertTrue(AutoReviewFailure
+            .checkout("Could not resolve host: github.com").isWorthRetrying)
+        XCTAssertFalse(AutoReviewFailure
+            .checkout("fatal: couldn't find remote ref refs/pull/901/head").isWorthRetrying)
+        XCTAssertFalse(AutoReviewFailure
+            .exited(code: 1, stderr: "Could not resolve host").isWorthRetrying)
+        XCTAssertFalse(AutoReviewFailure.timedOut(seconds: 900).isWorthRetrying)
+    }
 }

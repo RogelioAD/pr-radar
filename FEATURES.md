@@ -1442,7 +1442,19 @@ Some details that had to be decided:
 - **One at a time.** A review is a whole Claude Code session, and three at once
   on a laptop is a fan event.
 - **Three failures in a row and it switches itself off.** An auto-poster that
-  is broken should stop, not work its way down the list.
+  is broken should stop, not work its way down the list. It says so where it
+  happened — the review room keeps the reason until you switch it back on,
+  because the rule fires while nobody is at the desk and what you come back to
+  is otherwise a switch in the off position with nothing to say who moved it.
+- **A run stopped before it started is not a failed review.** Fetching the PR
+  head reaches the network, and a name server is allowed a bad second: the
+  fetch is asked again twice, about seven seconds apart, while the fault reads
+  as the network's rather than the repository's. If it still will not go, the
+  row says *Could not prepare the checkout* and tries again on the hour — but
+  it does not spend one of the PR's two attempts, and it does not count toward
+  the three failures above. Neither of those is a verdict on a review, and
+  nothing was reviewed. One flaky minute of DNS used to exhaust a pull request
+  and switch the whole feature off.
 
 ### The allowlist
 

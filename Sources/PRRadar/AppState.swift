@@ -400,7 +400,29 @@ final class AppState: ObservableObject {
     /// Written through like every other switch, but see `toggleAutoReview()`
     /// for the one path that is allowed to refuse.
     @Published var autoReviewEnabled: Bool = Prefs.autoReview {
-        didSet { Prefs.autoReview = autoReviewEnabled }
+        didSet {
+            Prefs.autoReview = autoReviewEnabled
+            // Switching it back on is the answer to the notice, so the notice
+            // goes with it.
+            if autoReviewEnabled { autoReviewStopped = nil }
+        }
+    }
+
+    /// Why automatic review switched itself off, or nil because it did not.
+    ///
+    /// Persisted, which is the whole reason it is a property of its own rather
+    /// than a sentence in `lastError`. The three-strikes rule in
+    /// `AutoReviewCoordinator` fires while nobody is at the desk — that is the
+    /// situation it exists for — and `lastError` is overwritten by the next
+    /// refresh a minute later. What was left was a switch in the off position
+    /// and nothing at all to say who had moved it.
+    ///
+    /// Read back only when the switch really is off. The two are written
+    /// together and cannot disagree, but a notice explaining why a running
+    /// feature had stopped would be the one way this could make things worse.
+    @Published var autoReviewStopped: String? =
+        Prefs.autoReview ? nil : Prefs.autoReviewStopped {
+        didSet { Prefs.autoReviewStopped = autoReviewStopped }
     }
 
     /// How much of a finished review goes out without being looked at.
@@ -1170,6 +1192,10 @@ final class AppState: ObservableObject {
     /// would be a number about nothing on screen.
     var reviewSummary: String {
         guard autoReviewEnabled else {
+            // Told apart from an Off nobody is surprised by, because the room
+            // behind this line has the reason and this is what sends anyone
+            // there to read it.
+            if autoReviewStopped != nil { return "Off — it stopped itself" }
             return canAutoReview ? "Off" : "Off — nothing to run"
         }
         if let key = reviewInFlight,

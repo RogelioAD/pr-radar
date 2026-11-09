@@ -10,6 +10,11 @@ public enum AutoReviewFailure: Error, Equatable, Sendable {
     /// rather than a general failure, because it is the one of these the user
     /// can fix in ten seconds and the row should say so in those words.
     case noClone(String)
+    /// The checkout the review needed could not be prepared: a fetch that did
+    /// not reach the network, a worktree git would not make. Its own case
+    /// rather than an `exited` like any other, and the separation is
+    /// load-bearing — see `ranTheSkill`.
+    case checkout(String)
     case timedOut(seconds: Int)
     case exited(code: Int32, stderr: String)
     case unparseable(String)
@@ -22,6 +27,9 @@ public enum AutoReviewFailure: Error, Equatable, Sendable {
             return "Claude Code was not found"
         case .noClone(let repo):
             return "No local checkout of \(repo)"
+        case .checkout(let detail):
+            return "Could not prepare the checkout: "
+                + AutoReviewRecord.truncated(detail, limit: 120)
         case .timedOut(let seconds):
             return "The review timed out after \(seconds / 60)m"
         case .exited(let code, let stderr):
@@ -32,6 +40,38 @@ public enum AutoReviewFailure: Error, Equatable, Sendable {
         case .unparseable(let detail):
             return "Could not read the review's result: \(AutoReviewRecord.truncated(detail, limit: 120))"
         }
+    }
+
+    /// Whether the skill actually ran.
+    ///
+    /// Both of the rules that punish a failure are verdicts on a *review*: the
+    /// attempt budget, which stops this grinding at a pull request nothing can
+    /// be said about, and the three-strikes switch, which turns the feature off
+    /// rather than letting a broken auto-poster work its way down the list.
+    /// A run that never got as far as the skill has earned neither.
+    ///
+    /// Treating the two alike is how one bad minute of DNS exhausted a pull
+    /// request's attempts and switched automatic review off altogether, with
+    /// nothing reviewed and the switch left sitting in the off position. The
+    /// same reasoning `AutoReviewLog.reconcileInterrupted` applies to a review
+    /// the app was killed in the middle of: being prevented is not a verdict.
+    ///
+    /// `notInstalled` and `noClone` are on the false side for the same reason
+    /// even though neither will clear by itself. They are conditions the user
+    /// goes and fixes, and both are already named on the row; spending the
+    /// budget on them only means that when the fix lands there is nothing left
+    /// to spend.
+    public var ranTheSkill: Bool {
+        switch self {
+        case .notInstalled, .noClone, .checkout: return false
+        case .timedOut, .exited, .unparseable: return true
+        }
+    }
+
+    /// Whether asking again in a moment is worth anything.
+    public var isWorthRetrying: Bool {
+        guard case .checkout(let detail) = self else { return false }
+        return GitFault.isTransient(detail)
     }
 }
 
