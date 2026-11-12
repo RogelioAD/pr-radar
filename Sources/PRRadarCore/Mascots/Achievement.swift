@@ -72,6 +72,15 @@ extension Achievement {
     public static let gapCells: CGFloat = 5
     public static let lineGapCells: CGFloat = 2
 
+    /// The dismiss mark's box, for a banner that waits to be sent away.
+    ///
+    /// Counted into the width like everything else here, because the window is
+    /// exactly the drawing: a button the arithmetic did not know about would be
+    /// drawn past the edge of the panel it is in and clipped to nothing — a
+    /// banner that cannot be dismissed, which is the one failure this whole
+    /// addition cannot survive.
+    public static let closeCells: CGFloat = 7
+
     /// Never below 2: the font is 5x7, and at 1x a capital is seven points
     /// tall — a texture rather than a word.
     public static let minimumScale: CGFloat = 2
@@ -121,6 +130,7 @@ extension Achievement {
     /// is how a window ends up narrower than the words inside it.
     public static func size(emblem: Sprite, title: String,
                             headline: String = Achievement.headline,
+                            dismissible: Bool = false,
                             scale: CGFloat) -> CGSize {
         let padding = paddingCells * scale
         let gap = gapCells * scale
@@ -134,8 +144,9 @@ extension Achievement {
         // The halo is drawn, so it is counted — the window is exactly the
         // drawing, and its corners are where the drawing's are.
         let halo = haloCells * scale * 2
+        let close = dismissible ? gap + closeCells * scale : 0
         return CGSize(
-            width: halo + padding * 2 + emblemWidth + gap + textWidth,
+            width: halo + padding * 2 + emblemWidth + gap + textWidth + close,
             height: halo + padding * 2 + max(CGFloat(emblem.height) * art,
                                              textHeight(scale: scale))
         )
@@ -151,13 +162,14 @@ extension Achievement {
     public static func scale(forScreenWidth width: CGFloat,
                              emblem: Sprite,
                              title: String,
-                             headline: String = Achievement.headline) -> CGFloat {
+                             headline: String = Achievement.headline,
+                             dismissible: Bool = false) -> CGFloat {
         let ceiling = width * widthFraction
         var chosen = minimumScale
         var candidate = minimumScale
         while candidate <= maximumScale {
             if size(emblem: emblem, title: title, headline: headline,
-                    scale: candidate).width <= ceiling {
+                    dismissible: dismissible, scale: candidate).width <= ceiling {
                 chosen = candidate
             }
             candidate += 1
@@ -166,7 +178,35 @@ extension Achievement {
     }
 }
 
+extension Achievement {
+    /// The mark on the dismiss button.
+    ///
+    /// A drawn cross rather than the font's letter `X`, which is a letter: it
+    /// has a flat top and bottom and reads as a word of one character sitting
+    /// where a word does not belong. Seven cells square, odd-numbered so the
+    /// two strokes meet on a single centre pixel instead of straddling a seam.
+    ///
+    /// `shade` rather than `light` or `accent`. The green says what happened
+    /// and the white says which pull request; a way to make the banner go away
+    /// is furniture, and furniture that competes with either of them would be
+    /// the quietest thing on the card shouting loudest.
+    public static let closeMark = Sprite([
+        "d.....d",
+        ".d...d.",
+        "..d.d..",
+        "...d...",
+        "..d.d..",
+        ".d...d.",
+        "d.....d",
+    ])
+}
+
 extension SpriteLayout {
+    /// The dismiss mark. Its slot is fixed, so the accent is never consulted.
+    public static func bannerClose() -> SpriteLayout {
+        single(Achievement.closeMark, accent: .neutral)
+    }
+
     /// The star, tinted by the one health that means "clear". Still what a
     /// burst of unlocks shows, because no one trophy in a burst is the one
     /// the banner is about.

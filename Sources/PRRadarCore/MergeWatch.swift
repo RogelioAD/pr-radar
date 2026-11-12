@@ -22,20 +22,31 @@ public struct MergedPR: Identifiable, Equatable, Sendable {
     /// wants to hear, not "bob clicked merge".
     public let authorLogin: String
     public let mergedAt: Date
+    /// Where to go to read it.
+    ///
+    /// Optional, so a node the server sent without one — or with one `URL`
+    /// will not take — costs that banner its link rather than costing the
+    /// banner. Which is also the state the summary line is in: "7 PULL
+    /// REQUESTS" is not one pull request and has nowhere to go.
+    public let url: URL?
 
     public var id: String { "\(repo)#\(number)" }
     public var repoShortName: String { RepoScope.shortName(repo) }
 
-    /// No title and no URL, deliberately. The banner says a repository and a
-    /// number, it ignores the mouse like every other banner this app drops,
-    /// and a pull request's description is a few kilobytes that would be
-    /// fetched for every watched repository every sixty seconds in order to be
-    /// thrown away. Nothing reads them, so nothing asks for them.
-    public init(repo: String, number: Int, authorLogin: String, mergedAt: Date) {
+    /// No title. The banner says a repository and a number, and a pull
+    /// request's description is a few kilobytes fetched for every watched
+    /// repository every sixty seconds in order to be thrown away.
+    ///
+    /// The URL is here because the banner is now a way *into* the pull request
+    /// rather than only an announcement that it exists. It was left out when
+    /// the banner ignored the mouse, on the grounds that nothing read it.
+    public init(repo: String, number: Int, authorLogin: String,
+                mergedAt: Date, url: URL? = nil) {
         self.repo = repo
         self.number = number
         self.authorLogin = authorLogin
         self.mergedAt = mergedAt
+        self.url = url
     }
 }
 
@@ -81,7 +92,8 @@ public enum MergeWatch {
                         // account has none. The banner says "MERGED" on its own
                         // there rather than naming a ghost.
                         authorLogin: node.author?.login ?? "",
-                        mergedAt: mergedAt)
+                        mergedAt: mergedAt,
+                        url: node.url.flatMap(URL.init(string:)))
     }
 
     /// Past this many in one round the queue is abandoned for a single line.

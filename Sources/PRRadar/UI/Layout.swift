@@ -207,9 +207,11 @@ enum Layout {
     static func achievementScale(on screen: NSScreen?,
                                  emblem: Sprite,
                                  title: String,
-                                 headline: String = Achievement.headline) -> CGFloat {
+                                 headline: String = Achievement.headline,
+                                 dismissible: Bool = false) -> CGFloat {
         Achievement.scale(forScreenWidth: screen?.visibleFrame.width ?? 1440,
-                          emblem: emblem, title: title, headline: headline)
+                          emblem: emblem, title: title, headline: headline,
+                          dismissible: dismissible)
     }
 
     // MARK: - Trophies

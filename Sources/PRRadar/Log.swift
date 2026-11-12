@@ -239,7 +239,10 @@ enum Log {
             MergedPR(repo: Prefs.updateRepo,
                      number: 400 + index,
                      authorLogin: "octocat",
-                     mergedAt: Date())
+                     mergedAt: Date(),
+                     // A real page, so pressing the fake proves the press
+                     // rather than opening a 404 that proves nothing.
+                     url: URL(string: "https://github.com/\(Prefs.updateRepo)/pulls"))
         }
     }
 

@@ -323,7 +323,7 @@ Scripts/contribute.sh  offers a fork's changes back to the original as a
                        draft PR — see CONTRIBUTING.md
 .githooks/             the post-commit hook that offers it, off until
                        `make hooks`
-Tests/                 1,199 tests
+Tests/                 1,204 tests
 Scripts/bundle.sh      assembles and ad-hoc signs PRRadar.app
 ```
 

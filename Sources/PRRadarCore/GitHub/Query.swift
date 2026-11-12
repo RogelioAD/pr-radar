@@ -248,6 +248,10 @@ public enum Query {
                              orderBy: {field: UPDATED_AT, direction: DESC}) {
                   nodes {
                     number
+                    # The way in. The banner is a link as well as an
+                    # announcement, so this is the one field here that is
+                    # fetched to be acted on rather than read.
+                    url
                     mergedAt
                     author { login }
                     repository { nameWithOwner }

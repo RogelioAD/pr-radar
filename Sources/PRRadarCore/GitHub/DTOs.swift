@@ -50,6 +50,7 @@ public struct MergedConn: Decodable {
 
 public struct MergedNode: Decodable {
     public let number: Int?
+    public let url: String?
     /// Null on nothing the query asks for — `states: MERGED` guarantees it —
     /// but optional anyway, because a node missing the one field that says
     /// *when* is a node this feature has no use for rather than a reason to

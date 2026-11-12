@@ -112,6 +112,84 @@ final class MergeNoticeTests: XCTestCase {
             CGFloat(BannerFont.width(of: headline)) * Achievement.headlineScale(2))
     }
 
+    // MARK: - The dismiss mark
+
+    /// The window is exactly the drawing, so a button the arithmetic did not
+    /// know about would be drawn past the panel's edge and clipped to nothing
+    /// — a banner that cannot be dismissed, which is the one failure this
+    /// cannot survive.
+    func testABannerWithAMarkIsWiderByExactlyTheMarkAndItsGap() {
+        let title = MergeNotice.title(repo: "acme/web", number: 412)
+        let headline = MergeNotice.headline(author: "alice")
+        func width(dismissible: Bool) -> CGFloat {
+            Achievement.size(emblem: MergeNotice.emblem, title: title,
+                             headline: headline, dismissible: dismissible,
+                             scale: 3).width
+        }
+        XCTAssertEqual(width(dismissible: true) - width(dismissible: false),
+                       (Achievement.gapCells + Achievement.closeCells) * 3,
+                       accuracy: 0.001)
+    }
+
+    /// Only the width. The mark is shorter than the two lines beside it, so a
+    /// banner must not grow a taller window to hold it.
+    func testTheMarkDoesNotChangeTheHeight() {
+        let plain = Achievement.size(emblem: MergeNotice.emblem, title: "WEB #1",
+                                     scale: 3).height
+        let dismissible = Achievement.size(emblem: MergeNotice.emblem, title: "WEB #1",
+                                           dismissible: true, scale: 3).height
+        XCTAssertEqual(plain, dismissible)
+        XCTAssertLessThanOrEqual(Achievement.closeCells * 3,
+                                 Achievement.textHeight(scale: 3),
+                                 "the mark has to fit beside the type, not above it")
+    }
+
+    /// The extra width is spent out of the same share of the screen, so a
+    /// dismissible banner can only ever be the same size or a step smaller —
+    /// never one that overflows.
+    func testTheMarkIsPaidForOutOfTheScreenShareRatherThanAddedToIt() {
+        for width in stride(from: CGFloat(800), through: 6000, by: 40) {
+            let title = MergeNotice.title(repo: "acme/web", number: 412)
+            let headline = MergeNotice.headline(author: "alice")
+            let plain = Achievement.scale(forScreenWidth: width,
+                                          emblem: MergeNotice.emblem,
+                                          title: title, headline: headline)
+            let dismissible = Achievement.scale(forScreenWidth: width,
+                                                emblem: MergeNotice.emblem,
+                                                title: title, headline: headline,
+                                                dismissible: true)
+            XCTAssertLessThanOrEqual(dismissible, plain, "\(width)")
+        }
+    }
+
+    /// A drawn cross, not the font's letter X — which has a flat top and
+    /// bottom and reads as a word of one character. Odd-numbered so the two
+    /// strokes meet on a single centre pixel instead of straddling a seam.
+    func testTheMarkIsASquareCrossThatMeetsInTheMiddle() {
+        let mark = Achievement.closeMark
+        XCTAssertEqual(mark.width, Int(Achievement.closeCells))
+        XCTAssertEqual(mark.width, mark.height)
+        XCTAssertEqual(mark.width % 2, 1, "an even cross has no centre")
+
+        let middle = mark.width / 2
+        XCTAssertNotNil(mark[middle, middle], "the strokes do not meet")
+        for step in 0..<mark.width {
+            XCTAssertNotNil(mark[step, step], "the falling stroke breaks at \(step)")
+            XCTAssertNotNil(mark[mark.width - 1 - step, step],
+                            "the rising stroke breaks at \(step)")
+        }
+    }
+
+    /// Quiet. The green says what happened and the white says which pull
+    /// request; a way to make the banner go away is furniture, and furniture
+    /// drawn in `accent` would be the one thing on the card taking a live
+    /// tint from a health it has nothing to do with.
+    func testTheMarkIsDrawnInAFixedQuietSlot() {
+        let mark = Achievement.closeMark
+        XCTAssertTrue(mark.litPoints.allSatisfy { mark[$0.x, $0.y] == .shade })
+        XCTAssertFalse(mark.litPoints.contains { mark[$0.x, $0.y] == .accent })
+    }
+
     // MARK: - Decoding
 
     func payload(_ json: String) throws -> [String: MergesResult] {
@@ -124,6 +202,7 @@ final class MergeNoticeTests: XCTestCase {
         let merges = MergeWatch.build(from: try payload("""
         {"m0": {"pullRequests": {"nodes": [
           {"number": 412,
+           "url": "https://github.com/acme/web/pull/412",
            "mergedAt": "2026-11-12T10:00:00Z",
            "author": {"login": "alice"},
            "repository": {"nameWithOwner": "acme/web"}}
@@ -132,6 +211,9 @@ final class MergeNoticeTests: XCTestCase {
         XCTAssertEqual(merges.count, 1)
         XCTAssertEqual(merges[0].id, "acme/web#412")
         XCTAssertEqual(merges[0].authorLogin, "alice")
+        XCTAssertEqual(merges[0].url?.absoluteString,
+                       "https://github.com/acme/web/pull/412",
+                       "the banner is a way into the pull request, not only a notice")
         XCTAssertEqual(merges[0].mergedAt, Date(timeIntervalSince1970: 1_794_477_600))
     }
 
@@ -164,8 +246,9 @@ final class MergeNoticeTests: XCTestCase {
         XCTAssertEqual(merges.map(\.number), [2])
     }
 
-    /// Likewise a node missing the one field that says *when*, or carrying a
-    /// URL `URL` will not take: it drops itself and nothing else.
+    /// A node missing the one field that says *when* drops itself and nothing
+    /// else — and a URL the server never sent costs that banner its link
+    /// rather than costing the banner.
     func testAnUnusableNodeDropsItselfAndNothingElse() throws {
         let merges = MergeWatch.build(from: try payload("""
         {"m0": {"pullRequests": {"nodes": [
@@ -177,6 +260,7 @@ final class MergeNoticeTests: XCTestCase {
         """))
         XCTAssertEqual(merges.map(\.number), [2], "no mergedAt, no merge")
         XCTAssertEqual(merges.first?.authorLogin, "", "a deleted account is not a failure")
+        XCTAssertNil(merges.first?.url, "and a missing link is not one either")
     }
 
     // MARK: - The query
@@ -189,11 +273,10 @@ final class MergeNoticeTests: XCTestCase {
         // Every field `MergeWatch.build` refuses to work without, and
         // nothing else: a description nothing reads is a few kilobytes a
         // repository every sixty seconds.
-        for field in ["number", "mergedAt", "nameWithOwner", "login"] {
+        for field in ["number", "mergedAt", "nameWithOwner", "login", "url"] {
             XCTAssertTrue(query.contains(field), "the query stopped asking for \(field)")
         }
         XCTAssertFalse(query.contains("title"), "nothing shows the title")
-        XCTAssertFalse(query.contains("url"), "the banner ignores the mouse")
     }
 
     /// Nothing to ask about is no request, not a request that asks nothing.

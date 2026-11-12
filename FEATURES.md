@@ -1289,7 +1289,9 @@ The rest is all about not wearing out:
   than twenty-five things you just did, and it is worth one line.
 - **It takes no clicks, so it never needs one.** The window ignores the mouse
   entirely — a banner that swallowed a click on whatever it flew over would be
-  worse than no banner — and it leaves on its own.
+  worse than no banner — and it leaves on its own. This is the one thing the
+  merge banner below does differently, and the reason is that it has somewhere
+  to send you.
 - **Its own window**, not part of the drawer or the badge. The drawer is
   usually shut at that moment, and for the original of these the badge was
   about to hide itself because nothing was waiting, which is the wrong place to
@@ -1303,8 +1305,29 @@ banner off, for anyone who would rather it did not. The shelf still fills.
 ## Merges
 
 **When something lands in a repository you work in, the same banner drops in
-and says so.** `ALICE MERGED` over `WEB #412`, a merge glyph beside it, three
-seconds, gone.
+and says so.** `ALICE MERGED` over `WEB #412`, a merge glyph beside it.
+
+**It stays until you send it away**, where a trophy holds for three seconds and
+lifts out by itself. The difference is what the two are for: a trophy is about
+something you did and is gone by the time you look up, and this is somebody
+else's work landing in something you are in the middle of. Three seconds is the
+length of a glance away.
+
+**Pressing it opens the pull request**, anywhere on the card. **Pressing the ×
+sends it away.** Both leave — once you are reading the diff, a card still
+sitting over the browser you just asked it to open is the app arguing with
+itself.
+
+The two-button arrangement follows from the one thing a banner that waits
+cannot avoid: it has to accept clicks, so it is going to eat one on the strip
+of screen it is parked on. Since it is eating it either way, the card does the
+thing you most likely wanted. "Go and read it" and "I have seen it" are
+different enough answers that one of them has to be aimed at, so the × is the
+one you aim at and the rest of the card is the one you cannot miss.
+
+Only the mark gets the pointing-hand cursor's promise where there is somewhere
+to go: the `7 PULL REQUESTS` summary line is not one pull request and has
+nowhere to send you, so pressing it anywhere just dismisses it.
 
 Not only your own pull requests. Yours were already covered — the lifetime
 merge count the trophies fetch goes up, and the mascot cheers — and that is a
@@ -1346,7 +1369,11 @@ in its first minute:
   window where this is actually telling you something.
 - **Past three at once it gives up and says `4 PULL REQUESTS`.** Lower than the
   trophy banner's five, because a trophy burst is a backfill that happens once
-  per machine and a release train puts six merges in at once.
+  per machine and a release train puts six merges in at once. It matters more
+  here than it ever did for trophies, because every one of these costs a press.
+- **A queue that builds up while you are away collapses too.** Four merges at
+  noon that nobody was at the desk for and three more at ten past is seven
+  presses; `7 PULL REQUESTS` is one, and the more useful sentence.
 - **Nothing is ever announced twice**, including across a relaunch.
 
 That last one is a store of ids rather than a *last seen* timestamp, and the
