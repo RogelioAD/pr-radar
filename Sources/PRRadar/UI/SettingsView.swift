@@ -180,6 +180,17 @@ struct SettingsView: View {
         toggle("Celebrate a cleared queue",
                help: "Show the achievement banner when the last review is done",
                isOn: $state.celebrateCleared)
+
+        Divider()
+
+        // Named for the repositories rather than for "your team": the set it
+        // watches is the one the two tabs already turned up, and somebody
+        // reviewing for a repo they do not work in would otherwise expect this
+        // to be quiet about it.
+        toggle("Tell me when something merges",
+               help: "Show a banner when any pull request lands in a repository "
+                   + "from your lists — not only your own.",
+               isOn: $state.announceMerges)
     }
 
     // MARK: - Accounts

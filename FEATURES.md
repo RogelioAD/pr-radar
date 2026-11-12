@@ -1300,6 +1300,90 @@ banner off, for anyone who would rather it did not. The shelf still fills.
 
 ---
 
+## Merges
+
+**When something lands in a repository you work in, the same banner drops in
+and says so.** `ALICE MERGED` over `WEB #412`, a merge glyph beside it, three
+seconds, gone.
+
+Not only your own pull requests. Yours were already covered — the lifetime
+merge count the trophies fetch goes up, and the mascot cheers — and that is a
+fact about you. This is the other half: a colleague's work going into something
+you are in the middle of, which nothing in the app said anything about before.
+It is the thing you would otherwise learn by pulling and finding the branch
+moved.
+
+### What counts as a repository you work in
+
+**The ones already in your two tabs.** Every repo with a review waiting on you
+or a pull request of yours open, which is the set the repo filter already
+offers.
+
+Deliberately not *everything your token can read*. For anyone in a large
+organisation that is thousands of repositories, and being told a stranger
+merged something in one you have never opened is noise with a progress bar in
+front of it. What you are working in is a question the app can already answer.
+
+**Capped at twenty**, in name order. This is one aliased query per repository on
+the sixty-second poll, and somebody with reviews open across forty of them
+would be spending the whole minute on it. Name order rather than any measure of
+busyness, because the cap has to pick the same twenty every round — a set that
+reshuffled would announce a different slice of the same hour each time.
+
+### What counts as news
+
+Four rules, and three of them exist to stop this being the feature you turn off
+in its first minute:
+
+- **The first round is silent.** A fresh install sees the last few merges in
+  every repository it watches, and every one of them is history you read about
+  in Slack on Tuesday. They go into the store quietly; everything after that is
+  news. The same bargain the comment notifications already strike.
+- **Nothing older than an hour.** A Mac closed on Friday and opened on Monday
+  has a weekend of merges it has never announced. Announcing them is not
+  telling you what happened while you were out — it is ninety banners about
+  things that are already done. An hour is *while I was at lunch*, which is the
+  window where this is actually telling you something.
+- **Past three at once it gives up and says `4 PULL REQUESTS`.** Lower than the
+  trophy banner's five, because a trophy burst is a backfill that happens once
+  per machine and a release train puts six merges in at once.
+- **Nothing is ever announced twice**, including across a relaunch.
+
+That last one is a store of ids rather than a *last seen* timestamp, and the
+difference matters. A timestamp cannot tell a repository that merged nothing
+this round from one the app could not read — an account that failed, a network
+that dropped — and resolving that doubt either way is wrong. Forwards it goes
+quiet about real merges; backwards it announces somebody's hour twice. The
+store keeps a repository nobody looked at and prunes only what it actually saw,
+so a failed round is followed by a quiet one rather than a burst.
+
+It prunes itself, too: an id that has fallen out of its repository's window can
+never come back, so forgetting it costs nothing. There is no fixed size to
+forget the wrong half of.
+
+### The cost, and what it is allowed to break
+
+One extra query per account per poll, asking each watched repository for its
+five most recently updated merged pull requests. Five, not thirty: the window
+only has to be wider than a minute's worth of merges, and a repository landing
+five in sixty seconds is a release, which is what the summary line is for.
+
+Aliased repositories rather than one `is:merged repo:a repo:b …` search, which
+is the obvious shape and the wrong one — a search is a single string with a
+length limit, so how many repositories this could watch would be decided by how
+long their names happened to be.
+
+It is allowed to fail on its own, like the merged count and the compare phase.
+The worst a failure costs is a banner nobody was promised, and failing a
+refresh that is carrying both tabs over a decoration would be the tail wagging
+the dog. When the switch is off no request is sent at all.
+
+**Settings → General → Tell me when something merges** turns it off. A switch
+rather than a `defaults write`, unlike the trophy banner beside it: a cleared
+queue happens to you a few times a month, and merges happen to a team all day.
+
+---
+
 ## Automatic review
 
 Off until asked for. Turned on with the wand beside the trophy, it runs the

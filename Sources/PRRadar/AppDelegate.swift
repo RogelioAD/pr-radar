@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// menu bar with it.
     private var statusItem: NSStatusItem?
     private var panel: PanelController!
-    private let banner = AchievementBanner()
+    private let banner = DropBanner()
     /// The review count at the last refresh, so a queue reaching zero can be
     /// told from a queue that was already there. nil until the first refresh
     /// lands: launching into an empty queue is not an achievement.
@@ -465,6 +465,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.lensStore.prune(keeping: state.lensKeepable)
         Log.debug("my PRs: \(mine.count), ready to merge: \(state.myPRsReadyToMerge)")
 
+        // After both lists, like the trophies below and for a plainer
+        // reason: the repositories this watches are the ones the lists name.
+        announceMerges(fetches.flatMap(\.merges))
+
         // Once both tabs have landed, never between them: a third of the rules
         // read the review queue, a third read your own pull requests, and three
         // read both.
@@ -503,6 +507,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// Lifetime merged count, which the trophy rules read. nil when this
         /// account did not answer — distinct from zero, which is a real count.
         var merged: Int?
+        /// The last few pull requests to land in the repositories this
+        /// account can see. Empty also means "did not ask", which is the right
+        /// reading: `MergeWatch.remembered` keeps a repository nobody looked at
+        /// rather than forgetting it and announcing its hour twice.
+        var merges: [MergedPR] = []
         /// Node ids of pinned pull requests this account found closed or
         /// merged, so their rows can stand down. Empty also means "did not
         /// ask", which is deliberately the same as "nothing to drop" — a row
@@ -590,6 +599,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Log.debug("my PRs fetch failed for \(account.id): \(error)")
             }
             result.merged = await fetchMergedCount(client: client)
+            // Last, because it is the only phase that needs the other two: the
+            // repositories worth watching are the ones this account's own two
+            // lists turned up, and asking before they land would watch
+            // whatever the previous round happened to leave behind.
+            result.merges = await fetchRecentMerges(client: client, from: result)
             return result
         } catch {
             Log.debug("fetch failed for \(account.id): \(error)")
@@ -687,6 +701,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.debug("merged count failed: \(error)")
             return nil
         }
+    }
+
+    /// The last few pull requests to land in the repositories one account
+    /// can see.
+    ///
+    /// Swallowed on failure, like the merged count above and the My PRs fetch
+    /// before it. The worst this costs is a banner nobody was promised, and
+    /// failing a refresh that is carrying two tabs over a decoration would be
+    /// the tail wagging the dog.
+    ///
+    /// Skipped entirely when the switch is off, so somebody who turned this
+    /// off is not quietly paying for it on every poll.
+    private func fetchRecentMerges(client: GitHubClient,
+                                   from result: AccountFetch) async -> [MergedPR] {
+        guard state.announceMerges else { return [] }
+        let repos = MergeWatch.watchable(reviews: result.items.map(\.repo),
+                                         mine: (result.myPRs ?? []).map(\.repo))
+        guard !repos.isEmpty else { return [] }
+        do {
+            return try await client.fetchRecentMerges(repos: repos)
+        } catch {
+            Log.debug("recent merges failed: \(error)")
+            return []
+        }
+    }
+
+    /// Puts what has just landed on screen, and remembers everything it saw.
+    ///
+    /// The store is written whether or not anything was announced — that is
+    /// what makes the first round silent and the second one honest, and it is
+    /// the same bargain `Notifier.notifyNewPings` strikes one function along.
+    private func announceMerges(_ seen: [MergedPR]) {
+        guard state.announceMerges else { return }
+        let landed = MergeWatch.landed(seen, announced: Prefs.announcedMerges)
+        // Written from what was *seen* rather than from what was announced: a
+        // merge the freshness floor suppressed must not arrive in a burst
+        // later, and the first round writes the whole window and says nothing.
+        Prefs.announcedMerges = MergeWatch.remembered(Prefs.announcedMerges, seeing: seen)
+
+        // Debug only, and it stands in for the round rather than joining it —
+        // on the first refresh, where the store is being seeded and nothing
+        // real can be announced anyway. See `Log.fakeMerge`.
+        let showing = (lastReviewCount == nil ? Log.fakeMerge : nil) ?? landed
+        guard !showing.isEmpty else { return }
+        Log.debug("merged: \(showing.map(\.id).joined(separator: ", "))")
+        banner.show(merges: showing, on: panel.currentScreen)
+        // The same nod the mascot gives your own merges. Somebody else's work
+        // landing in a repository you are in is good news too, and the
+        // character reacting to it is what keeps the badge and the banner
+        // reading as one app rather than two.
+        state.cheer()
     }
 
     /// Repeats the discovered account up to `PRRADAR_FAKE_ACCOUNTS`.

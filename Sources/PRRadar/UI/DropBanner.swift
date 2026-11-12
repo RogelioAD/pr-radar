@@ -2,19 +2,27 @@ import AppKit
 import SwiftUI
 import PRRadarCore
 
-/// The banner that drops in from the top of the screen when a trophy is
-/// earned.
+/// The banner that drops in from the top of the screen when something worth a
+/// nod happens — a trophy earned, or a pull request landing in one of the
+/// repositories you work in.
 ///
 /// Its own window rather than anything inside the drawer: the drawer is
 /// usually shut at the moment this fires, and the badge — which for the
 /// original of these was about to hide itself, because nothing was waiting —
 /// is the wrong place to celebrate having nothing.
+///
+/// One class for both kinds, and it has to be one: two would each own a panel,
+/// and a trophy and a merge arriving in the same round would put two cards in
+/// the same place at the same time. Sharing the runner is what makes a round's
+/// worth of news a queue instead of a pile.
 @MainActor
-final class AchievementBanner {
+final class DropBanner {
 
-    /// What one banner is showing.
+    /// What one banner is showing: a drawing, a quiet standing line, and the
+    /// loud one that carries the news.
     private struct Card {
         let emblem: SpriteLayout
+        let headline: String
         let title: String
     }
 
@@ -53,11 +61,37 @@ final class AchievementBanner {
         let cards: [Card]
         if trophies.count > Self.maximumInARow {
             cards = [Card(emblem: .achievementEmblem(),
+                          headline: Achievement.headline,
                           title: Achievement.manyTitle(trophies.count))]
         } else {
             cards = trophies.map { id in
                 let trophy = Trophy.named(id)
-                return Card(emblem: .trophy(trophy.smallArt), title: trophy.name)
+                return Card(emblem: .trophy(trophy.smallArt),
+                            headline: Achievement.headline,
+                            title: trophy.name)
+            }
+        }
+        play(cards, on: screen)
+    }
+
+    /// Shows one banner per merge, in turn.
+    ///
+    /// Its own run limit, lower than the trophies'. A trophy burst is a
+    /// backfill that happens once per machine; merges are a team's work
+    /// landing, and a release train puts six in at once — see
+    /// `MergeWatch.maximumInARow`.
+    func show(merges: [MergedPR], on screen: NSScreen?) {
+        guard !merges.isEmpty else { return }
+        let cards: [Card]
+        if merges.count > MergeWatch.maximumInARow {
+            cards = [Card(emblem: .mergeEmblem(),
+                          headline: MergeNotice.manyHeadline,
+                          title: MergeNotice.manyTitle(merges.count))]
+        } else {
+            cards = merges.map { merge in
+                Card(emblem: .mergeEmblem(),
+                     headline: MergeNotice.headline(author: merge.authorLogin),
+                     title: MergeNotice.title(merge))
             }
         }
         play(cards, on: screen)
@@ -86,8 +120,10 @@ final class AchievementBanner {
 
     private func present(_ card: Card, on screen: NSScreen?) {
         let sprite = card.emblem.layers.first?.sprite ?? Achievement.emblem
-        let scale = Layout.achievementScale(on: screen, emblem: sprite, title: card.title)
-        let size = Achievement.size(emblem: sprite, title: card.title, scale: scale)
+        let scale = Layout.achievementScale(on: screen, emblem: sprite,
+                                            title: card.title, headline: card.headline)
+        let size = Achievement.size(emblem: sprite, title: card.title,
+                                    headline: card.headline, scale: scale)
         let visible = screen?.visibleFrame
             ?? NSScreen.main?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
@@ -110,9 +146,10 @@ final class AchievementBanner {
         // whatever it flew over would be worse than no banner.
         panel.ignoresMouseEvents = true
         panel.contentView = NSHostingView(
-            rootView: AchievementBannerView(emblem: card.emblem,
-                                            title: card.title,
-                                            scale: scale))
+            rootView: DropBannerView(emblem: card.emblem,
+                                     headline: card.headline,
+                                     title: card.title,
+                                     scale: scale))
         self.resting = visible
 
         let x = visible.midX - size.width / 2
@@ -155,14 +192,15 @@ final class AchievementBanner {
     }
 }
 
-/// The banner's face: an emblem, a standing header, and the thing you did.
+/// The banner's face: an emblem, a standing header, and the news.
 ///
 /// Every metric is a multiple of `scale`, which the screen chose — so this
 /// draws the same banner at whatever size it was given without a second set of
 /// numbers to keep in step. The emblem is the one exception, and it has a rule
 /// of its own: see `Achievement.emblemScale`.
-struct AchievementBannerView: View {
+struct DropBannerView: View {
     let emblem: SpriteLayout
+    let headline: String
     let title: String
     let scale: CGFloat
 
@@ -184,7 +222,7 @@ struct AchievementBannerView: View {
             SpriteCanvas(layout: emblem, scale: emblemScale)
 
             VStack(alignment: .leading, spacing: Achievement.lineGapCells * scale) {
-                SpriteCanvas(layout: .bannerText(Achievement.headline, slot: .accent),
+                SpriteCanvas(layout: .bannerText(headline, slot: .accent),
                              scale: Achievement.headlineScale(scale))
                 SpriteCanvas(layout: .bannerText(title, slot: .light), scale: scale)
             }

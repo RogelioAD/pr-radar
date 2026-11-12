@@ -206,9 +206,10 @@ enum Layout {
     /// `Achievement` so it can be tested without a screen.
     static func achievementScale(on screen: NSScreen?,
                                  emblem: Sprite,
-                                 title: String) -> CGFloat {
+                                 title: String,
+                                 headline: String = Achievement.headline) -> CGFloat {
         Achievement.scale(forScreenWidth: screen?.visibleFrame.width ?? 1440,
-                          emblem: emblem, title: title)
+                          emblem: emblem, title: title, headline: headline)
     }
 
     // MARK: - Trophies

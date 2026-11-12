@@ -366,6 +366,11 @@ final class AppState: ObservableObject {
     @Published var celebrateCleared: Bool = Prefs.celebrateCleared {
         didSet { Prefs.celebrateCleared = celebrateCleared }
     }
+    /// Whether a pull request landing in a repository you work in drops a
+    /// banner. Read by the refresh before it spends a request on asking.
+    @Published var announceMerges: Bool = Prefs.announceMerges {
+        didSet { Prefs.announceMerges = announceMerges }
+    }
 
     /// Whether the drawer stays put instead of folding away when you look
     /// elsewhere.

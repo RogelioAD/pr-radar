@@ -23,6 +23,8 @@ public enum Prefs {
         static let myPRFilter = "mine.filter"
         static let myPRStackedOnly = "mine.stackedOnly"
         static let celebrateCleared = "celebrate.cleared"
+        static let announceMerges = "merges.announce"
+        static let announcedMerges = "merges.announced"
         static let widgetVisible = "badge.visible"
         static let leadsByRepo = "leads.byRepo"
         static let repoFilter = "list.repoFilter"
@@ -280,6 +282,38 @@ public enum Prefs {
             return defaults.bool(forKey: Key.celebrateCleared)
         }
         set { defaults.set(newValue, forKey: Key.celebrateCleared) }
+    }
+
+    /// Whether something landing in a repository you work in drops a banner.
+    ///
+    /// On by default, and a switch rather than a silent default like
+    /// `celebrateCleared` beside it, because the two have very different
+    /// appetites behind them. A cleared queue happens to you a few times a
+    /// month; merges happen to a team all day, and somebody on a busy monorepo
+    /// is entitled to turn this off from the room rather than from a `defaults
+    /// write` they would have to be told about.
+    public static var announceMerges: Bool {
+        get {
+            guard defaults.object(forKey: Key.announceMerges) != nil else { return true }
+            return defaults.bool(forKey: Key.announceMerges)
+        }
+        set { defaults.set(newValue, forKey: Key.announceMerges) }
+    }
+
+    /// Merges already put on screen, by `MergedPR.id`.
+    ///
+    /// Its own store rather than a timestamp to compare against, for the reason
+    /// `MergeWatch.remembered` sets out: a high-water mark cannot tell a
+    /// repository that merged nothing from one the app could not read this
+    /// round, and resolving that doubt either way is wrong — forwards it goes
+    /// quiet, backwards it announces an hour of somebody else's work twice.
+    ///
+    /// Unbounded here on purpose. It is `MergeWatch` that keeps it small, by
+    /// dropping ids that have fallen out of their repository's window, and it
+    /// can do that honestly where a `prefix(400)` across a set cannot.
+    public static var announcedMerges: Set<String> {
+        get { Set(defaults.stringArray(forKey: Key.announcedMerges) ?? []) }
+        set { defaults.set(Array(newValue), forKey: Key.announcedMerges) }
     }
 
     /// The trophy shelf, as one JSON blob.

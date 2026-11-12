@@ -218,6 +218,31 @@ enum Log {
         }
     }
 
+    /// PRRADAR_FAKE_MERGE=1|many drops the merge banner on the first refresh.
+    ///
+    /// The same reason as the trophy fake, and a stronger one: a merge banner
+    /// is somebody *else* pressing a button in a repository you happen to be
+    /// in. There is no way to arrange one, and opening a pull request in order
+    /// to merge it in order to look at a banner is a worse plan than it sounds.
+    ///
+    /// `many` trips the summary form, which is otherwise only reachable during
+    /// a release — four or more landing inside the same minute.
+    ///
+    /// In memory only: the fake never reaches the announced store, so the real
+    /// pull requests it stands in for are still news when they land.
+    static var fakeMerge: [MergedPR]? {
+        guard let raw = ProcessInfo.processInfo.environment["PRRADAR_FAKE_MERGE"],
+              !raw.isEmpty
+        else { return nil }
+        let count = raw == "many" ? MergeWatch.maximumInARow + 1 : 1
+        return (0..<count).map { index in
+            MergedPR(repo: Prefs.updateRepo,
+                     number: 400 + index,
+                     authorLogin: "octocat",
+                     mergedAt: Date())
+        }
+    }
+
     /// PRRADAR_FAKE_TROPHIES=all|none forces the shelf to one of its two ends.
     ///
     /// Both ends are hard to reach honestly and both are worth looking at.

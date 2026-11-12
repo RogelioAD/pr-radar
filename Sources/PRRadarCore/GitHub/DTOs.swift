@@ -33,6 +33,32 @@ public struct MergedCountPayload: Decodable {
     public let merged: CountResult
 }
 
+// MARK: - Recently merged payload
+//
+// One alias per repository, so `data` decodes as a dictionary keyed by alias —
+// the same shape the compare phase uses, including the nullability: a
+// repository renamed, made private, or simply gone comes back as null rather
+// than as an error, and the round has to shrug that off.
+
+public struct MergesResult: Decodable {
+    public let pullRequests: MergedConn?
+}
+
+public struct MergedConn: Decodable {
+    public let nodes: [MergedNode]
+}
+
+public struct MergedNode: Decodable {
+    public let number: Int?
+    /// Null on nothing the query asks for — `states: MERGED` guarantees it —
+    /// but optional anyway, because a node missing the one field that says
+    /// *when* is a node this feature has no use for rather than a reason to
+    /// fail a refresh that is carrying two tabs.
+    public let mergedAt: Date?
+    public let author: ActorDTO?
+    public let repository: RepoDTO?
+}
+
 public struct PRNode: Decodable {
     /// The GraphQL node id, which every mutation needs as its subject.
     public let id: String?

@@ -242,6 +242,10 @@ PRRADAR_FAKE_BANNER=century,carousel
                           # the banner is sized around whatever it draws, so
                           # seeing *a* banner is not seeing the banner.
                           # `1` means inbox zero; `many` trips the summary
+PRRADAR_FAKE_MERGE=1      # drop the merge banner on the first refresh. The
+                          # real thing is somebody else pressing a button in a
+                          # repo you happen to be in, so there is no arranging
+                          # one. `many` trips the summary form
 PRRADAR_FAKE_TROPHIES=all # force the shelf to one of its two ends. `all` is
                           # the finished set; `none` is what a stranger sees,
                           # which otherwise exists for about four seconds on
@@ -319,7 +323,7 @@ Scripts/contribute.sh  offers a fork's changes back to the original as a
                        draft PR — see CONTRIBUTING.md
 .githooks/             the post-commit hook that offers it, off until
                        `make hooks`
-Tests/                 991 tests
+Tests/                 1,199 tests
 Scripts/bundle.sh      assembles and ad-hoc signs PRRadar.app
 ```
 

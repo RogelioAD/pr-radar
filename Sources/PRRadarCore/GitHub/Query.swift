@@ -214,6 +214,52 @@ public enum Query {
     }
     """
 
+    /// The last few pull requests to land in each repository, one alias per
+    /// repo. Aliases are `m0`, `m1`, … matching the input order.
+    ///
+    /// Aliased repositories rather than one `search(query: "is:merged repo:a
+    /// repo:b …")`, which is the obvious shape and the wrong one. Search takes
+    /// a single string with a length limit on it, so the number of repositories
+    /// this could watch would be decided by how long their names happened to be
+    /// — twelve short ones or four long ones, failing at whatever point the
+    /// query tipped over. One alias per repo has no such cliff, and it is the
+    /// shape `compares` already uses for the same reason.
+    ///
+    /// `UPDATED_AT` because the schema has no `MERGED_AT` to order by. It is a
+    /// proxy and an imperfect one — a comment on a year-old merged pull request
+    /// pushes it back to the front — which is exactly why the caller filters on
+    /// `mergedAt` rather than trusting the order. All this has to do is make
+    /// sure a merge from five minutes ago is *in* the page.
+    ///
+    /// Five a repository, not thirty. This runs on the sixty-second poll for
+    /// every repository in both tabs at once, and the window only has to be
+    /// wider than a minute's worth of merges — which for a repository that
+    /// lands five pull requests in sixty seconds is a release, and a release is
+    /// what the banner's summary form is for.
+    public static func recentMerges(_ repos: [String], first: Int = 5) -> String? {
+        var body = ""
+        for (index, repo) in repos.enumerated() {
+            let parts = repo.split(separator: "/")
+            guard parts.count == 2 else { continue }
+            body += """
+
+              m\(index): repository(owner: "\(parts[0])", name: "\(parts[1])") {
+                pullRequests(states: MERGED, first: \(first),
+                             orderBy: {field: UPDATED_AT, direction: DESC}) {
+                  nodes {
+                    number
+                    mergedAt
+                    author { login }
+                    repository { nameWithOwner }
+                  }
+                }
+              }
+            """
+        }
+        guard !body.isEmpty else { return nil }
+        return "query {\(body)\n}"
+    }
+
     /// One aliased `compare` per pull request, to learn how far behind each head
     /// branch is. Aliases are `c0`, `c1`, … matching the input order.
     public static func compares(

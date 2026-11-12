@@ -117,6 +117,17 @@ public struct GitHubClient {
         try await run(Query.mergedCount, as: MergedCountPayload.self).merged.issueCount
     }
 
+    /// The last few pull requests to land in each of `repos`.
+    ///
+    /// Returns nothing for an empty list rather than issuing a request that
+    /// asks nothing, the way the pinned lookup does. Allowed to fail
+    /// independently of the refresh that calls it, like the compare phase: the
+    /// worst a failure here costs is a banner nobody was promised.
+    public func fetchRecentMerges(repos: [String]) async throws -> [MergedPR] {
+        guard let query = Query.recentMerges(repos) else { return [] }
+        return MergeWatch.build(from: try await run(query, as: [String: MergesResult].self))
+    }
+
     /// The latest published release of PR Radar itself.
     public func fetchLatestRelease(repo: String) async throws -> ReleaseNode? {
         guard let query = Query.latestRelease(repo: repo) else { return nil }

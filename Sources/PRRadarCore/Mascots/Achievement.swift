@@ -1,7 +1,7 @@
 import Foundation
 
 /// The banner that drops in when a trophy is earned, and the arithmetic that
-/// sizes it.
+/// sizes *any* banner that drops in from the top of the screen.
 ///
 /// Green, because that is already this app's colour for *nothing is in your
 /// way* — the same `Health.good` the ready-to-merge count wears, resolved from
@@ -11,6 +11,12 @@ import Foundation
 /// takes the emblem and the title it is drawing, because thirty trophies have
 /// thirty names of different lengths and a banner sized for the longest would
 /// be a banner three times too wide for the shortest.
+///
+/// The geometry outgrew the name when merges started arriving on the same
+/// furniture — see `MergeNotice`, which brings its own two lines and borrows
+/// every number below. It is not renamed because the achievement is still what
+/// the defaults describe: a banner that says nothing about what it is sizing
+/// sizes the trophy, which is the one that has been here from the start.
 public enum Achievement {
 
     /// The standing line. Two lines, the way these have always been: a small
@@ -18,7 +24,7 @@ public enum Achievement {
     public static let headline = "ACHIEVEMENT UNLOCKED"
 
     /// What a burst of unlocks says instead of holding the screen one trophy
-    /// at a time. See `AchievementBanner`.
+    /// at a time. See `DropBanner`.
     public static func manyTitle(_ count: Int) -> String {
         "\(count) TROPHIES"
     }
@@ -107,7 +113,15 @@ extension Achievement {
     /// The banner's footprint at a given scale, derived from the art rather
     /// than measured — so the window is exactly the drawing and its corners are
     /// where the drawing's are.
-    public static func size(emblem: Sprite, title: String, scale: CGFloat) -> CGSize {
+    ///
+    /// `headline` is a parameter rather than the constant it reads as by
+    /// default because the standing line is no longer standing: a merge banner
+    /// puts somebody's login there, and a login is routinely longer than the
+    /// title below it. Measuring the fixed text while drawing a different one
+    /// is how a window ends up narrower than the words inside it.
+    public static func size(emblem: Sprite, title: String,
+                            headline: String = Achievement.headline,
+                            scale: CGFloat) -> CGSize {
         let padding = paddingCells * scale
         let gap = gapCells * scale
         let header = headlineScale(scale)
@@ -136,12 +150,14 @@ extension Achievement {
     /// screen gets the floor instead of an unreadable fraction of one.
     public static func scale(forScreenWidth width: CGFloat,
                              emblem: Sprite,
-                             title: String) -> CGFloat {
+                             title: String,
+                             headline: String = Achievement.headline) -> CGFloat {
         let ceiling = width * widthFraction
         var chosen = minimumScale
         var candidate = minimumScale
         while candidate <= maximumScale {
-            if size(emblem: emblem, title: title, scale: candidate).width <= ceiling {
+            if size(emblem: emblem, title: title, headline: headline,
+                    scale: candidate).width <= ceiling {
                 chosen = candidate
             }
             candidate += 1

@@ -61,6 +61,9 @@ public enum BannerFont {
         "!": ["..1..", "..1..", "..1..", "..1..", "..1..", ".....", "..1.."],
         "'": ["..1..", "..1..", ".1...", ".....", ".....", ".....", "....."],
         "-": [".....", ".....", ".....", "11111", ".....", ".....", "....."],
+        // A pull request number is the one thing on the merge banner you might
+        // go and type somewhere, and `412` without it reads as a quantity.
+        "#": [".1.1.", ".1.1.", "11111", ".1.1.", "11111", ".1.1.", ".1.1."],
     ]
 
     /// Cells a string occupies, tracking included. Zero for an empty string,
