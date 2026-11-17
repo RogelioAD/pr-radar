@@ -319,3 +319,74 @@ extension GitHubClient {
         return .object(fields)
     }
 }
+
+/// One inline thread a submitted review opened.
+public struct OpenedThread: Equatable, Sendable {
+    public let id: String
+    public let path: String
+    public let line: Int
+}
+
+/// Maps a review's comments to the threads they started.
+///
+/// Needed because `addPullRequestReview` returns comment ids, and
+/// `resolveReviewThread` takes thread ids. A comment has no link to its
+/// thread, so threads are matched by their first comment.
+struct ReviewThreadsPayload: Decodable {
+    struct Comment: Decodable {
+        let id: String
+        let path: String?
+        let line: Int?
+        let originalLine: Int?
+    }
+    struct Comments: Decodable { let nodes: [Comment] }
+    struct FirstComment: Decodable { let id: String }
+    struct FirstComments: Decodable { let nodes: [FirstComment] }
+    struct Thread: Decodable { let id: String; let comments: FirstComments }
+    struct Threads: Decodable { let nodes: [Thread] }
+    struct PullRequest: Decodable { let reviewThreads: Threads }
+    struct Review: Decodable { let comments: Comments?; let pullRequest: PullRequest? }
+    let node: Review?
+
+    var threads: [OpenedThread] {
+        guard let node else { return [] }
+        let byComment = Dictionary(
+            (node.comments?.nodes ?? []).map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first })
+        return (node.pullRequest?.reviewThreads.nodes ?? []).compactMap { thread in
+            guard let first = thread.comments.nodes.first,
+                  let comment = byComment[first.id],
+                  let path = comment.path,
+                  let line = comment.line ?? comment.originalLine
+            else { return nil }
+            return OpenedThread(id: thread.id, path: path, line: line)
+        }
+    }
+}
+
+extension Mutation {
+    /// A read, kept beside the mutation it follows.
+    public static let reviewThreads = """
+    query($id: ID!) {
+      node(id: $id) {
+        ... on PullRequestReview {
+          comments(first: 100) { nodes { id path line originalLine } }
+          pullRequest {
+            reviewThreads(last: 100) {
+              nodes { id comments(first: 1) { nodes { id } } }
+            }
+          }
+        }
+      }
+    }
+    """
+}
+
+extension GitHubClient {
+    /// The threads a review opened, by thread id.
+    public func openedThreads(reviewID: String) async throws -> [OpenedThread] {
+        try await run(Mutation.reviewThreads,
+                      variables: ["id": .string(reviewID)],
+                      as: ReviewThreadsPayload.self).threads
+    }
+}

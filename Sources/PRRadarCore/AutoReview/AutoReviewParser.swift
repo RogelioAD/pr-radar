@@ -218,9 +218,10 @@ extension AutoReviewFindings {
             }
         }
         self.findings = kept
+        self.resolved = (try? container.decodeIfPresent([String].self, forKey: .resolved)) ?? []
     }
 
-    enum CodingKeys: String, CodingKey { case verdict, findings }
+    enum CodingKeys: String, CodingKey { case verdict, findings, resolved }
 }
 
 /// Swallows one element of unknown shape, so a bad entry can be stepped over.

@@ -376,6 +376,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // review on somebody's pull request that could not be followed through
         // from here.
         let closed = reachable.reduce(into: Set<String>()) { $0.formUnion($1.closedPins) }
+        // Heads first, so a re-review it queues is in the log before the rows
+        // owed a decision are worked out from it.
+        var heads: [String: String] = [:]
+        for fetch in reachable { heads.merge(fetch.heads) { first, _ in first } }
+        for item in items { if let oid = item.headOid { heads[item.id] = oid } }
+        autoReviewer.noticeHeads(heads, closed: closed, fetched: items)
         let awaiting = state.autoReviewLog.awaitingDecision(fetched: items, closed: closed)
         if !awaiting.isEmpty {
             items = (items + awaiting).sorted { $0.pingedAt < $1.pingedAt }
@@ -517,6 +523,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// ask", which is deliberately the same as "nothing to drop" — a row
         /// outliving its PR is a far smaller harm than one vanishing early.
         var closedPins: Set<String> = []
+        /// Head commits of the pull requests the pinned lookup found, by
+        /// `repo#number`, so a reviewed one that has moved can be re-reviewd.
+        var heads: [String: String] = [:]
         var error: String?
 
         /// Whether this account's contribution is short, for any reason. An
@@ -571,16 +580,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // decision sat there has nothing left to decide. Failure is
             // swallowed on purpose — not knowing keeps the row, and the row is
             // the thing worth protecting.
-            let pinnedIDs = state.autoReviewLog.records.values
-                .filter { $0.status == .posted && $0.subject?.account == account.id }
+            //
+            // Reviewed pull requests with a session are asked after too, for
+            // their head: a push to one is what starts a re-review.
+            let fetchedIDs = Set(result.items.compactMap(\.nodeID))
+            let tracked = state.autoReviewLog.records.values
+                .filter { $0.subject?.account == account.id && AutoReviewLog.keepsRow($0) }
                 .compactMap { $0.subject?.nodeID }
-            if !pinnedIDs.isEmpty,
-               let seen = try? await client.fetchPinnedPullRequests(ids: pinnedIDs) {
-                result.closedPins = Set(seen.nodes.compactMap { node in
-                    guard let id = node.id, let state = node.state, state != "OPEN"
-                    else { return nil }
-                    return id
-                })
+            var seenIDs = Set<String>()
+            let sessionIDs = state.persistentSessions
+                ? state.reviewSessions.nodeIDs(account: account.id) : []
+            let pinnedIDs = (tracked + sessionIDs)
+                .filter { !fetchedIDs.contains($0) && seenIDs.insert($0).inserted }
+            for start in stride(from: 0, to: pinnedIDs.count, by: 30) {
+                let batch = Array(pinnedIDs[start..<min(start + 30, pinnedIDs.count)])
+                guard let seen = try? await client.fetchPinnedPullRequests(ids: batch)
+                else { continue }
+                for node in seen.nodes {
+                    guard let id = node.id else { continue }
+                    if let state = node.state, state != "OPEN" { result.closedPins.insert(id) }
+                    if let repo = node.repository?.nameWithOwner, let number = node.number,
+                       let oid = node.head?.nodes.first?.commit?.oid {
+                        result.heads["\(repo)#\(number)"] = oid
+                    }
+                }
             }
 
             // The My PRs half is independently fallible: losing it must not cost

@@ -149,6 +149,55 @@ final class ClaudeInvocationTests: XCTestCase {
         XCTAssertEqual(value(after: "--permission-mode", in: arguments), "dontAsk")
     }
 
+    // MARK: - Sessions
+
+    /// A first review keeps its session, under an id chosen up front, so a
+    /// later re-review can resume it.
+    func testAFirstReviewKeepsItsSession() {
+        let first = AutoReviewRequest(skill: "/code-review", repo: "acme/repo", number: 12,
+                                      url: request.url, turn: .first(sessionID: "s-1"))
+        let arguments = ClaudeInvocation.arguments(for: first)
+
+        XCTAssertEqual(value(after: "--session-id", in: arguments), "s-1")
+        XCTAssertFalse(arguments.contains("--no-session-persistence"))
+        XCTAssertEqual(ClaudeInvocation.prompt(for: first),
+                       "/code-review https://github.com/acme/repo/pull/12")
+    }
+
+    func testARereviewResumesTheSessionAndDoesNotRunTheSkillAgain() {
+        let rereview = Rereview(fromOid: "aaa1111", toOid: "bbb2222", openThreads: [
+            PostedThread(id: "T_x", path: "Sources/Foo.swift", line: 42, summary: "retains self"),
+        ])
+        let resumed = AutoReviewRequest(skill: "/code-review", repo: "acme/repo", number: 12,
+                                        url: request.url,
+                                        turn: .rereview(sessionID: "s-1", rereview))
+        let arguments = ClaudeInvocation.arguments(for: resumed)
+        let prompt = ClaudeInvocation.prompt(for: resumed)
+
+        XCTAssertEqual(value(after: "--resume", in: arguments), "s-1")
+        XCTAssertFalse(arguments.contains("--session-id"))
+        XCTAssertFalse(prompt.hasPrefix("/code-review"))
+        XCTAssertTrue(prompt.contains("git diff aaa1111..bbb2222"))
+        XCTAssertTrue(prompt.contains("- T1 Sources/Foo.swift:42 — retains self"))
+        XCTAssertFalse(prompt.contains("T_x"), "the model is given labels, not node ids")
+    }
+
+    func testARereviewWithNoNewCommitsSaysSo() {
+        let prompt = ClaudeInvocation.rereviewPrompt(
+            Rereview(fromOid: "aaa", toOid: "aaa", openThreads: []), url: request.url)
+
+        XCTAssertTrue(prompt.contains("has not moved"))
+        XCTAssertTrue(prompt.contains("(none)"))
+    }
+
+    func testTheSchemaLetsARereviewNameWhatItResolved() throws {
+        let schema = try JSONSerialization.jsonObject(
+            with: Data(ClaudeInvocation.schema.utf8)) as? [String: Any]
+        let properties = schema?["properties"] as? [String: Any]
+        XCTAssertNotNil(properties?["resolved"])
+        XCTAssertEqual(schema?["required"] as? [String], ["findings"])
+    }
+
     /// Each argument is its own argv element, which is the property that makes
     /// shell metacharacters meaningless here — there is no shell to read them.
     func testTheSkillAndItsURLTravelAsSingleArgvElements() {

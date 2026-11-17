@@ -309,7 +309,8 @@ public enum AutoReviewComment {
     /// comments that are not there.
     public static func compose(_ prepared: [PreparedFinding],
                                skill: String,
-                               pingKey: String) -> ComposedReview {
+                               pingKey: String,
+                               note: String? = nil) -> ComposedReview {
         let chosen = prepared.filter(\.isSelected)
         let threads = chosen.compactMap(\.anchor)
         let unanchored = chosen.filter { !$0.isAnchored }.map(\.finding)
@@ -318,7 +319,8 @@ public enum AutoReviewComment {
                        skill: skill,
                        pingKey: pingKey,
                        unanchored: unanchored,
-                       omitted: prepared.filter { !$0.isSelected }.map(\.finding)),
+                       omitted: prepared.filter { !$0.isSelected }.map(\.finding),
+                       note: note),
             threads: threads,
             unanchored: unanchored)
     }
@@ -335,10 +337,15 @@ public enum AutoReviewComment {
                             skill: String,
                             pingKey: String,
                             unanchored: [Finding] = [],
-                            omitted: [Finding] = []) -> String {
+                            omitted: [Finding] = [],
+                            note: String? = nil) -> String {
         var lines = [marker(pingKey: pingKey)]
         lines.append("**PR Radar** · automatic review · `\(ReviewSkill.name(of: skill))`")
         lines.append("")
+        if let note, !note.isEmpty {
+            lines.append(note)
+            lines.append("")
+        }
         lines.append(tally(findings, unanchored: unanchored.count))
         lines.append("")
 
@@ -381,6 +388,21 @@ public enum AutoReviewComment {
         }
         return truncated(lines.joined(separator: "\n"))
     }
+
+    /// The line a re-review's body opens with: which commits it covers and how
+    /// many earlier threads it closed.
+    public static func rereviewNote(from: String, to: String, resolved: Int) -> String {
+        let range = from == to
+            ? "no new commits (`\(short(to))`)"
+            : "`\(short(from))`…`\(short(to))`"
+        var note = "_Re-review after new activity · \(range)"
+        if resolved > 0 {
+            note += " · resolved \(resolved) earlier thread\(resolved == 1 ? "" : "s")"
+        }
+        return note + "._"
+    }
+
+    private static func short(_ oid: String) -> String { String(oid.prefix(7)) }
 
     /// What a superseded review's body is rewritten to, so the Files tab does
     /// not fill with suggestions that no longer apply.

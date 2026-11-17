@@ -71,10 +71,14 @@ public struct Finding: Codable, Equatable, Sendable {
 public struct AutoReviewFindings: Codable, Equatable, Sendable {
     public let verdict: String?
     public let findings: [Finding]
+    /// Labels of earlier PR Radar threads a re-review found fixed. Empty on a
+    /// first review.
+    public let resolved: [String]
 
-    public init(verdict: String? = nil, findings: [Finding]) {
+    public init(verdict: String? = nil, findings: [Finding], resolved: [String] = []) {
         self.verdict = verdict
         self.findings = findings
+        self.resolved = resolved
     }
 
     public func of(_ tier: FindingTier) -> [Finding] { findings.filter { $0.tier == tier } }

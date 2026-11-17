@@ -124,6 +124,17 @@ public struct AutoReviewRecord: Codable, Equatable, Sendable {
     /// mutation subject.
     public var subject: ReviewItem?
 
+    /// This run continues the pull request's session after its head moved,
+    /// rather than answering a new ping.
+    public var isRereview = false
+
+    /// What the re-review says changed, for the posted body. Set when it finishes.
+    public var rereviewNote: String?
+
+    /// Earlier PR Radar threads the re-review found fixed. Resolved only once
+    /// this review is posted, so a dismissed re-review closes nothing.
+    public var resolveOnPost: [String] = []
+
     public init(status: AutoReviewStatus = .queued) {
         self.status = status
     }
@@ -161,6 +172,9 @@ public struct AutoReviewRecord: Codable, Equatable, Sendable {
         // which is the failure mode every other field here is written to avoid.
         subject = try? container.decodeIfPresent(ReviewItem.self, forKey: .subject)
         runSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .runSeconds)
+        isRereview = try container.decodeIfPresent(Bool.self, forKey: .isRereview) ?? false
+        rereviewNote = try container.decodeIfPresent(String.self, forKey: .rereviewNote)
+        resolveOnPost = try container.decodeIfPresent([String].self, forKey: .resolveOnPost) ?? []
     }
 
     public var reviewURL: URL? { reviewURLString.flatMap(URL.init(string:)) }
@@ -278,7 +292,7 @@ public struct AutoReviewLog: Codable, Equatable, Sendable {
         let present = Set(fetched.map(\.id))
         return records.values
             .compactMap { record -> ReviewItem? in
-                guard record.status == .posted, let subject = record.subject else { return nil }
+                guard AutoReviewLog.keepsRow(record), let subject = record.subject else { return nil }
                 guard !present.contains(subject.id) else { return nil }
                 // Merged or closed while you were deciding: there is nothing
                 // left to approve, so the row goes of its own accord.
@@ -291,8 +305,23 @@ public struct AutoReviewLog: Codable, Equatable, Sendable {
     /// Node ids worth asking about, so the caller can verify only what it must.
     public var awaitingDecisionNodeIDs: [String] {
         records.values
-            .filter { $0.status == .posted }
+            .filter(AutoReviewLog.keepsRow)
             .compactMap { $0.subject?.nodeID }
+    }
+
+    /// Whether a record holds its row up when the search no longer returns it.
+    ///
+    /// Only a posted review or a re-review carries a subject, so any record with
+    /// one is kept until a decision is made. That covers a re-run of a posted
+    /// review. An unposted re-review is not kept: off the search means no
+    /// longer requested, and its session waits for a re-request.
+    public static func keepsRow(_ record: AutoReviewRecord) -> Bool {
+        guard record.subject != nil else { return false }
+        switch record.status {
+        case .posted: return true
+        case .queued, .running, .ready, .failed: return !record.isRereview
+        case .dismissed, .skipped: return false
+        }
     }
 
     /// Keeps anything still on screen, drops finished work that has aged out,

@@ -172,6 +172,16 @@ final class ReviewInboxTests: XCTestCase {
         XCTAssertEqual(items.map(\.number), [2, 1], "most overdue must sort first")
     }
 
+    /// A re-review is started by the head moving, so the row has to carry it.
+    func testTheRowCarriesTheHeadCommit() throws {
+        let json = payload(requests: [("User", me, "2026-09-15T11:00:00Z")])
+            .replacingOccurrences(
+                of: #""repository":{"nameWithOwner":"acme/repo"},"#,
+                with: #""repository":{"nameWithOwner":"acme/repo"},"head":{"nodes":[{"commit":{"oid":"abc123"}}]},"#)
+        let items = inbox().build(from: try decode(json))
+        XCTAssertEqual(items.first?.headOid, "abc123")
+    }
+
     func testDraftsExcludedWhenConfigured() throws {
         let data = try decode(payload(draft: true, requests: [("User", me, "2026-09-15T11:00:00Z")]))
         XCTAssertEqual(inbox(includeDrafts: true).build(from: data).count, 1)

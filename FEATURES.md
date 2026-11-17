@@ -1482,6 +1482,44 @@ tab to count them.
 Nits are counted and never raised. Posting a colleague a list of nits under
 your own name is how an automated reviewer gets muted.
 
+### Re-reviewing when new work is pushed
+
+**Off by default.** Turn it on with **Persistent sessions** under the review settings.
+While it is off, every review runs in a throwaway session and runs once per
+request, as it always has.
+
+When it is on, a review keeps its Claude Code session. Each pull request gets one session,
+started with `--session-id`, and every later review of that pull request
+resumes it with `--resume` instead of gathering the PR's description,
+discussion and code again.
+
+Two things start a re-review:
+
+- **A push while you are still requested.** Each poll compares the PR's head
+  with the commit the last run reviewed. When they differ and the PR is still
+  in your review requests under the same request, the review is queued again
+  and its row shows `queued to re-review`, then `re-reviewing…`. Once a review
+  you submit clears the request, pushes are ignored until the author
+  re-requests you.
+- **A new review request.** It resumes the same session instead of starting a
+  new one.
+
+A re-review asks the session for the change since its last review
+(`git diff <old>..<new>`) and any new discussion. It reports only findings
+that are new or still unfixed and not already posted. It also names which of
+PR Radar's open threads the new head fixes.
+
+What gets posted is **incremental**. A new comment review holds the new
+findings and opens with a line naming the commit range. The earlier review
+stays, and the threads the re-review found fixed are resolved, but only once
+the new review is actually posted. Dismissing a curated re-review closes nothing.
+
+Re-reviews go through the same queue as first reviews, so they count against
+the hourly limit and follow the allowlist, draft and own-PR rules. **Re-run**
+still starts over in a new session and supersedes the old review. **Retry** on
+a failed re-review retries it in the same session. If Claude Code has already
+cleaned up the session, the run starts a fresh one.
+
 ### The thing it missed
 
 Under the nits, in **Let me choose**, there is an **other** box: one field. It
