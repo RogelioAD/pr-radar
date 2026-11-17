@@ -313,12 +313,13 @@ public struct AutoReviewLog: Codable, Equatable, Sendable {
     ///
     /// Only a posted review or a re-review carries a subject, so any record with
     /// one is kept until a decision is made. That covers a re-run of a posted
-    /// review, and a re-review that starts after you approved, when nothing else
-    /// would bring the row back.
+    /// review. An unposted re-review is not kept: off the search means no
+    /// longer requested, and its session waits for a re-request.
     public static func keepsRow(_ record: AutoReviewRecord) -> Bool {
         guard record.subject != nil else { return false }
         switch record.status {
-        case .posted, .queued, .running, .ready, .failed: return true
+        case .posted: return true
+        case .queued, .running, .ready, .failed: return !record.isRereview
         case .dismissed, .skipped: return false
         }
     }

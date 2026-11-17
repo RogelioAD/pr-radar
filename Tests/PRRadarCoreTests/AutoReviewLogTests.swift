@@ -353,9 +353,9 @@ extension AutoReviewLogTests {
         XCTAssertTrue(log.awaitingDecision(fetched: []).isEmpty)
     }
 
-    /// A re-review can start after you approved, when the search has nothing
-    /// to return. Its row has to come back for it.
-    func testARereviewKeepsItsRowUntilItIsDealtWith() {
+    /// Off the search means no longer requested, so an unposted re-review
+    /// lets its row go.
+    func testAnUnpostedRereviewDoesNotKeepItsRow() {
         for status in [AutoReviewStatus.queued, .running, .ready, .failed] {
             var log = AutoReviewLog()
             var record = AutoReviewRecord(status: status)
@@ -363,9 +363,19 @@ extension AutoReviewLogTests {
             record.isRereview = true
             log["k"] = record
 
-            XCTAssertEqual(log.awaitingDecision(fetched: []).map(\.number), [1], "\(status)")
-            XCTAssertEqual(log.awaitingDecisionNodeIDs, ["PR_7"], "\(status)")
+            XCTAssertTrue(log.awaitingDecision(fetched: []).isEmpty, "\(status)")
+            XCTAssertTrue(log.awaitingDecisionNodeIDs.isEmpty, "\(status)")
         }
+    }
+
+    /// A posted re-review still waits on your decision.
+    func testAPostedRereviewKeepsItsRow() {
+        var log = AutoReviewLog()
+        var record = posted(subject(1))
+        record.isRereview = true
+        log["k"] = record
+
+        XCTAssertEqual(log.awaitingDecision(fetched: []).map(\.number), [1])
     }
 
     func testADismissedRereviewLetsTheRowGo() {

@@ -27,8 +27,7 @@ public struct ReviewSession: Codable, Equatable, Sendable {
     /// pull request's head differs from this.
     public var reviewedOid: String?
     public var lastRunAt: Date?
-    /// The pull request, so a re-review can bring its row back after the search
-    /// has stopped returning it.
+    /// The pull request this session reviews.
     public var subject: ReviewItem
     /// The newest log record for this pull request.
     public var recordKey: String?
