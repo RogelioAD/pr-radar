@@ -86,20 +86,29 @@ public struct ReviewSessions: Codable, Equatable, Sendable {
         set { sessions[pullRequest] = newValue }
     }
 
-    /// Pull requests whose head has moved since their last run and which are
-    /// not already being reviewed again.
+    /// Pull requests whose head has moved since their last run, which are
+    /// still requested of the viewer, and which are not already being
+    /// reviewed again.
     ///
     /// `heads` is `repo#number` → head oid, for the pull requests this round
     /// could see. One it could not see is left alone: not knowing is not a
     /// push. Only a run that was posted, dismissed or is waiting to be picked
     /// over is restarted — queued and running ones are already on their way,
     /// and a failed one retries through the queue's own backoff.
-    public func rereviewsDue(heads: [String: String], log: AutoReviewLog) -> [String] {
+    ///
+    /// `requested` is `repo#number` → ping key, for the pull requests the
+    /// review-requested search returned. A push re-reviews only under the same
+    /// request: once a review clears it, the author has to re-request. One
+    /// requested again under a newer ping is left to the queue.
+    public func rereviewsDue(heads: [String: String], requested: [String: String],
+                             log: AutoReviewLog) -> [String] {
         sessions.compactMap { id, session -> String? in
             guard let reviewed = session.reviewedOid,
                   let head = heads[id], head != reviewed
             else { return nil }
-            guard let key = session.recordKey, let record = log[key] else { return id }
+            let key = session.recordKey ?? session.subject.pingKey
+            guard requested[id] == key else { return nil }
+            guard let record = log[key] else { return id }
             switch record.status {
             case .posted, .dismissed, .ready: return id
             case .queued, .running, .failed, .skipped: return nil

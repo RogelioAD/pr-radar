@@ -19,6 +19,9 @@ final class ReviewSessionTests: XCTestCase {
                       reviewedOid: reviewed, lastRunAt: lastRunAt, recordKey: key)
     }
 
+    /// Still requested, under the session's own ping.
+    private let requested = ["acme/repo#1": "k"]
+
     private func log(_ status: AutoReviewStatus, key: String = "k") -> AutoReviewLog {
         var log = AutoReviewLog()
         log[key] = AutoReviewRecord(status: status)
@@ -31,24 +34,46 @@ final class ReviewSessionTests: XCTestCase {
         var sessions = ReviewSessions()
         sessions["acme/repo#1"] = session(1)
 
-        XCTAssertEqual(sessions.rereviewsDue(heads: ["acme/repo#1": "bbb"], log: log(.posted)),
+        XCTAssertEqual(sessions.rereviewsDue(heads: ["acme/repo#1": "bbb"], requested: requested, log: log(.posted)),
                        ["acme/repo#1"])
     }
 
-    /// Approving does not stop it: a push after the decision is still new work.
-    func testAPushAfterYouDecidedIsStillDue() {
+    /// Picked over but not yet posted, and the author pushed: still requested.
+    func testAPushBeforeYouSubmitIsDue() {
         var sessions = ReviewSessions()
         sessions["acme/repo#1"] = session(1)
 
-        XCTAssertEqual(sessions.rereviewsDue(heads: ["acme/repo#1": "bbb"], log: log(.dismissed)),
+        XCTAssertEqual(sessions.rereviewsDue(heads: ["acme/repo#1": "bbb"], requested: requested, log: log(.ready)),
                        ["acme/repo#1"])
+    }
+
+    /// A review cleared the request: a push waits for a re-request.
+    func testAPushAfterTheRequestClearedIsNotDue() {
+        var sessions = ReviewSessions()
+        sessions["acme/repo#1"] = session(1)
+
+        for status in [AutoReviewStatus.posted, .dismissed, .ready] {
+            XCTAssertTrue(sessions.rereviewsDue(heads: ["acme/repo#1": "bbb"], requested: [:],
+                                                log: log(status)).isEmpty,
+                          "\(status) should wait for a re-request")
+        }
+    }
+
+    /// A re-request is a new ping, which the queue reviews in the same session.
+    func testARerequestIsLeftToTheQueue() {
+        var sessions = ReviewSessions()
+        sessions["acme/repo#1"] = session(1)
+
+        XCTAssertTrue(sessions.rereviewsDue(heads: ["acme/repo#1": "bbb"],
+                                            requested: ["acme/repo#1": "newer"],
+                                            log: log(.posted)).isEmpty)
     }
 
     func testAnUnmovedHeadIsNotDue() {
         var sessions = ReviewSessions()
         sessions["acme/repo#1"] = session(1)
 
-        XCTAssertTrue(sessions.rereviewsDue(heads: ["acme/repo#1": "aaa"], log: log(.posted)).isEmpty)
+        XCTAssertTrue(sessions.rereviewsDue(heads: ["acme/repo#1": "aaa"], requested: requested, log: log(.posted)).isEmpty)
     }
 
     /// Not knowing the head is not a push.
@@ -56,7 +81,7 @@ final class ReviewSessionTests: XCTestCase {
         var sessions = ReviewSessions()
         sessions["acme/repo#1"] = session(1)
 
-        XCTAssertTrue(sessions.rereviewsDue(heads: [:], log: log(.posted)).isEmpty)
+        XCTAssertTrue(sessions.rereviewsDue(heads: [:], requested: requested, log: log(.posted)).isEmpty)
     }
 
     func testWorkAlreadyOnItsWayIsNotStartedTwice() {
@@ -64,7 +89,7 @@ final class ReviewSessionTests: XCTestCase {
         sessions["acme/repo#1"] = session(1)
 
         for status in [AutoReviewStatus.queued, .running, .failed, .skipped] {
-            XCTAssertTrue(sessions.rereviewsDue(heads: ["acme/repo#1": "bbb"], log: log(status)).isEmpty,
+            XCTAssertTrue(sessions.rereviewsDue(heads: ["acme/repo#1": "bbb"], requested: requested, log: log(status)).isEmpty,
                           "\(status) should not be restarted")
         }
     }
@@ -74,7 +99,7 @@ final class ReviewSessionTests: XCTestCase {
         var sessions = ReviewSessions()
         sessions["acme/repo#1"] = session(1)
 
-        XCTAssertEqual(sessions.rereviewsDue(heads: ["acme/repo#1": "bbb"], log: AutoReviewLog()),
+        XCTAssertEqual(sessions.rereviewsDue(heads: ["acme/repo#1": "bbb"], requested: requested, log: AutoReviewLog()),
                        ["acme/repo#1"])
     }
 
@@ -82,7 +107,7 @@ final class ReviewSessionTests: XCTestCase {
         var sessions = ReviewSessions()
         sessions["acme/repo#1"] = session(1, reviewed: nil)
 
-        XCTAssertTrue(sessions.rereviewsDue(heads: ["acme/repo#1": "bbb"], log: log(.posted)).isEmpty)
+        XCTAssertTrue(sessions.rereviewsDue(heads: ["acme/repo#1": "bbb"], requested: requested, log: log(.posted)).isEmpty)
     }
 
     // MARK: - Resolving

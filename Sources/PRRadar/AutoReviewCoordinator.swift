@@ -236,15 +236,13 @@ final class AutoReviewCoordinator {
         if log != state.autoReviewLog { state.autoReviewLog = log }
     }
 
-    /// Starts a re-review for every reviewed pull request whose head has moved,
-    /// and forgets the sessions of pull requests that have closed.
+    /// Starts a re-review for every reviewed pull request whose head has moved
+    /// while it is still requested, and forgets the sessions of pull requests
+    /// that have closed.
     ///
-    /// Called by the refresh before it adds back the rows the search no longer
-    /// returns, so a re-review of a pull request you already approved brings its
-    /// row back in the same round.
-    ///
-    /// `fetched` is what the search returned. A pull request in it under a
-    /// newer ping is left to the queue, which resumes the same session.
+    /// `fetched` is what the review-requested search returned. A pull request
+    /// not in it gets no re-review; one in it under a newer ping is left to the
+    /// queue, which resumes the same session.
     func noticeHeads(_ heads: [String: String], closed: Set<String>, fetched: [ReviewItem]) {
         var sessions = state.reviewSessions
         sessions.retire(closed: closed)
@@ -255,12 +253,11 @@ final class AutoReviewCoordinator {
         }
 
         var log = state.autoReviewLog
-        let fetchedKeys = Dictionary(fetched.map { ($0.id, $0.pingKey) },
-                                     uniquingKeysWith: { first, _ in first })
-        for id in sessions.rereviewsDue(heads: heads, log: log) {
+        let requested = Dictionary(fetched.map { ($0.id, $0.pingKey) },
+                                   uniquingKeysWith: { first, _ in first })
+        for id in sessions.rereviewsDue(heads: heads, requested: requested, log: log) {
             guard var session = sessions[id], let head = heads[id] else { continue }
             let key = session.recordKey ?? session.subject.pingKey
-            if let current = fetchedKeys[id], current != key { continue }
 
             var subject = log[key]?.subject ?? session.subject
             subject.headOid = head

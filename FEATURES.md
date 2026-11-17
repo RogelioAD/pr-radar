@@ -1495,11 +1495,12 @@ discussion and code again.
 
 Two things start a re-review:
 
-- **A push.** Each poll compares the PR's head with the commit the last run
-  reviewed. When they differ, the review is queued again and its row shows
-  `queued to re-review`, then `re-reviewing…`. This keeps happening until the pull
-  request closes, including after you have approved it or requested changes.
-  In that case the row comes back for the re-review.
+- **A push while you are still requested.** Each poll compares the PR's head
+  with the commit the last run reviewed. When they differ and the PR is still
+  in your review requests under the same request, the review is queued again
+  and its row shows `queued to re-review`, then `re-reviewing…`. Once a review
+  you submit clears the request, pushes are ignored until the author
+  re-requests you.
 - **A new review request.** It resumes the same session instead of starting a
   new one.
 
