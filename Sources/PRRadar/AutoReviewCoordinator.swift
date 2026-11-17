@@ -236,6 +236,65 @@ final class AutoReviewCoordinator {
         if log != state.autoReviewLog { state.autoReviewLog = log }
     }
 
+    /// Starts a re-review for every reviewed pull request whose head has moved,
+    /// and forgets the sessions of pull requests that have closed.
+    ///
+    /// Called by the refresh before it adds back the rows the search no longer
+    /// returns, so a re-review of a pull request you already approved brings its
+    /// row back in the same round.
+    ///
+    /// `fetched` is what the search returned. A pull request in it under a
+    /// newer ping is left to the queue, which resumes the same session.
+    func noticeHeads(_ heads: [String: String], closed: Set<String>, fetched: [ReviewItem]) {
+        var sessions = state.reviewSessions
+        sessions.retire(closed: closed)
+        sessions.trim()
+        guard state.persistentSessions else {
+            if sessions != state.reviewSessions { state.reviewSessions = sessions }
+            return
+        }
+
+        var log = state.autoReviewLog
+        let fetchedKeys = Dictionary(fetched.map { ($0.id, $0.pingKey) },
+                                     uniquingKeysWith: { first, _ in first })
+        for id in sessions.rereviewsDue(heads: heads, log: log) {
+            guard var session = sessions[id], let head = heads[id] else { continue }
+            let key = session.recordKey ?? session.subject.pingKey
+            if let current = fetchedKeys[id], current != key { continue }
+
+            var subject = log[key]?.subject ?? session.subject
+            subject.headOid = head
+            var record = log[key] ?? AutoReviewRecord()
+            record.status = .queued
+            record.isRereview = true
+            record.attempts = 0
+            record.startedAt = nil
+            record.failure = nil
+            record.rereviewNote = nil
+            record.resolveOnPost = []
+            record.subject = subject
+
+            // Only when the queue would take it, so a re-review never parks a
+            // row in `queued` for a repo or PR that is not reviewed.
+            var candidate = log
+            candidate[key] = record
+            let skip = AutoReviewQueue.skip(
+                for: subject, log: candidate, viewerLogins: viewerLogins,
+                allowlist: state.reviewAllowlist, policy: policy(),
+                startedInLastHour: startedInLastHour(), now: Date())
+            guard skip == nil || skip == .rateLimited else { continue }
+
+            log[key] = record
+            session.subject = subject
+            session.recordKey = key
+            sessions[id] = session
+            Log.debug("head of \(id) moved to \(head.prefix(7)) — re-review queued")
+        }
+
+        if sessions != state.reviewSessions { state.reviewSessions = sessions }
+        if log != state.autoReviewLog { state.autoReviewLog = log }
+    }
+
     private func prune() {
         var log = state.autoReviewLog
         log.prune(liveKeys: Set(state.items.map(\.pingKey)), now: Date())
@@ -291,13 +350,21 @@ final class AutoReviewCoordinator {
         defer { if state.reviewInFlight == key { state.reviewInFlight = nil } }
 
         do {
-            let (findings, diff) = try await run(item)
+            let outcome = try await run(item)
+            let findings = outcome.findings
             // Anchored once, here, because it needs the diff — and the diff
             // exists only in the worktree the review just ran in. By the time
             // anybody is ticking boxes it is gone.
-            let prepared = AutoReviewComment.prepare(findings, diff: diff)
+            let prepared = AutoReviewComment.prepare(findings, diff: outcome.diff)
+            let resolving = outcome.rereview == nil ? [] :
+                state.reviewSessions[item.id]?.threadIDs(forLabels: findings.resolved) ?? []
+            let note = outcome.rereview.map {
+                AutoReviewComment.rereviewNote(from: $0.fromOid, to: $0.toOid,
+                                              resolved: resolving.count)
+            }
             let composed = AutoReviewComment.compose(
-                prepared, skill: Prefs.reviewSkill ?? "", pingKey: key)
+                prepared, skill: Prefs.reviewSkill ?? "", pingKey: key, note: note)
+            remember(outcome, for: item, key: key)
 
             var seconds: TimeInterval?
             update(key) { record in
@@ -309,6 +376,8 @@ final class AutoReviewCoordinator {
                 record.body = composed.body
                 record.threads = composed.threads
                 record.prepared = prepared
+                record.rereviewNote = note
+                record.resolveOnPost = resolving
                 record.status = .ready
                 record.finishedAt = Date()
             }
@@ -316,7 +385,7 @@ final class AutoReviewCoordinator {
             recordTrophyFacts(findings, seconds: seconds)
 
             if state.reviewMode.postsWithoutAsking {
-                await post(item, composed)
+                await post(item, composed, summaries: Self.summaries(prepared))
             }
         } catch let failure as AutoReviewFailure {
             // The hour's ceiling is a ceiling on reviews, and a run that never
@@ -336,17 +405,61 @@ final class AutoReviewCoordinator {
     /// Runs the skill and returns its findings, or throws the reason there are
     /// none. Never returns an empty result in place of a failure — a clean bill
     /// of health nobody earned is the worst thing this can produce.
-    private func run(_ item: ReviewItem) async throws -> (AutoReviewFindings, DiffMap) {
+    private struct RunOutcome {
+        let findings: AutoReviewFindings
+        let diff: DiffMap
+        /// nil when the session was not kept.
+        let sessionID: String?
+        /// The head that was reviewed.
+        let head: String?
+        /// Set when the run resumed the pull request's session.
+        let rereview: Rereview?
+    }
+
+    private func run(_ item: ReviewItem) async throws -> RunOutcome {
         guard let claude = state.claudePath else { throw AutoReviewFailure.notInstalled }
         guard let skill = ReviewSkill.normalized(state.reviewSkillDraft) else {
             throw AutoReviewFailure.unparseable("no review skill is configured")
         }
-        let worktree = try await checkout(item)
+        // A session that never recorded a head cannot be re-reviewd, and its id
+        // cannot be reused with `--session-id`, so it is replaced.
+        let keeps = state.persistentSessions
+        let session = keeps
+            ? state.reviewSessions[item.id].flatMap { $0.reviewedOid == nil ? nil : $0 }
+            : nil
+        let sessionID = session?.sessionID ?? UUID().uuidString.lowercased()
+        // Same path every run of a session, so paths the session read earlier
+        // still point at the code.
+        let worktree = try await checkout(item, token: String(sessionID.prefix(8)))
         defer { removeWorktree(worktree) }
 
+        // Off: a throwaway session, exactly as before re-reviewing existed.
+        var turn: ReviewTurn? = keeps ? .first(sessionID: sessionID) : nil
+        if let session, let from = session.reviewedOid, let head = worktree.head {
+            turn = .rereview(sessionID: sessionID,
+                            Rereview(fromOid: from, toOid: head,
+                                    openThreads: session.openThreads))
+            update(item.pingKey) { $0.isRereview = true }
+        }
+
+        do {
+            return try await invoke(claude, skill: skill, item: item,
+                                    turn: turn, worktree: worktree)
+        } catch let failure as AutoReviewFailure where Self.sessionIsGone(failure, turn: turn) {
+            // Claude Code cleans up old sessions. Start a fresh one rather
+            // than failing; the open threads are kept, they are still on the PR.
+            Log.debug("session for \(item.id) is gone — starting a new one")
+            return try await invoke(claude, skill: skill, item: item,
+                                    turn: .first(sessionID: UUID().uuidString.lowercased()),
+                                    worktree: worktree)
+        }
+    }
+
+    private func invoke(_ claude: String, skill: String, item: ReviewItem,
+                        turn: ReviewTurn?, worktree: Worktree) async throws -> RunOutcome {
         let request = AutoReviewRequest(
             skill: skill, repo: item.repo, number: item.number, url: item.url,
-            model: Prefs.reviewModel, budgetUSD: Prefs.reviewBudget)
+            model: Prefs.reviewModel, budgetUSD: Prefs.reviewBudget, turn: turn)
 
         let result = try await ProcessRunner.run(
             executable: claude,
@@ -359,11 +472,51 @@ final class AutoReviewCoordinator {
             exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr,
             timedOut: result.timedOut, timeoutSeconds: Int(Self.timeout)).get()
 
+        var rereview: Rereview?
+        if case .rereview(_, let value)? = turn { rereview = value }
+
         // The map is built from the worktree we just reviewed in, so a finding's
         // line numbers and the diff's agree by construction. An empty diff is
         // not fatal: every finding then falls back to the summary body rather
         // than being dropped.
-        return (findings, DiffMap.parse(unifiedDiff: worktree.diff))
+        return RunOutcome(findings: findings,
+                          diff: DiffMap.parse(unifiedDiff: worktree.diff),
+                          sessionID: turn?.sessionID,
+                          head: worktree.head,
+                          rereview: rereview)
+    }
+
+    /// Whether a resume failed only because Claude Code no longer has the session.
+    private static func sessionIsGone(_ failure: AutoReviewFailure, turn: ReviewTurn?) -> Bool {
+        guard case .rereview? = turn, case .exited(_, let detail) = failure else { return false }
+        return detail.contains("No conversation found")
+    }
+
+    /// Writes down the session a run used, so the next run resumes it.
+    private func remember(_ outcome: RunOutcome, for item: ReviewItem, key: String) {
+        guard let sessionID = outcome.sessionID else { return }
+        let existing = state.reviewSessions[item.id]
+        var subject = item
+        subject.headOid = outcome.head ?? item.headOid
+        state.reviewSessions[item.id] = ReviewSession(
+            sessionID: sessionID,
+            subject: subject,
+            reviewedOid: outcome.head,
+            lastRunAt: Date(),
+            recordKey: key,
+            openThreads: existing?.openThreads ?? [])
+    }
+
+    /// Finding summaries by where their thread is anchored, so a posted
+    /// thread can be named in a later re-review prompt.
+    private static func summaries(_ prepared: [PreparedFinding]) -> [String: String] {
+        var result: [String: String] = [:]
+        for item in prepared where item.isSelected {
+            guard let anchor = item.anchor else { continue }
+            let key = "\(anchor.path):\(anchor.line)"
+            if result[key] == nil { result[key] = item.finding.summary }
+        }
+        return result
     }
 
     // MARK: - The checkout
@@ -372,11 +525,12 @@ final class AutoReviewCoordinator {
         let clone: URL
         let path: URL
         let diff: String
+        let head: String?
     }
 
     /// Fetches the PR head into the user's own clone and checks it out in a
     /// throwaway worktree, so their working tree is never touched.
-    private func checkout(_ item: ReviewItem) async throws -> Worktree {
+    private func checkout(_ item: ReviewItem, token: String) async throws -> Worktree {
         guard let root = Prefs.reviewWorkspace,
               let clone = await state.findCheckout(of: item.repo, under: root)
         else { throw AutoReviewFailure.noClone(item.repo) }
@@ -386,8 +540,14 @@ final class AutoReviewCoordinator {
                                   Workspace.fetchRefspec(forPR: item.number)])
 
         let path = FileManager.default.temporaryDirectory
-            .appendingPathComponent(Workspace.worktreeName(
-                forPR: item.number, token: String(UUID().uuidString.prefix(8))))
+            .appendingPathComponent(Workspace.worktreeName(forPR: item.number, token: token))
+        // The path is reused across a session's runs; clear a leftover first.
+        if FileManager.default.fileExists(atPath: path.path) {
+            _ = try? await Self.runGit(["-C", clone.path, "worktree", "remove",
+                                        "--force", path.path])
+            try? FileManager.default.removeItem(at: path)
+            _ = try? await Self.runGit(["-C", clone.path, "worktree", "prune"])
+        }
         _ = try await Self.runGit(["-C", clone.path, "worktree", "add", "--detach",
                                    path.path, ref])
 
@@ -414,8 +574,11 @@ final class AutoReviewCoordinator {
         // use the pull request's own base; this is the diff agreeing with it.
         let range = await diffRange(for: item, clone: clone, worktree: path)
         let diff = (try? await Self.runGit(["-C", path.path, "diff", "--unified=3", range])) ?? ""
+        let head = (try? await Self.runGit(["-C", path.path, "rev-parse", "HEAD"]))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return Worktree(clone: clone, path: path, diff: diff)
+        return Worktree(clone: clone, path: path, diff: diff,
+                        head: head?.isEmpty == false ? head : nil)
     }
 
     /// What to diff the checked-out head against.
@@ -517,13 +680,17 @@ final class AutoReviewCoordinator {
         }
     }
 
-    private func post(_ item: ReviewItem, _ composed: ComposedReview) async {
+    private func post(_ item: ReviewItem, _ composed: ComposedReview,
+                      summaries: [String: String]) async {
         guard let client = client(for: item), let nodeID = item.nodeID else { return }
+        let resolving = state.autoReviewLog[item.pingKey]?.resolveOnPost ?? []
         do {
             let review = try await client.submitReview(
                 pullRequestID: nodeID, event: .comment,
                 body: composed.body, threads: composed.threads)
             record(review, for: item)
+            await track(review, for: item, client: client,
+                        summaries: summaries, resolving: resolving)
         } catch {
             // A review goes out as one mutation, so GitHub refusing a single
             // anchor — "Line could not be resolved" — takes every other finding
@@ -545,6 +712,8 @@ final class AutoReviewCoordinator {
                     body: composed.body + AutoReviewComment.anchorsDroppedNote,
                     threads: [])
                 record(review, for: item)
+                await track(review, for: item, client: client,
+                            summaries: [:], resolving: resolving)
             } catch {
                 fail(item.pingKey, AutoReviewRecord.truncated(error.localizedDescription))
             }
@@ -575,7 +744,36 @@ final class AutoReviewCoordinator {
             // Including what you wrote. It is on the pull request now, so
             // keeping the draft would only let a later press send it twice.
             record.authored = []
+            record.resolveOnPost = []
         }
+    }
+
+    /// After a review is up: notes the threads it opened against the session,
+    /// and resolves the earlier ones the re-review found fixed.
+    ///
+    /// The ids `submitReview` returns are comment ids, and resolving takes
+    /// thread ids, so the threads are looked up.
+    private func track(_ review: SubmittedReview, for item: ReviewItem, client: GitHubClient,
+                       summaries: [String: String], resolving: [String]) async {
+        let opened = review.commentIDs.isEmpty
+            ? []
+            : ((try? await client.openedThreads(reviewID: review.id)) ?? [])
+        if !opened.isEmpty {
+            update(item.pingKey) { $0.threadNodeIDs = opened.map(\.id) }
+        }
+
+        var closed = Set<String>()
+        for id in resolving where await client.resolveThread(id: id) {
+            closed.insert(id)
+        }
+
+        guard var session = state.reviewSessions[item.id] else { return }
+        session.openThreads.removeAll { closed.contains($0.id) }
+        session.openThreads += opened.map { thread in
+            PostedThread(id: thread.id, path: thread.path, line: thread.line,
+                         summary: summaries["\(thread.path):\(thread.line)"] ?? "")
+        }
+        state.reviewSessions[item.id] = session
     }
 
     /// One press per row at a time.
@@ -617,9 +815,10 @@ final class AutoReviewCoordinator {
                 ? record.heldReview
                 : AutoReviewComment.compose(record.sendable,
                                             skill: Prefs.reviewSkill ?? "",
-                                            pingKey: key)
+                                            pingKey: key,
+                                            note: record.rereviewNote)
             guard let chosen, !chosen.body.isEmpty else { return }
-            await post(item, chosen)
+            await post(item, chosen, summaries: Self.summaries(record.sendable))
 
         case .approve:
             await submit(.approve, body: nil, on: item)
@@ -628,9 +827,20 @@ final class AutoReviewCoordinator {
             await submit(.requestChanges, body: record.body, on: item)
 
         case .rerun:
+            // Retrying a failed re-review retries it in the same session.
+            if record.status == .failed, record.isRereview {
+                update(key) { $0.status = .queued }
+                refreshLanded()
+                return
+            }
             await supersede(record, on: item)
+            // A re-run starts over, in a new session.
+            state.reviewSessions[item.id] = nil
             update(key) { record in
                 record.status = .queued
+                record.isRereview = false
+                record.rereviewNote = nil
+                record.resolveOnPost = []
                 // `failure` is deliberately left alone. Only `failed` and
                 // `skipped` rows ever show it, so a stale one cannot reach the
                 // screen — and clearing it here meant pressing Retry destroyed
@@ -668,7 +878,8 @@ final class AutoReviewCoordinator {
         guard let client = client(for: item), let reviewID = record.reviewNodeID else { return }
         try? await client.updateReview(
             id: reviewID, body: AutoReviewComment.supersededBody(pingKey: item.pingKey))
-        for threadID in record.threadNodeIDs {
+        let earlier = state.reviewSessions[item.id]?.openThreads.map(\.id) ?? []
+        for threadID in Set(record.threadNodeIDs + earlier) {
             await client.resolveThread(id: threadID)
         }
     }

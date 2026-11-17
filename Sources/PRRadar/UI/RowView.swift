@@ -405,9 +405,11 @@ struct RowView: View {
             ChipFlow(spacing: ChipMetrics.spacing, lineSpacing: ChipMetrics.lineSpacing) {
                 switch review.status {
                 case .queued:
-                    Chip(text: "queued for review", symbol: "clock", health: .neutral)
+                    Chip(text: review.isRereview ? "queued to re-review" : "queued for review",
+                         symbol: "clock", health: .neutral)
                 case .running:
-                    Chip(text: "reviewing…", symbol: "wand.and.sparkles", health: .running)
+                    Chip(text: review.isRereview ? "re-reviewing…" : "reviewing…",
+                         symbol: "wand.and.sparkles", health: .running)
                     runTime(review)
                 case .skipped:
                     Chip(text: review.failure ?? "not reviewed", health: .neutral)

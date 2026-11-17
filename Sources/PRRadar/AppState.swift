@@ -771,6 +771,17 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Whether reviews keep their session and re-review new pushes.
+    @Published var persistentSessions: Bool = Prefs.persistentSessions {
+        didSet { Prefs.persistentSessions = persistentSessions }
+    }
+
+    /// The session behind each reviewed pull request. Not published: no view
+    /// draws it.
+    var reviewSessions: ReviewSessions = Prefs.reviewSessions {
+        didSet { Prefs.reviewSessions = reviewSessions }
+    }
+
     /// Every automatic review the app remembers.
     @Published var autoReviewLog: AutoReviewLog = Prefs.autoReviewLog {
         didSet {

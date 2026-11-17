@@ -8,15 +8,46 @@ public struct AutoReviewRequest: Equatable, Sendable {
     public let url: URL
     public let model: String?
     public let budgetUSD: Double?
+    /// Which session this run belongs to. nil runs a throwaway session.
+    public let turn: ReviewTurn?
 
     public init(skill: String, repo: String, number: Int, url: URL,
-                model: String? = nil, budgetUSD: Double? = nil) {
+                model: String? = nil, budgetUSD: Double? = nil,
+                turn: ReviewTurn? = nil) {
         self.skill = skill
         self.repo = repo
         self.number = number
         self.url = url
         self.model = model
         self.budgetUSD = budgetUSD
+        self.turn = turn
+    }
+}
+
+/// Whether a run starts a pull request's session or continues it.
+public enum ReviewTurn: Equatable, Sendable {
+    /// The first review: runs the skill under a session id chosen up front.
+    case first(sessionID: String)
+    /// A later one: resumes that session and asks it to re-review.
+    case rereview(sessionID: String, Rereview)
+
+    public var sessionID: String {
+        switch self {
+        case .first(let id), .rereview(let id, _): return id
+        }
+    }
+}
+
+/// What a resumed session is told about the change since its last review.
+public struct Rereview: Equatable, Sendable {
+    public let fromOid: String
+    public let toOid: String
+    public let openThreads: [PostedThread]
+
+    public init(fromOid: String, toOid: String, openThreads: [PostedThread]) {
+        self.fromOid = fromOid
+        self.toOid = toOid
+        self.openThreads = openThreads
     }
 }
 
@@ -107,8 +138,49 @@ public enum ClaudeInvocation {
     /// about what to return — and the text stops reading as a command, so the
     /// skill never dispatches and a general-purpose model answers instead.
     /// Everything PR Radar needs to say goes in the system prompt.
+    ///
+    /// A re-review is the exception: the skill already ran in this session, so
+    /// the prompt is the instruction to look again.
     public static func prompt(for request: AutoReviewRequest) -> String {
-        "\(request.skill) \(request.url.absoluteString)"
+        if case .rereview(_, let rereview) = request.turn {
+            return rereviewPrompt(rereview, url: request.url)
+        }
+        return "\(request.skill) \(request.url.absoluteString)"
+    }
+
+    /// The message that continues a session after the pull request has moved.
+    public static func rereviewPrompt(_ rereview: Rereview, url: URL) -> String {
+        let from = rereview.fromOid, to = rereview.toOid
+        let change = from == to
+            ? "The head has not moved since your last review in this session "
+              + "(still \(to)), but you have been asked to look again."
+            : "The head has moved since your last review in this session, "
+              + "from \(from) to \(to)."
+        let threads = rereview.openThreads.isEmpty
+            ? "(none)"
+            : rereview.openThreads.enumerated().map { index, thread in
+                "- \(ReviewSession.label(at: index)) \(thread.path):\(thread.line) — \(thread.summary)"
+            }.joined(separator: "\n")
+
+        return """
+        Re-review \(url.absoluteString). \(change) The working directory is again \
+        a checkout of the current head, at the same path as before.
+
+        1. Read what changed since your last review: `git diff \(from)..\(to)`. \
+        If \(from) is no longer reachable (a force-push), use the pull request's \
+        whole diff. Also read any discussion added since your last review.
+        2. Re-check your earlier findings against the current head.
+        3. Report only findings that are new, or earlier findings that are still \
+        not fixed and are not in the open PR Radar threads below. Those threads \
+        are already on the pull request; do not report them again.
+        4. In `resolved`, list the label of each open PR Radar thread below that \
+        the current head fixes. Leave a thread out if you are not sure.
+
+        Open PR Radar threads:
+        \(threads)
+
+        Return only the JSON described by the output schema.
+        """
     }
 
     /// What PR Radar needs the session to know, appended to the system prompt.
@@ -158,7 +230,8 @@ public enum ClaudeInvocation {
     "summary":{"type":"string"},\
     "detail":{"type":"string"},\
     "recommendation":{"type":"string"},\
-    "suggestion":{"type":"string"}}}}}}
+    "suggestion":{"type":"string"}}}},\
+    "resolved":{"type":"array","items":{"type":"string"}}}}
     """
 
     /// Tools the review may use: everything needed to read a pull request and
@@ -188,9 +261,13 @@ public enum ClaudeInvocation {
             "--output-format", "json",
             "--json-schema", schema,
             "--permission-mode", "dontAsk",
-            "--no-session-persistence",
-            "--allowedTools",
         ]
+        switch request.turn {
+        case nil: arguments.append("--no-session-persistence")
+        case .first(let id): arguments += ["--session-id", id]
+        case .rereview(let id, _): arguments += ["--resume", id]
+        }
+        arguments.append("--allowedTools")
         arguments += allowedTools
         arguments.append("--disallowedTools")
         arguments += disallowedTools

@@ -54,6 +54,8 @@ public enum Prefs {
         static let reviewBudget = "review.budget"
         static let reviewMaxPerHour = "review.maxPerHour"
         static let reviewLog = "review.log"
+        static let reviewSessions = "review.sessions"
+        static let persistentSessions = "review.persistentSessions"
         static let lensOn = "lens.on"
         static let lensModel = "lens.model"
         static let lensBudget = "lens.budget"
@@ -578,6 +580,20 @@ public enum Prefs {
     public static var autoReviewLog: AutoReviewLog {
         get { AutoReviewLog.decoded(from: defaults.data(forKey: Key.reviewLog)) }
         set { defaults.set(newValue.encoded(), forKey: Key.reviewLog) }
+    }
+
+    /// Whether reviews keep their session and re-review when the head moves.
+    /// Off by default: it keeps sessions on disk and runs more reviews.
+    public static var persistentSessions: Bool {
+        get { defaults.bool(forKey: Key.persistentSessions) }
+        set { defaults.set(newValue, forKey: Key.persistentSessions) }
+    }
+
+    /// The Claude session behind each reviewed pull request, so a re-review can
+    /// resume it.
+    public static var reviewSessions: ReviewSessions {
+        get { ReviewSessions.decoded(from: defaults.data(forKey: Key.reviewSessions)) }
+        set { defaults.set(newValue.encoded(), forKey: Key.reviewSessions) }
     }
 
     /// Whether somebody commenting on one of your own pull requests is worth a

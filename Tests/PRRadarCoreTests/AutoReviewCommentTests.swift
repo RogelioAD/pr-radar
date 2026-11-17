@@ -760,4 +760,22 @@ extension AutoReviewCommentTests {
         XCTAssertEqual(record.authored, [])
     }
 
+
+    // MARK: - Re-review
+
+    func testARereviewNoteNamesTheRangeAndWhatItClosed() {
+        XCTAssertEqual(
+            AutoReviewComment.rereviewNote(from: "aaaaaaa111", to: "bbbbbbb222", resolved: 2),
+            "_Re-review after new activity · `aaaaaaa`…`bbbbbbb` · resolved 2 earlier threads._")
+        XCTAssertEqual(
+            AutoReviewComment.rereviewNote(from: "abc", to: "abc", resolved: 0),
+            "_Re-review after new activity · no new commits (`abc`)._")
+    }
+
+    func testTheNoteOpensTheBody() {
+        let body = AutoReviewComment.body([], skill: "/code-review", pingKey: "k",
+                                          note: "_Re-review note._")
+        let lines = body.components(separatedBy: "\n")
+        XCTAssertEqual(lines[3], "_Re-review note._")
+    }
 }

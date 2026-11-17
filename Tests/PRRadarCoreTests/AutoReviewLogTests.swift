@@ -319,17 +319,71 @@ extension AutoReviewLogTests {
         XCTAssertEqual(log.awaitingDecision(fetched: [], closed: []).count, 1)
     }
 
-    /// Only `posted` is owed a decision. A dismissed row has had one, and a
-    /// ready one has not been posted so the search still returns it.
-    func testOnlyAPostedReviewKeepsARowAlive() {
+    /// A dismissed row has had its decision, and a skipped one never ran.
+    func testADecidedOrSkippedRecordDoesNotKeepARowAlive() {
         var log = AutoReviewLog()
-        for status in AutoReviewStatus.allCases where status != .posted {
+        for status in [AutoReviewStatus.dismissed, .skipped] {
             var record = AutoReviewRecord(status: status)
             record.subject = subject(1)
             log[status.rawValue] = record
         }
 
         XCTAssertTrue(log.awaitingDecision(fetched: []).isEmpty)
+    }
+
+    /// Re-run puts a posted review back in the queue. The search still does
+    /// not return the PR, so the row must not vanish while it runs.
+    func testAReRunOfAPostedReviewKeepsItsRow() {
+        var log = AutoReviewLog()
+        var record = posted(subject(812))
+        record.status = .queued
+        log["k"] = record
+
+        XCTAssertEqual(log.awaitingDecision(fetched: []).map(\.number), [812])
+    }
+
+    /// Only a posted review or a re-review has a subject; without one there is
+    /// no row to draw.
+    func testARecordWithNoSubjectKeepsNoRow() {
+        var log = AutoReviewLog()
+        for status in AutoReviewStatus.allCases {
+            log[status.rawValue] = AutoReviewRecord(status: status)
+        }
+
+        XCTAssertTrue(log.awaitingDecision(fetched: []).isEmpty)
+    }
+
+    /// A re-review can start after you approved, when the search has nothing
+    /// to return. Its row has to come back for it.
+    func testARereviewKeepsItsRowUntilItIsDealtWith() {
+        for status in [AutoReviewStatus.queued, .running, .ready, .failed] {
+            var log = AutoReviewLog()
+            var record = AutoReviewRecord(status: status)
+            record.subject = subject(1, node: "PR_7")
+            record.isRereview = true
+            log["k"] = record
+
+            XCTAssertEqual(log.awaitingDecision(fetched: []).map(\.number), [1], "\(status)")
+            XCTAssertEqual(log.awaitingDecisionNodeIDs, ["PR_7"], "\(status)")
+        }
+    }
+
+    func testADismissedRereviewLetsTheRowGo() {
+        var log = AutoReviewLog()
+        var record = AutoReviewRecord(status: .dismissed)
+        record.subject = subject(1)
+        record.isRereview = true
+        log["k"] = record
+
+        XCTAssertTrue(log.awaitingDecision(fetched: []).isEmpty)
+    }
+
+    func testARecordFromBeforeRereviewsIsNotOne() throws {
+        let json = #"{"records":{"k":{"status":"posted","attempts":1,"counts":{},"threadNodeIDs":[]}}}"#
+        let record = try XCTUnwrap(AutoReviewLog.decoded(from: Data(json.utf8))["k"])
+        XCTAssertFalse(record.isRereview)
+        XCTAssertNil(record.rereviewNote)
+        XCTAssertEqual(record.resolveOnPost, [])
     }
 
     /// Records written before the subject existed cannot draw a row, and must

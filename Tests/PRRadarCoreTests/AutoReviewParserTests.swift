@@ -36,6 +36,17 @@ final class AutoReviewParserTests: XCTestCase {
         XCTAssertEqual(findings.verdict, "needs work")
     }
 
+    func testARereviewsResolvedLabelsAreRead() throws {
+        let json = #"{"findings":[],"resolved":["T1","T3"]}"#
+        let findings = try parse(envelope(result: "", structured: json)).get()
+        XCTAssertEqual(findings.resolved, ["T1", "T3"])
+    }
+
+    func testAFirstReviewResolvesNothing() throws {
+        let findings = try parse(envelope(result: "", structured: findingsJSON)).get()
+        XCTAssertEqual(findings.resolved, [])
+    }
+
     func testAJSONStringInTheResultFieldIsParsed() throws {
         let findings = try XCTUnwrap(try? parse(envelope(result: findingsJSON)).get())
         XCTAssertEqual(findings.findings.count, 2)

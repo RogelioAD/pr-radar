@@ -132,4 +132,32 @@ final class MutationTests: XCTestCase {
         let review = try JSONDecoder().decode(SubmittedReview.self, from: Data(json.utf8))
         XCTAssertTrue(review.commentIDs.isEmpty)
     }
+
+    // MARK: - Threads a review opened
+
+    /// Comment ids are what a review returns; resolving needs thread ids.
+    func testThreadsAreMatchedToTheReviewByTheirFirstComment() throws {
+        let json = #"""
+        {"node":{
+          "comments":{"nodes":[
+            {"id":"C_1","path":"a.swift","line":4,"originalLine":4},
+            {"id":"C_2","path":"b.swift","line":null,"originalLine":9}]},
+          "pullRequest":{"reviewThreads":{"nodes":[
+            {"id":"PRRT_other","comments":{"nodes":[{"id":"C_someone"}]}},
+            {"id":"PRRT_1","comments":{"nodes":[{"id":"C_1"}]}},
+            {"id":"PRRT_2","comments":{"nodes":[{"id":"C_2"}]}}]}}}}
+        """#
+        let payload = try JSONDecoder().decode(ReviewThreadsPayload.self, from: Data(json.utf8))
+
+        XCTAssertEqual(payload.threads, [
+            OpenedThread(id: "PRRT_1", path: "a.swift", line: 4),
+            OpenedThread(id: "PRRT_2", path: "b.swift", line: 9),
+        ])
+    }
+
+    func testAMissingReviewOpenedNoThreads() throws {
+        let payload = try JSONDecoder().decode(ReviewThreadsPayload.self,
+                                               from: Data(#"{"node":null}"#.utf8))
+        XCTAssertTrue(payload.threads.isEmpty)
+    }
 }

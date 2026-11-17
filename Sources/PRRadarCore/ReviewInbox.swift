@@ -92,7 +92,8 @@ public struct ReviewInbox {
             signals: signals(from: node),
             sinceReview: sinceReview(in: node, ignoring: pinned),
             sinceRun: sinceRun(in: node, ranAt: runs["\(repo)#\(number)"]),
-            summary: PRSummary.firstLine(of: node.body)
+            summary: PRSummary.firstLine(of: node.body),
+            headOid: node.head?.nodes.first?.commit?.oid
         )
     }
 

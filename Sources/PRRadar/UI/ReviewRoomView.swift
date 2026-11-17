@@ -280,6 +280,16 @@ struct ReviewRoomView: View {
                 .accessibilityLabel("What happens when a review finishes")
             }
             note(state.reviewMode.detail)
+            row("Persistent sessions") {
+                Toggle("Persistent sessions", isOn: $state.persistentSessions)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .accessibilityLabel("Keep review sessions and re-review new pushes")
+            }
+            note(state.persistentSessions
+                 ? "Reviews keep their Claude session and look again, in it, "
+                   + "whenever the pull request's head moves."
+                 : "Each review starts fresh and runs once per request.")
         }
     }
 

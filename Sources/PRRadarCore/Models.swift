@@ -63,6 +63,9 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
     /// The one line of the description worth showing. See `PRSummary`.
     public var summary: String?
 
+    /// The head commit, so a re-review can tell when new work has been pushed.
+    public var headOid: String?
+
     public var id: String { "\(repo)#\(number)" }
     /// Short repo name without the owner prefix.
     public var repoShortName: String {
@@ -97,7 +100,8 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
                 authorLogin: String, authorAvatarURL: URL?, pingedAt: Date,
                 account: String = "", nodeID: String? = nil, baseRef: String? = nil,
                 signals: ReviewSignals? = nil, sinceReview: SinceReview? = nil,
-                sinceRun: SinceRun? = nil, summary: String? = nil) {
+                sinceRun: SinceRun? = nil, summary: String? = nil,
+                headOid: String? = nil) {
         self.repo = repo
         self.number = number
         self.title = title
@@ -113,6 +117,7 @@ public struct ReviewItem: Identifiable, Equatable, Sendable, Codable {
         self.sinceReview = sinceReview
         self.sinceRun = sinceRun
         self.summary = summary
+        self.headOid = headOid
     }
 }
 
